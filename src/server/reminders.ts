@@ -169,7 +169,7 @@ function toTg(i: ReminderItem): TgItem {
  * Ежедневный запуск напоминаний в Telegram:
  * — личные сообщения ответственным, которые подключились к боту;
  * — сводка в общий чат команды (по понедельникам — ещё и еженедельная).
- * Повторные сообщения об одной задаче в тот же день не отправляются.
+ * Повторные сообщения об одной задаче в тот же день не отправляются (кроме запуска кнопкой).
  */
 export async function runReminders(opts: { force?: boolean } = {}): Promise<RunResult> {
   const today = todayMsk();
@@ -226,7 +226,8 @@ export async function runReminders(opts: { force?: boolean } = {}): Promise<RunR
       for (const e of it.employees) {
         const chat = chatOf.get(e.id);
         if (!chat) continue;
-        if (sentKey.has(`${it.taskId}:${e.id}:${it.kind}`)) {
+        // Кнопка «Отправить сейчас» (force) шлёт всегда; утренняя рассылка не повторяется
+        if (!opts.force && sentKey.has(`${it.taskId}:${e.id}:${it.kind}`)) {
           personalSkipped++;
           continue;
         }
