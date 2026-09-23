@@ -438,11 +438,11 @@ const TaskRow = React.memo(function TaskRow({
           field="startDate"
           warn={
             startWarn ? (
-              <AlertTriangle className="size-3.5 text-amber-500" aria-label="Пора начинать" />
+              <AlertTriangle className="size-3.5 text-status-red" aria-label="Пора начинать" />
             ) : null
           }
         />
-        {startWarn && <span className="block px-1 text-[11px] text-amber-600">пора начинать</span>}
+        {startWarn && <span className="block px-1 text-[11px] text-status-red">пора начинать</span>}
       </td>
       <td className="px-1 py-1.5 text-xs">
         <DateCell task={t} field="endDate" />

@@ -332,8 +332,8 @@ export function GanttView() {
     {
       date: forum.salesStartDate,
       label: 'Старт продаж',
-      cls: 'border-l-2 border-amber-500',
-      text: 'text-amber-600',
+      cls: 'border-l-2 border-status-purple',
+      text: 'text-status-purple',
     },
     {
       date: forum.startDate,
@@ -884,7 +884,7 @@ function Legend() {
         <span className="h-3 border-l-2 border-dashed border-brand" /> сегодня
       </span>
       <span className="inline-flex items-center gap-1.5">
-        <span className="h-3 border-l-2 border-amber-500" /> старт продаж
+        <span className="h-3 border-l-2 border-status-purple" /> старт продаж
       </span>
       <span className="inline-flex items-center gap-1.5">
         <span className="h-3 border-l-[3px] border-ink" /> дата форума

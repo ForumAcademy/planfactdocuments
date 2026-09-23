@@ -169,7 +169,7 @@ function PlanImportDialog({
         {loading && <Spinner className="mt-3" label="Читаем файл…" />}
         {error && <p className="mt-3 text-sm text-status-red">{error}</p>}
         {parsed && parsed.fileErrors.length > 0 && parsed.rows.length > 0 && (
-          <ul className="mt-3 list-inside list-disc text-sm text-amber-700">
+          <ul className="mt-3 list-inside list-disc text-sm text-yellow-700">
             {parsed.fileErrors.map((e) => (
               <li key={e}>{e}</li>
             ))}
@@ -216,7 +216,7 @@ function PlanImportDialog({
               <Stat
                 label="Уточнить срок / ошибки"
                 value={new Set([...analysis.flagged, ...analysis.unknownTerm]).size}
-                tone="text-amber-600"
+                tone="text-yellow-600"
               />
             </div>
 
@@ -278,7 +278,7 @@ function PlanImportDialog({
                         </td>
                         <td className="px-2 py-1">{r.roles.join(' / ')}</td>
                         <td className="px-2 py-1">{STATUS_LABEL[r.status]}</td>
-                        <td className="px-2 py-1 text-amber-700">
+                        <td className="px-2 py-1 text-yellow-700">
                           {[
                             ...r.errors,
                             analysis.unknownTerm.has(r.rowNumber)

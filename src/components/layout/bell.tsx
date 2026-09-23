@@ -27,7 +27,7 @@ const LABEL = {
 const COLOR = {
   overdue: 'text-status-red',
   due_soon: 'text-brand',
-  should_start: 'text-amber-600',
+  should_start: 'text-status-red',
 } as const;
 
 export function Bell({

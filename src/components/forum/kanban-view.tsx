@@ -108,7 +108,7 @@ export function KanbanView() {
                       </span>
                       {lag > 0 && <span className="font-semibold text-status-red">+{lag} дн.</span>}
                       {shouldStart(t, today) && !overdue && (
-                        <span className="inline-flex items-center gap-1 text-amber-600">
+                        <span className="inline-flex items-center gap-1 text-status-red">
                           <AlertTriangle className="size-3" /> пора начинать
                         </span>
                       )}

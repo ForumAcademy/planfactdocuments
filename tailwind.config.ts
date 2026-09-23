@@ -9,7 +9,15 @@ const config: Config = {
         ink: '#111111',
         surface: '#F4F6FA',
         line: '#E3E7EF',
-        status: { green: '#1E9E5A', red: '#D93838', gray: '#8A94A6', blue: '#0A0A9F' },
+        status: {
+          green: '#1E9E5A',
+          red: '#D93838',
+          gray: '#8A94A6',
+          blue: '#0A0A9F',
+          // жёлтый — только «уточнить», фиолетовый — только «старт продаж»
+          yellow: '#EAB308',
+          purple: '#7C3AED',
+        },
       },
       borderRadius: { DEFAULT: '6px', md: '6px' },
       fontFamily: {

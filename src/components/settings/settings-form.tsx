@@ -54,7 +54,7 @@ export function SettingsForm({
 
   return (
     <>
-      <Card className={`mt-4 p-4 text-sm ${smtp ? '' : 'border-amber-300 bg-amber-50'}`}>
+      <Card className={`mt-4 p-4 text-sm ${smtp ? '' : 'border-yellow-300 bg-yellow-50'}`}>
         {smtp ? (
           <p>
             Почта настроена: письма отправляются с адреса <b>{smtpUser}</b>. Рассылка запускается

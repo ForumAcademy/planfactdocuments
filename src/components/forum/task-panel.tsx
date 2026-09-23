@@ -76,7 +76,7 @@ function PanelBody({ task, onClose }: { task: TaskDTO; onClose: () => void }) {
               <span className="font-semibold text-status-red">Отставание +{lag} дн.</span>
             )}
             {shouldStart(task, today) && (
-              <span className="inline-flex items-center gap-1 text-amber-600">
+              <span className="inline-flex items-center gap-1 text-status-red">
                 <AlertTriangle className="size-3.5" /> пора начинать
               </span>
             )}

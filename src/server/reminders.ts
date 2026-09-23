@@ -103,7 +103,7 @@ function digestHtml(name: string, items: ReminderItem[]): string {
   const rows = items
     .map(
       (i) => `<tr>
-<td style="padding:6px 8px;border-bottom:1px solid #E3E7EF;color:${i.kind === 'overdue' ? '#D93838' : i.kind === 'due_soon' ? '#0A0A9F' : '#B45309'};white-space:nowrap">${KIND_LABEL[i.kind]}${i.lag ? ` (+${i.lag} дн.)` : ''}</td>
+<td style="padding:6px 8px;border-bottom:1px solid #E3E7EF;color:${i.kind === 'overdue' ? '#D93838' : i.kind === 'due_soon' ? '#0A0A9F' : '#D93838'};white-space:nowrap">${KIND_LABEL[i.kind]}${i.lag ? ` (+${i.lag} дн.)` : ''}</td>
 <td style="padding:6px 8px;border-bottom:1px solid #E3E7EF">${esc(i.forumName)}</td>
 <td style="padding:6px 8px;border-bottom:1px solid #E3E7EF">${url ? `<a href="${url}/forums/${i.forumId}/tasks?q=${encodeURIComponent(i.description.slice(0, 40))}" style="color:#111">` : ''}№${i.number}. ${esc(i.description)}${url ? '</a>' : ''}</td>
 <td style="padding:6px 8px;border-bottom:1px solid #E3E7EF;white-space:nowrap">${formatDate(i.endDate)}</td>
