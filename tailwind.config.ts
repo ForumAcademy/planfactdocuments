@@ -13,7 +13,16 @@ const config: Config = {
       },
       borderRadius: { DEFAULT: '6px', md: '6px' },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Arial', 'sans-serif'],
+        sans: [
+          'Inter Variable',
+          'Inter',
+          'system-ui',
+          '-apple-system',
+          'Segoe UI',
+          'Roboto',
+          'Arial',
+          'sans-serif',
+        ],
       },
     },
   },

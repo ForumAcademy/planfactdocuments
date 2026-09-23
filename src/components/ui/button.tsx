@@ -3,7 +3,7 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 export const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
+  'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md pb-0.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
@@ -19,8 +19,8 @@ export const buttonVariants = cva(
         // Все кнопки с текстом — одного размера (36 px); sm и lg оставлены для совместимости
         sm: 'h-9 px-3.5',
         lg: 'h-9 px-3.5',
-        icon: 'h-9 w-9',
-        iconSm: 'h-7 w-7',
+        icon: 'h-9 w-9 pb-0',
+        iconSm: 'h-7 w-7 pb-0',
       },
     },
     defaultVariants: { variant: 'default', size: 'default' },
