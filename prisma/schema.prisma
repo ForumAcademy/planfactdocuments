@@ -1,5 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // Связанные данные (роли, ответственные, этап…) загружаются одним запросом, а не пятью
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {

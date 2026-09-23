@@ -12,6 +12,8 @@ import { getReportCharts, type ChartDTO } from '@/server/report-queries';
 const id = z.number().int().positive();
 const palette = z.enum(['RED', 'GREEN', 'BLUE']);
 
+// Диаграммы страница обновляет сама по ответу сервера — пересобирать её целиком не нужно.
+// Дата отчёта хранится в форуме (шапка страницы), её обновляем через пересборку.
 function refresh(forumId: number) {
   revalidatePath(`/forums/${forumId}/report`);
 }
@@ -57,7 +59,6 @@ export async function saveChart(
         },
       });
     }
-    refresh(forumId);
     return getReportCharts(forumId);
   });
 }
@@ -69,7 +70,6 @@ export async function deleteChart(
   return run(async () => {
     await requireEditor();
     await prisma.reportChart.delete({ where: { id: chartId, forumId } });
-    refresh(forumId);
     return getReportCharts(forumId);
   });
 }
@@ -86,7 +86,6 @@ export async function reorderCharts(
         prisma.reportChart.update({ where: { id: chartId, forumId }, data: { order: i + 1 } }),
       ),
     );
-    refresh(forumId);
     return getReportCharts(forumId);
   });
 }
@@ -129,7 +128,6 @@ export async function saveChartItems(
         })),
       }),
     ]);
-    refresh(forumId);
     return getReportCharts(forumId);
   });
 }
@@ -171,7 +169,6 @@ export async function copyReportFrom(
         });
       }
     });
-    refresh(forumId);
     return getReportCharts(forumId);
   });
 }
@@ -218,7 +215,6 @@ export async function importReport(
         });
       }
     });
-    refresh(forumId);
     return getReportCharts(forumId);
   });
 }

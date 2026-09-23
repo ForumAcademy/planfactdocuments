@@ -60,6 +60,10 @@ function revalidateForum(forumId: number) {
   revalidatePath('/');
 }
 
+// Правки задач (статус, сроки, ответственные, порядок…) страница применяет у себя сама по ответу
+// сервера. Пересборка всей страницы форума после каждой правки не нужна: она удлиняла ответ
+// в несколько раз (все задачи форума заново) — поэтому для частых действий её нет.
+
 /** Применяет изменения к задаче и пишет историю. */
 async function applyPatch(
   tx: Prisma.TransactionClient,
@@ -234,7 +238,6 @@ export async function updateTask(taskId: number, patch: TaskPatch): Promise<Acti
       await applyPatch(tx, task, p, userName);
       return tx.task.findUniqueOrThrow({ where: { id: taskId }, include: taskInclude });
     });
-    revalidateForum(updated.forumId);
     return toTaskDTO(updated);
   });
 }
@@ -282,7 +285,6 @@ export async function bulkUpdateTasks(
       },
       { timeout: 60_000 },
     );
-    if (result[0]) revalidateForum(result[0].forumId);
     return result.map(toTaskDTO);
   });
 }
@@ -345,7 +347,6 @@ export async function createTask(
       },
       include: taskInclude,
     });
-    revalidateForum(forumId);
     return toTaskDTO(t);
   });
 }
@@ -388,7 +389,6 @@ export async function duplicateTask(taskId: number): Promise<ActionResult<TaskDT
       },
       include: taskInclude,
     });
-    revalidateForum(t.forumId);
     return toTaskDTO(copy);
   });
 }
@@ -397,9 +397,7 @@ export async function deleteTasks(taskIds: number[]): Promise<ActionResult<numbe
   return run(async () => {
     await requireEditor();
     const ids = z.array(id).min(1).max(2000).parse(taskIds);
-    const first = await prisma.task.findFirst({ where: { id: { in: ids } } });
     const res = await prisma.task.deleteMany({ where: { id: { in: ids } } });
-    if (first) revalidateForum(first.forumId);
     return res.count;
   });
 }
@@ -414,7 +412,6 @@ export async function reorderTasks(forumId: number, orderedIds: number[]): Promi
     await prisma.$transaction(
       ids.map((taskId, i) => prisma.task.update({ where: { id: taskId }, data: { order: i + 1 } })),
     );
-    revalidateForum(forumId);
     return null;
   });
 }

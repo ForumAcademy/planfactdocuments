@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   ArrowDown,
@@ -53,6 +54,15 @@ export function ReportView({
   const [busy, setBusy] = React.useState<'pptx' | 'pdf' | null>(null);
 
   React.useEffect(() => setCharts(initial), [initial]);
+  // После правок при уходе со страницы обновляем кэш, чтобы «Назад» не показал старые данные
+  const router = useRouter();
+  const edited = React.useRef(false);
+  React.useEffect(
+    () => () => {
+      if (edited.current) router.refresh();
+    },
+    [router],
+  );
 
   const apply = (
     res: { ok: true; data: ChartDTO[] } | { ok: false; error: string },
@@ -62,6 +72,7 @@ export function ReportView({
       toast.error(res.error);
       return false;
     }
+    edited.current = true;
     setCharts(res.data);
     toast.success(msg, { id: 'saved' });
     return true;
@@ -122,7 +133,10 @@ export function ReportView({
             forum={forum}
             reportDate={reportDate}
             charts={charts}
-            onImported={setCharts}
+            onImported={(c) => {
+              edited.current = true;
+              setCharts(c);
+            }}
           />
           <Button
             onClick={() => exportAs('pptx')}

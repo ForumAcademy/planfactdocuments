@@ -112,7 +112,19 @@ export function ForumProvider({
     [tasks, filters, today, dicts],
   );
 
+  // Сервер не пересобирает страницу после каждой правки (так быстрее). Чтобы при возврате
+  // «Назад» не показать старую копию из кэша браузера, после правок при уходе со страницы форума
+  // кэш обновляется один раз.
+  const edited = React.useRef(false);
+  React.useEffect(
+    () => () => {
+      if (edited.current) router.refresh();
+    },
+    [router],
+  );
+
   const track = async <T,>(p: Promise<T>): Promise<T> => {
+    edited.current = true;
     setPending((n) => n + 1);
     try {
       return await p;
