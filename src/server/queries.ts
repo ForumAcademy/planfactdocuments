@@ -94,14 +94,50 @@ export async function getDicts(): Promise<DictsDTO> {
   };
 }
 
+export interface ForumMoney {
+  amount: number;
+  unit: string;
+}
+
 export interface ForumCardData extends ForumDTO {
   counts: StatusCounts;
+  income: ForumMoney | null;
+  expenses: ForumMoney | null;
+}
+
+/** Прошедшие форумы (после даты окончания) переносятся в архив, кроме возвращённых вручную. */
+export async function autoArchivePastForums(): Promise<number> {
+  const today = isoToDb(todayMsk());
+  const res = await prisma.forum.updateMany({
+    where: {
+      archived: false,
+      keepActive: false,
+      OR: [{ endDate: { lt: today } }, { endDate: null, startDate: { lt: today } }],
+    },
+    data: { archived: true },
+  });
+  return res.count;
+}
+
+/** Сумма диаграммы «Доходы» / «Расходы» (по названию, иначе — по зелёной / красной гамме). */
+function pickMoney(
+  charts: { title: string; palette: string; unit: string; items: { amount: unknown }[] }[],
+  word: string,
+  palette: string,
+): ForumMoney | null {
+  const chart =
+    charts.find((c) => c.title.toLowerCase().includes(word)) ??
+    charts.find((c) => c.palette === palette);
+  if (!chart || chart.items.length === 0) return null;
+  const amount = Math.round(chart.items.reduce((s, i) => s + Number(i.amount), 0) * 100) / 100;
+  return { amount, unit: chart.unit };
 }
 
 /** Плашки форумов: счётчики статусов считает база одним запросом, без загрузки задач. */
 export async function getForumsForHome(archived: boolean): Promise<ForumCardData[]> {
   const today = isoToDb(todayMsk());
-  const [forums, rows] = await Promise.all([
+  await autoArchivePastForums();
+  const [forums, rows, charts] = await Promise.all([
     prisma.forum.findMany({ where: { archived } }),
     prisma.$queryRaw<
       { forumId: number; total: bigint; ns: bigint; ip: bigint; done: bigint; overdue: bigint }[]
@@ -114,6 +150,18 @@ export async function getForumsForHome(archived: boolean): Promise<ForumCardData
       FROM "Task" t JOIN "Forum" f ON f.id = t."forumId"
       WHERE f.archived = ${archived}
       GROUP BY t."forumId"`,
+    prisma.reportChart.findMany({
+      where: { forum: { archived } },
+      select: {
+        forumId: true,
+        title: true,
+        palette: true,
+        unit: true,
+        order: true,
+        items: { select: { amount: true } },
+      },
+      orderBy: { order: 'asc' },
+    }),
   ]);
   const byForum = new Map(rows.map((r) => [r.forumId, r]));
   return forums.map((f) => {
@@ -127,6 +175,16 @@ export async function getForumsForHome(archived: boolean): Promise<ForumCardData
         done: Number(r?.done ?? 0),
         overdue: Number(r?.overdue ?? 0),
       },
+      income: pickMoney(
+        charts.filter((c) => c.forumId === f.id),
+        'доход',
+        'GREEN',
+      ),
+      expenses: pickMoney(
+        charts.filter((c) => c.forumId === f.id),
+        'расход',
+        'RED',
+      ),
     };
   });
 }

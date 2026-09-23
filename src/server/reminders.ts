@@ -7,6 +7,7 @@ import {
   type WeeklyForum,
 } from '@/lib/telegram-format';
 import { sendTelegram, telegramConfigured } from './telegram';
+import { autoArchivePastForums } from './queries';
 import { prisma } from '@/lib/db';
 import { addDays, dayOfWeek, dbToISO, todayMsk, type ISODate } from '@/lib/dates';
 import { isOverdue, lagDays, shouldStart, type TaskStatusCode } from '@/lib/status';
@@ -184,6 +185,8 @@ export async function runReminders(opts: { force?: boolean } = {}): Promise<RunR
     telegram,
     message: '',
   };
+  // Прошедшие форумы уходят в архив и больше не попадают в напоминания
+  await autoArchivePastForums();
   const items = await collectReminders(today, settings.daysBefore);
   result.reminders = items.length;
   if (!telegram) {

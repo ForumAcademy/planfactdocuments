@@ -26,7 +26,8 @@ import { useConfirm } from '@/components/ui/confirm-dialog';
 import { diffDays, formatDate, type ISODate } from '@/lib/dates';
 import { COUNTER_CLASS, progressPercent, type StatusCounts } from '@/lib/status';
 import type { ForumDTO } from '@/lib/types';
-import { pluralRu } from '@/lib/utils';
+import { formatAmount, pluralRu } from '@/lib/utils';
+import type { ForumMoney } from '@/server/queries';
 import { deleteForum, duplicateForum, setForumArchived } from '@/server/actions/forums';
 import { ForumFormDialog } from './forum-form-dialog';
 
@@ -47,11 +48,15 @@ export function daysLeftText(f: Pick<ForumDTO, 'startDate' | 'endDate'>, today: 
 export function ForumCard({
   forum,
   counts,
+  income,
+  expenses,
   today,
   forumOptions,
 }: {
   forum: ForumDTO;
   counts: StatusCounts;
+  income?: ForumMoney | null;
+  expenses?: ForumMoney | null;
   today: ISODate;
   forumOptions: { id: number; name: string }[];
 }) {
@@ -139,6 +144,11 @@ export function ForumCard({
           />
         </dl>
 
+        <dl className="mt-2 grid grid-cols-2 gap-1" data-testid="forum-money">
+          <Money label="Доходы" value={income} className="text-status-green" />
+          <Money label="Расходы" value={expenses} className="text-status-red" />
+        </dl>
+
         <div className="mt-4 flex items-center justify-between border-t border-line pt-3 text-sm">
           <span className="text-ink/70">
             {c.total} {pluralRu(c.total, 'задача', 'задачи', 'задач')}
@@ -204,6 +214,30 @@ function Counter({
         {value}
       </dd>
       <dt className="mt-1 text-[11px] leading-tight text-ink/60">{label}</dt>
+    </div>
+  );
+}
+
+function Money({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value?: ForumMoney | null;
+  className: string;
+}) {
+  return (
+    <div className="rounded bg-surface px-2 py-1.5 text-center">
+      <dd
+        className={`text-base font-semibold tabular-nums leading-none ${value ? className : 'text-status-gray'}`}
+      >
+        {value ? formatAmount(value.amount) : '—'}
+      </dd>
+      <dt className="mt-1 text-[11px] leading-tight text-ink/60">
+        {label}
+        {value ? `, ${value.unit}` : ''}
+      </dt>
     </div>
   );
 }

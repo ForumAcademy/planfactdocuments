@@ -257,7 +257,8 @@ export async function duplicateForum(id: number): Promise<ActionResult<{ id: num
 export async function setForumArchived(id: number, archived: boolean): Promise<ActionResult> {
   return run(async () => {
     await requireEditor();
-    await prisma.forum.update({ where: { id }, data: { archived } });
+    // Вернули из архива вручную — автоархив больше не трогает этот форум
+    await prisma.forum.update({ where: { id }, data: { archived, keepActive: !archived } });
     revalidatePath('/');
     return null;
   });
