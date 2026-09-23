@@ -129,3 +129,74 @@ export async function getForumOptions(): Promise<
     orderBy: { startDate: 'desc' },
   });
 }
+
+export interface TemplateDTO {
+  id: number;
+  number: number;
+  stageId: number | null;
+  blockId: number | null;
+  description: string;
+  termText: string;
+  comment: string | null;
+  order: number;
+  roleIds: number[];
+}
+
+export interface DatabaseData {
+  dicts: DictsDTO;
+  usage: {
+    stage: Record<number, number>;
+    block: Record<number, number>;
+    role: Record<number, number>;
+    employee: Record<number, number>;
+  };
+  templates: TemplateDTO[];
+  forums: (ForumDTO & { taskCount: number })[];
+}
+
+export async function getDatabaseData(): Promise<DatabaseData> {
+  const [dicts, stages, blocks, roles, employees, templates, forums] = await Promise.all([
+    getDicts(),
+    prisma.stage.findMany({
+      select: { id: true, _count: { select: { tasks: true, templates: true } } },
+    }),
+    prisma.block.findMany({
+      select: { id: true, _count: { select: { tasks: true, templates: true } } },
+    }),
+    prisma.role.findMany({
+      select: { id: true, _count: { select: { tasks: true, templates: true, employees: true } } },
+    }),
+    prisma.employee.findMany({ select: { id: true, _count: { select: { tasks: true } } } }),
+    prisma.templateTask.findMany({
+      include: { roles: { select: { id: true } } },
+      orderBy: [{ order: 'asc' }, { number: 'asc' }],
+    }),
+    prisma.forum.findMany({
+      include: { _count: { select: { tasks: true } } },
+      orderBy: { startDate: 'asc' },
+    }),
+  ]);
+  return {
+    dicts,
+    usage: {
+      stage: Object.fromEntries(stages.map((s) => [s.id, s._count.tasks + s._count.templates])),
+      block: Object.fromEntries(blocks.map((s) => [s.id, s._count.tasks + s._count.templates])),
+      role: Object.fromEntries(
+        roles.map((s) => [s.id, s._count.tasks + s._count.templates + s._count.employees]),
+      ),
+      employee: Object.fromEntries(employees.map((s) => [s.id, s._count.tasks])),
+    },
+    templates: templates.map((t) => ({
+      id: t.id,
+      number: t.number,
+      stageId: t.stageId,
+      blockId: t.blockId,
+      description: t.description,
+      termText: t.termText,
+      comment: t.comment,
+      order: t.order,
+      roleIds: t.roles.map((r) => r.id),
+    })),
+    forums: forums.map((f) => ({ ...toForumDTO(f), taskCount: f._count.tasks })),
+  };
+}
