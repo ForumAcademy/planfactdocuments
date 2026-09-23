@@ -5,9 +5,8 @@ import {
   chartTotal,
   computeSegments,
   formatPct,
-  insideLabels,
-  polar,
-  type Segment,
+  radialLayout,
+  sectorPoints,
 } from './donut-layout';
 import {
   BRAND,
@@ -34,20 +33,6 @@ async function loadFont(url: string): Promise<string> {
 }
 
 const hex = (c: string) => (c.startsWith('#') ? c : `#${c}`);
-
-function segmentPath(doc: jsPDF, cx: number, cy: number, r0: number, r1: number, s: Segment) {
-  const steps = Math.max(2, Math.ceil(((s.end - s.start) / (Math.PI * 2)) * 180));
-  const outer = Array.from({ length: steps + 1 }, (_, i) =>
-    polar(cx, cy, r1, s.start + ((s.end - s.start) * i) / steps),
-  );
-  const inner = Array.from({ length: steps + 1 }, (_, i) =>
-    polar(cx, cy, r0, s.end - ((s.end - s.start) * i) / steps),
-  );
-  const pts = [...outer, ...inner];
-  doc.moveTo(pts[0].x, pts[0].y);
-  for (const p of pts.slice(1)) doc.lineTo(p.x, p.y);
-  doc.close();
-}
 
 function header(doc: jsPDF, title: string, right: string) {
   doc.setFillColor(hex(BRAND));
@@ -114,33 +99,46 @@ export async function buildPdf(d: ReportExportData): Promise<jsPDF> {
     const total = chartTotal(c.items);
     const cx = 290;
     const cy = 300;
-    const r1 = 150;
-    const r0 = r1 * 0.72;
+    const outerR = 170;
 
     if (segs.length) {
+      const L = radialLayout(segs, cx, cy, outerR, 11);
+      // Тонкие фоновые окружности
+      doc.setDrawColor('#E3E7EF');
+      doc.setLineWidth(0.6);
+      for (const r of L.rings) doc.circle(cx, cy, r, 'S');
+      // Сектора: ширина — доля, длина убывает по спирали
       doc.setDrawColor('#FFFFFF');
       doc.setLineWidth(1.5);
-      for (const s of segs) {
-        doc.setFillColor(s.color);
-        segmentPath(doc, cx, cy, r0, r1, s);
+      for (const s of L.sectors) {
+        doc.setFillColor(s.segment.color);
+        const pts = sectorPoints(cx, cy, s.r, s.a0, s.a1);
+        doc.moveTo(pts[0].x, pts[0].y);
+        for (const p of pts.slice(1)) doc.lineTo(p.x, p.y);
+        doc.close();
         doc.fillStroke();
       }
-      // Итог в центре
+      // Белый круг с итогом в центре
+      doc.setFillColor('#EDEFF3');
+      doc.circle(cx, cy, L.hole + 1.5, 'F');
+      doc.setFillColor('#FFFFFF');
+      doc.circle(cx, cy, L.hole, 'F');
       doc.setFont('DejaVu', 'bold');
-      doc.setFontSize(30);
+      doc.setFontSize(22);
       doc.setTextColor(hex(INK));
-      doc.text(formatAmount(total), cx, cy + 4, { align: 'center' });
+      doc.text(formatAmount(total), cx, cy + 3, { align: 'center' });
       doc.setFont('DejaVu', 'normal');
-      doc.setFontSize(12);
-      doc.setTextColor('#444444');
-      doc.text(c.unit, cx, cy + 24, { align: 'center' });
-
-      // Доли внутри сегментов (названия и суммы — в таблице справа)
-      doc.setFont('DejaVu', 'bold');
       doc.setFontSize(10);
-      for (const l of insideLabels(segs, cx, cy, (r0 + r1) / 2)) {
-        doc.setTextColor(l.dark ? '#FFFFFF' : hex(INK));
-        doc.text(l.text, l.x, l.y + 3.5, { align: 'center' });
+      doc.setTextColor('#444444');
+      doc.text(c.unit, cx, cy + 19, { align: 'center' });
+
+      // Доли внутри секторов (названия и суммы — в таблице справа)
+      doc.setFont('DejaVu', 'bold');
+      doc.setFontSize(11);
+      for (const s of L.sectors) {
+        if (!s.label) continue;
+        doc.setTextColor(s.label.dark ? '#FFFFFF' : hex(INK));
+        doc.text(s.label.text, s.label.x, s.label.y + 3.8, { align: 'center' });
       }
     } else {
       doc.setFontSize(16);

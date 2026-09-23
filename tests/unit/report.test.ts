@@ -77,3 +77,26 @@ describe('отчёт', () => {
     ]);
   });
 });
+
+describe('radialLayout', () => {
+  it('сектора по спирали: ширина — доля, длина убывает, углы покрывают круг', async () => {
+    const { radialLayout, sectorPathD } = await import('@/lib/report/donut-layout');
+    const segs = computeSegments(
+      [
+        { name: 'A', amount: 5 },
+        { name: 'B', amount: 3 },
+        { name: 'C', amount: 2 },
+      ],
+      'BLUE',
+    );
+    const L = radialLayout(segs, 100, 100, 90);
+    expect(L.sectors.map((s) => s.r)).toEqual([90, 72, 54]);
+    expect(L.sectors[0].a0).toBeCloseTo(-Math.PI / 2);
+    expect(L.sectors[2].a1).toBeCloseTo((3 * Math.PI) / 2);
+    expect(L.hole).toBeLessThan(54);
+    expect(L.sectors[0].label?.text).toBe('50 %');
+    // Один сектор на весь круг — корректный контур
+    const one = radialLayout(computeSegments([{ name: 'A', amount: 1 }], 'RED'), 100, 100, 90);
+    expect(sectorPathD(100, 100, 90, one.sectors[0].a0, one.sectors[0].a1)).toMatch(/A.*A/);
+  });
+});

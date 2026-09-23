@@ -213,3 +213,131 @@ export function insideLabels(
       return { segment: s, x, y, text: formatPct(s.pct), dark: isDarkColor(s.color) };
     });
 }
+
+/* ---------- Радиальная («спиральная») диаграмма ---------- */
+
+/** Первый (самый крупный) сектор начинается с «9 часов» и идёт по часовой стрелке. */
+export const RADIAL_START = -Math.PI / 2;
+
+export interface RadialSector {
+  segment: Segment;
+  /** Углы с учётом поворота, радианы от «12 часов» по часовой стрелке */
+  a0: number;
+  a1: number;
+  /** Внешний радиус сектора */
+  r: number;
+  /** Подпись процента внутри сектора (если помещается) */
+  label: { x: number; y: number; text: string; dark: boolean } | null;
+}
+
+export interface RadialLayout {
+  /** Радиус белого круга в центре */
+  hole: number;
+  /** Радиусы тонких фоновых окружностей */
+  rings: number[];
+  sectors: RadialSector[];
+}
+
+const r1 = (n: number) => Math.round(n * 10) / 10;
+
+/**
+ * Ширина сектора — доля статьи; длина убывает от крупной статьи к мелкой (спираль).
+ * Первый сектор достаёт до outerR, последний — примерно до 60 % радиуса.
+ */
+export function radialLayout(
+  segments: Segment[],
+  cx: number,
+  cy: number,
+  outerR: number,
+  fontPx = 12,
+): RadialLayout {
+  const hole = outerR * 0.34;
+  const minR = outerR * 0.6;
+  const n = segments.length;
+  const rings = [0.5, 0.64, 0.78, 0.92, 1].map((k) => r1(outerR * k));
+  const sectors = segments.map((s, k) => {
+    const r = n > 1 ? outerR - ((outerR - minR) * k) / (n - 1) : outerR;
+    const a0 = s.start + RADIAL_START;
+    const a1 = s.end + RADIAL_START;
+    const mid = (a0 + a1) / 2;
+    const lr = hole + (r - hole) * 0.56;
+    const text = formatPct(s.pct);
+    // Подпись — если по дуге хватает места под текст
+    const fits = (a1 - a0) * lr >= text.length * fontPx * 0.55 + 6 && r - hole > fontPx * 2;
+    const p = polar(cx, cy, lr, mid);
+    return {
+      segment: s,
+      a0,
+      a1,
+      r: r1(r),
+      label: fits ? { x: r1(p.x), y: r1(p.y), text, dark: isDarkColor(s.color) } : null,
+    };
+  });
+  return { hole: r1(hole), rings, sectors };
+}
+
+/** Точки контура сектора (для PDF): внешняя дуга, затем центр круга. */
+export function sectorPoints(
+  cx: number,
+  cy: number,
+  r: number,
+  a0: number,
+  a1: number,
+): { x: number; y: number }[] {
+  const steps = Math.max(2, Math.ceil(((a1 - a0) / (Math.PI * 2)) * 180));
+  const arc = Array.from({ length: steps + 1 }, (_, i) =>
+    polar(cx, cy, r, a0 + ((a1 - a0) * i) / steps),
+  );
+  return a1 - a0 >= Math.PI * 2 - 1e-6 ? arc : [{ x: cx, y: cy }, ...arc];
+}
+
+/** SVG-контур сектора от центра (белый круг в центре закрывает середину). */
+export function sectorPathD(cx: number, cy: number, r: number, a0: number, a1: number): string {
+  const f = (n: number) => n.toFixed(2);
+  if (a1 - a0 >= Math.PI * 2 - 1e-6) {
+    const top = polar(cx, cy, r, a0);
+    const bottom = polar(cx, cy, r, a0 + Math.PI);
+    return `M${f(top.x)} ${f(top.y)}A${f(r)} ${f(r)} 0 1 1 ${f(bottom.x)} ${f(bottom.y)}A${f(r)} ${f(r)} 0 1 1 ${f(top.x)} ${f(top.y)}Z`;
+  }
+  const p0 = polar(cx, cy, r, a0);
+  const p1 = polar(cx, cy, r, a1);
+  const large = a1 - a0 > Math.PI ? 1 : 0;
+  return `M${f(cx)} ${f(cy)}L${f(p0.x)} ${f(p0.y)}A${f(r)} ${f(r)} 0 ${large} 1 ${f(p1.x)} ${f(p1.y)}Z`;
+}
+
+/** Полная SVG-картинка диаграммы — для вставки в PPTX (рисуется в браузере). */
+export function radialSvg(
+  segments: Segment[],
+  opts: { size: number; total: string; unit: string; font?: string },
+): string {
+  const { size } = opts;
+  const c = size / 2;
+  const outerR = size / 2 - 4;
+  const font = opts.font ?? 'Arial, sans-serif';
+  const fs = Math.round(size / 26);
+  const L = radialLayout(segments, c, c, outerR, fs);
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const parts = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">`,
+    ...L.rings.map(
+      (r) =>
+        `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="#E3E7EF" stroke-width="${size / 400}"/>`,
+    ),
+    ...L.sectors.map(
+      (s) =>
+        `<path d="${sectorPathD(c, c, s.r, s.a0, s.a1)}" fill="${s.segment.color}" stroke="#FFFFFF" stroke-width="${size / 300}"/>`,
+    ),
+    `<circle cx="${c}" cy="${c}" r="${L.hole + size / 200}" fill="#000000" opacity="0.06"/>`,
+    `<circle cx="${c}" cy="${c}" r="${L.hole}" fill="#FFFFFF"/>`,
+    ...L.sectors
+      .filter((s) => s.label)
+      .map(
+        (s) =>
+          `<text x="${s.label!.x}" y="${s.label!.y}" text-anchor="middle" dominant-baseline="central" font-family="${font}" font-size="${fs}" font-weight="700" fill="${s.label!.dark ? '#FFFFFF' : '#111111'}">${esc(s.label!.text)}</text>`,
+      ),
+    `<text x="${c}" y="${c - fs * 0.25}" text-anchor="middle" font-family="${font}" font-size="${Math.round(L.hole * 0.42)}" font-weight="700" fill="#111111">${esc(opts.total)}</text>`,
+    `<text x="${c}" y="${c + L.hole * 0.38}" text-anchor="middle" font-family="${font}" font-size="${Math.round(fs * 0.9)}" fill="#555555">${esc(opts.unit)}</text>`,
+    '</svg>',
+  ];
+  return parts.join('');
+}

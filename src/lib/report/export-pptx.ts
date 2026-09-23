@@ -1,7 +1,7 @@
 import PptxGenJS from 'pptxgenjs';
 import { formatDate } from '../dates';
 import { formatAmount } from '../utils';
-import { chartTotal, computeSegments, formatPct } from './donut-layout';
+import { chartTotal, computeSegments, formatPct, radialSvg, type Segment } from './donut-layout';
 import {
   BRAND,
   BRAND_DARK,
@@ -13,6 +13,28 @@ import {
 } from './export-common';
 
 const FONT = 'Arial';
+
+/** Рисует диаграмму в PNG (в браузере через canvas) для вставки на слайд. */
+async function radialPng(segs: Segment[], total: string, unit: string): Promise<string> {
+  const size = 1200;
+  const svg = radialSvg(segs, { size, total, unit, font: 'Arial, sans-serif' });
+  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+  try {
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('Не удалось нарисовать диаграмму'));
+      img.src = url;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    canvas.getContext('2d')!.drawImage(img, 0, 0, size, size);
+    return canvas.toDataURL('image/png');
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 const W = 13.333;
 const H = 7.5;
 
@@ -81,7 +103,7 @@ export async function buildPptx(d: ReportExportData): Promise<PptxGenJS> {
   );
   footer(title, 1, d);
 
-  d.charts.forEach((c, i) => {
+  for (const [i, c] of d.charts.entries()) {
     const slide = pptx.addSlide();
     slide.background = { color: 'FFFFFF' };
     slide.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: W, h: 0.95, fill: { color: BRAND } });
@@ -109,47 +131,16 @@ export async function buildPptx(d: ReportExportData): Promise<PptxGenJS> {
     const segs = computeSegments(c.items, c.palette);
     const total = chartTotal(c.items);
     if (segs.length) {
-      const cx = { x: 0.3, y: 1.15, w: 7.4, h: 5.75 };
-      slide.addChart(
-        pptx.ChartType.doughnut,
-        [{ name: c.title, labels: segs.map((s) => s.name), values: segs.map((s) => s.amount) }],
-        {
-          ...cx,
-          holeSize: 62,
-          firstSliceAng: 0,
-          chartColors: segs.map((s) => s.color.replace('#', '')),
-          dataBorder: { pt: 1.5, color: 'FFFFFF' },
-          showLegend: false,
-          showTitle: false,
-          showValue: true,
-          showPercent: true,
-          showLabel: false,
-          dataLabelColor: 'FFFFFF',
-          dataLabelFontSize: 10,
-          dataLabelFontBold: true,
-          dataLabelFormatCode: '0.00',
-          dataLabelFontFace: FONT,
-        },
-      );
-      // Итог в центре кольца
-      slide.addText(
-        [
-          {
-            text: formatAmount(total),
-            options: { fontSize: 34, bold: true, color: INK, breakLine: true },
-          },
-          { text: c.unit, options: { fontSize: 14, color: '444444' } },
-        ],
-        {
-          x: cx.x + cx.w / 2 - 1.4,
-          y: cx.y + cx.h / 2 - 0.65,
-          w: 2.8,
-          h: 1.3,
-          align: 'center',
-          valign: 'middle',
-          fontFace: FONT,
-        },
-      );
+      // Диаграмма с секторами разной длины — картинкой (в PowerPoint нет такого типа)
+      const side = 5.6;
+      slide.addImage({
+        data: await radialPng(segs, formatAmount(total), c.unit),
+        x: 0.3 + (7.4 - side) / 2,
+        y: 1.2,
+        w: side,
+        h: side,
+        altText: `${c.title}: ${segs.map((s) => `${s.name} ${formatPct(s.pct)}`).join(', ')}`,
+      });
     } else {
       slide.addText('Нет данных', {
         x: 0.4,
@@ -200,7 +191,7 @@ export async function buildPptx(d: ReportExportData): Promise<PptxGenJS> {
       autoPage: false,
     });
     footer(slide, i + 2, d);
-  });
+  }
   return pptx;
 }
 
