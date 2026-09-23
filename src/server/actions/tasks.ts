@@ -13,6 +13,7 @@ import { optionalIsoDate } from '@/lib/validation';
 import { run, UserError, type ActionResult } from '@/server/action-utils';
 import { taskInclude, toTaskDTO } from '@/server/queries';
 import { importPlanRows, planRowSchema, type ImportResult } from '@/server/plan-service';
+import { syncAutoAssignments } from '@/server/auto-assign';
 
 const id = z.number().int().positive();
 
@@ -32,6 +33,8 @@ const patchSchema = z
     needsClarification: z.boolean(),
     /** Пересчитать даты по тексту срока */
     recalc: z.boolean(),
+    /** Вернуть автоназначение ответственных по ролям */
+    autoAssign: z.boolean(),
   })
   .partial();
 export type TaskPatch = z.input<typeof patchSchema>;
@@ -169,10 +172,12 @@ async function applyPatch(
   }
 
   // Роли и ответственные
+  let rolesChanged = false;
   if (p.roleIds !== undefined) {
     const prev = task.roles.map((r) => r.id).sort();
     const next = [...new Set(p.roleIds)].sort();
     if (prev.join() !== next.join()) {
+      rolesChanged = true;
       const newRoles = await tx.role.findMany({ where: { id: { in: next } } });
       data.roles = { set: next.map((x) => ({ id: x })) };
       hist.push({ field: 'Роль', oldValue: names(task.roles), newValue: names(newRoles) });
@@ -184,12 +189,35 @@ async function applyPatch(
     if (prev.join() !== next.join()) {
       const list = await tx.employee.findMany({ where: { id: { in: next } } });
       data.employees = { set: next.map((x) => ({ id: x })) };
+      // Ответственные изменены вручную — автоназначение больше не трогает задачу
+      data.employeesManual = true;
       hist.push({ field: 'Ответственный', oldValue: names(task.employees), newValue: names(list) });
     }
   }
+  if (p.autoAssign && task.employeesManual) {
+    data.employeesManual = false;
+  }
+  const manualAfter = (data.employeesManual as boolean | undefined) ?? task.employeesManual;
+  const needSync =
+    !manualAfter && (rolesChanged || Boolean(p.autoAssign) || p.status !== undefined);
 
-  if (Object.keys(data).length === 0) return;
-  await tx.task.update({ where: { id: task.id }, data });
+  if (Object.keys(data).length === 0 && !needSync) return;
+  if (Object.keys(data).length) await tx.task.update({ where: { id: task.id }, data });
+  if (needSync) {
+    await syncAutoAssignments(tx, { taskIds: [task.id] });
+    const after = await tx.employee.findMany({
+      where: { tasks: { some: { id: task.id } } },
+      orderBy: { fullName: 'asc' },
+    });
+    const before = [...task.employees].sort((a, b) => a.fullName.localeCompare(b.fullName));
+    if (names(before) !== names(after)) {
+      hist.push({
+        field: 'Ответственный (по ролям)',
+        oldValue: names(before),
+        newValue: names(after),
+      });
+    }
+  }
   if (hist.length) {
     await tx.taskHistory.createMany({
       data: hist.map((h) => ({ ...h, taskId: task.id, changedBy: userName })),
@@ -215,6 +243,8 @@ const bulkSchema = z.object({
   status: z.enum(['NOT_STARTED', 'IN_PROGRESS', 'DONE']).optional(),
   employeeIds: z.array(id).max(30).optional(),
   employeeMode: z.enum(['set', 'add']).optional(),
+  /** Назначить ответственных автоматически по ролям */
+  autoAssign: z.boolean().optional(),
   shiftDays: z.number().int().min(-3650).max(3650).optional(),
 });
 
@@ -239,6 +269,7 @@ export async function bulkUpdateTasks(
                 ? [...t.employees.map((e) => e.id), ...b.employeeIds]
                 : b.employeeIds;
           }
+          if (b.autoAssign) p.autoAssign = true;
           if (b.shiftDays) {
             const s = dbToISO(t.startDate);
             const e = dbToISO(t.endDate);
@@ -347,6 +378,7 @@ export async function duplicateTask(taskId: number): Promise<ActionResult<TaskDT
         endDate: t.endDate,
         needsClarification: t.needsClarification,
         datesManual: t.datesManual,
+        employeesManual: t.employeesManual,
         comment: t.comment,
         roles: { connect: t.roles.map((r) => ({ id: r.id })) },
         employees: { connect: t.employees.map((e) => ({ id: e.id })) },

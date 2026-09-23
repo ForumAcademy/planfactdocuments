@@ -94,6 +94,22 @@ export function BulkBar({ ids, onClear }: { ids: number[]; onClear: () => void }
           >
             Применить
           </Button>
+          <div className="border-t border-line pt-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full"
+              onClick={async () => {
+                if (await bulkUpdate(ids, { autoAssign: true })) setEmpOpen(false);
+              }}
+              data-testid="bulk-auto-assign"
+            >
+              Назначить автоматически по ролям
+            </Button>
+            <p className="mt-1 text-xs text-ink/60">
+              Ответственными станут сотрудники с ролями задачи; дальше они будут обновляться сами.
+            </p>
+          </div>
         </PopoverContent>
       </Popover>
 

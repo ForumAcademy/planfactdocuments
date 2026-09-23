@@ -4,6 +4,7 @@ import { isoToDb, isISODate, todayMsk, type ISODate } from '@/lib/dates';
 import { computeTaskDates, mergeNoteIntoComment, type ForumRefs } from '@/lib/plan';
 import { STATUS_LABEL } from '@/lib/status';
 import { ensureDictionaries, key } from './dictionaries';
+import { syncAutoAssignments } from './auto-assign';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -103,6 +104,8 @@ export async function importPlanRows(
       status: row.status as TaskStatus,
       completedAt: isoToDb(completedAt),
       comment,
+      // Ответственные указаны в файле — считаем их заданными вручную, иначе назначим по ролям
+      employeesManual: employeeIds.length > 0,
     };
 
     const prev = row.number !== null ? byNumber.get(row.number) : undefined;
@@ -150,6 +153,7 @@ export async function importPlanRows(
       result.added++;
     }
   }
+  await syncAutoAssignments(db, { forumId: forum.id });
   return result;
 }
 

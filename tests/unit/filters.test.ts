@@ -14,6 +14,7 @@ const base: TaskDTO = {
   endDate: '2026-09-30',
   needsClarification: false,
   datesManual: false,
+  employeesManual: false,
   status: 'NOT_STARTED',
   completedAt: null,
   comment: null,

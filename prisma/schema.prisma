@@ -132,6 +132,8 @@ model Task {
   endDate            DateTime?     @db.Date
   needsClarification Boolean       @default(false)
   datesManual        Boolean       @default(false)
+  /// Ответственные изменены вручную — автоназначение по ролям их не трогает
+  employeesManual    Boolean       @default(false)
   status             TaskStatus    @default(NOT_STARTED)
   completedAt        DateTime?     @db.Date
   comment            String?

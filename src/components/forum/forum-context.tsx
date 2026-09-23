@@ -142,7 +142,10 @@ export function ForumProvider({
           if (patch.description !== undefined) n.description = patch.description;
           if (patch.comment !== undefined) n.comment = patch.comment;
           if (patch.termText !== undefined) n.termText = patch.termText;
-          if (patch.employeeIds !== undefined) n.employeeIds = patch.employeeIds;
+          if (patch.employeeIds !== undefined) {
+            n.employeeIds = patch.employeeIds;
+            n.employeesManual = true;
+          }
           if (patch.roleIds !== undefined) n.roleIds = patch.roleIds;
           if (patch.stageId !== undefined) n.stageId = patch.stageId;
           if (patch.blockId !== undefined) n.blockId = patch.blockId;

@@ -23,6 +23,8 @@ export interface TaskDTO {
   endDate: ISODate | null;
   needsClarification: boolean;
   datesManual: boolean;
+  /** Ответственные изменены вручную (иначе — назначаются по ролям) */
+  employeesManual: boolean;
   status: TaskStatusCode;
   completedAt: ISODate | null;
   comment: string | null;

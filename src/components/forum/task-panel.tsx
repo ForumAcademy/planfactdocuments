@@ -226,6 +226,25 @@ function PanelBody({ task, onClose }: { task: TaskDTO; onClose: () => void }) {
             onChange={(v) => save({ employeeIds: v.map(Number) })}
             placeholder="Выберите из справочника"
           />
+          <div
+            className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink/60"
+            data-testid="assign-mode"
+          >
+            {task.employeesManual ? (
+              <>
+                <span>Изменены вручную.</span>
+                <button
+                  type="button"
+                  className="text-brand hover:underline"
+                  onClick={() => save({ autoAssign: true })}
+                >
+                  Назначать автоматически по ролям
+                </button>
+              </>
+            ) : (
+              <span>Назначаются автоматически по ролям задачи — можно изменить вручную.</span>
+            )}
+          </div>
         </Field>
         <Field label="Комментарий">
           <Textarea

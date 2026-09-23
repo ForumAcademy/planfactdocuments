@@ -203,7 +203,6 @@ export async function runSeed(prisma: PrismaClient, masterPlan: Uint8Array): Pro
         reportDate: isoToDb(today),
       },
     });
-    const employees = await prisma.employee.findMany({ include: { roles: true } });
     const rows: PlanRowInput[] = parsed.rows.map((r) => ({
       number: r.number,
       stage: r.stage,
@@ -213,11 +212,8 @@ export async function runSeed(prisma: PrismaClient, masterPlan: Uint8Array): Pro
       roles: r.roles,
       status: 'NOT_STARTED',
       comment: r.comment,
-      // Назначаем первого сотрудника с подходящей ролью
-      employees: employees
-        .filter((e) => e.roles.some((role) => r.roles.some((x) => key(x) === key(role.name))))
-        .slice(0, 1)
-        .map((e) => e.fullName),
+      // Ответственные назначаются автоматически по ролям
+      employees: [],
       startDate: null,
       endDate: null,
       completedAt: null,

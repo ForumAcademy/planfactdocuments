@@ -7,6 +7,7 @@ import { requireEditor } from '@/lib/auth';
 import { colorSchema, employeeSchema, nameSchema, type EmployeeInput } from '@/lib/validation';
 import { run, UserError, type ActionResult } from '@/server/action-utils';
 import { normalizeTgUsername } from '@/lib/telegram-format';
+import { syncAutoAssignments } from '@/server/auto-assign';
 
 export type DictKind = 'stage' | 'block' | 'role' | 'employee' | 'template';
 
@@ -107,6 +108,8 @@ export async function saveEmployee(
       : await prisma.employee.create({
           data: { ...data, roles: { connect: d.roleIds.map((r) => ({ id: r })) } },
         });
+    // Роли сотрудника изменились — пересчитываем ответственных во всех активных форумах
+    await syncAutoAssignments(prisma);
     refresh();
     return { id: row.id };
   });
@@ -222,6 +225,7 @@ export async function setDictArchived(
     if (kind === 'role') await prisma.role.update({ where: { id }, data: { archived } });
     if (kind === 'employee')
       await prisma.employee.update({ where: { id }, data: { active: !archived } });
+    if (kind === 'employee') await syncAutoAssignments(prisma);
     refresh();
     return null;
   });

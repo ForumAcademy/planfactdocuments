@@ -32,6 +32,7 @@ export function toTaskDTO(
     endDate: dbToISO(t.endDate),
     needsClarification: t.needsClarification,
     datesManual: t.datesManual,
+    employeesManual: t.employeesManual,
     status: t.status,
     completedAt: dbToISO(t.completedAt),
     comment: t.comment,

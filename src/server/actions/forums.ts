@@ -10,6 +10,7 @@ import { forumSchema, type ForumInput } from '@/lib/validation';
 import { DEFAULT_REPORT } from '@/server/seed';
 import { run, UserError, type ActionResult } from '@/server/action-utils';
 import { importPlanRows, planRowSchema, recalcForumDates } from '@/server/plan-service';
+import { syncAutoAssignments } from '@/server/auto-assign';
 
 const sourceSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('empty') }),
@@ -81,6 +82,7 @@ export async function createForum(
         });
       }
       tasks = templates.length;
+      await syncAutoAssignments(prisma, { forumId: forum.id });
     } else if (src.kind === 'forum') {
       tasks = await copyTasks(src.forumId, forum.id, refs, userName, true);
     } else if (src.kind === 'excel') {
@@ -137,6 +139,7 @@ async function copyTasks(
         endDate: isoToDb(endDate),
         needsClarification,
         datesManual: t.datesManual,
+        employeesManual: t.employeesManual,
         status: resetStatus ? 'NOT_STARTED' : t.status,
         completedAt: resetStatus ? null : t.completedAt,
         comment: t.comment,
@@ -152,6 +155,7 @@ async function copyTasks(
       },
     });
   }
+  await syncAutoAssignments(prisma, { forumId: toForumId });
   return src.length;
 }
 
