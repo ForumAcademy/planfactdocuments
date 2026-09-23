@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   ArrowDown,
+  ArrowLeft,
+  ArrowRight,
   ArrowUp,
   Copy,
   FileDown,
@@ -76,6 +78,29 @@ export function ReportView({
     setCharts(res.data);
     toast.success(msg, { id: 'saved' });
     return true;
+  };
+
+  // Перестановка блоков прямо на странице: перетаскивание за ручку или стрелки
+  const [dragId, setDragId] = React.useState<number | null>(null);
+  const [overId, setOverId] = React.useState<number | null>(null);
+  const moveChart = async (from: number, to: number) => {
+    if (from === to || to < 0 || to >= charts.length) return;
+    const prev = charts;
+    const next = [...charts];
+    const [m] = next.splice(from, 1);
+    next.splice(to, 0, m);
+    setCharts(next);
+    if (
+      !apply(
+        await reorderCharts(
+          forum.id,
+          next.map((c) => c.id),
+        ),
+        'Порядок сохранён',
+      )
+    ) {
+      setCharts(prev);
+    }
   };
 
   const onDate = async (d: string | null) => {
@@ -170,8 +195,40 @@ export function ReportView({
 
       {/* На широком экране — по две диаграммы в строке */}
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
-        {charts.map((c) => (
-          <ChartCard key={c.id} chart={c} />
+        {charts.map((c, i) => (
+          <div
+            key={c.id}
+            className={cn(
+              'flex rounded-md transition-shadow [&>*]:flex-1',
+              dragId === c.id && 'opacity-50',
+              overId === c.id && dragId !== c.id && 'ring-2 ring-brand ring-offset-2',
+            )}
+            onDragOver={(e) => {
+              if (dragId === null) return;
+              e.preventDefault();
+              setOverId(c.id);
+            }}
+            onDragLeave={() => setOverId((o) => (o === c.id ? null : o))}
+            onDrop={(e) => {
+              e.preventDefault();
+              const from = charts.findIndex((x) => x.id === dragId);
+              setDragId(null);
+              setOverId(null);
+              if (from >= 0) void moveChart(from, i);
+            }}
+          >
+            <ChartCard
+              chart={c}
+              index={i}
+              count={charts.length}
+              onMove={(to) => void moveChart(i, to)}
+              onDragStart={() => setDragId(c.id)}
+              onDragEnd={() => {
+                setDragId(null);
+                setOverId(null);
+              }}
+            />
+          </div>
         ))}
         {charts.length === 0 && (
           <div className="rounded-md border border-dashed border-line p-10 text-center text-status-gray xl:col-span-2">
@@ -193,13 +250,74 @@ export function ReportView({
   );
 }
 
-function ChartCard({ chart }: { chart: ChartDTO }) {
+function ChartCard({
+  chart,
+  index,
+  count,
+  onMove,
+  onDragStart,
+  onDragEnd,
+}: {
+  chart: ChartDTO;
+  index: number;
+  count: number;
+  onMove: (to: number) => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+}) {
   const total = chartTotal(chart.items);
   const segments = computeSegments(chart.items, chart.palette);
   const hasNotes = segments.some((s) => s.note);
   return (
     <Card className="flex flex-col p-4" data-testid="report-chart">
-      <h2 className="text-lg font-semibold">{chart.title}</h2>
+      <div className="flex items-center gap-2">
+        {count > 1 && (
+          <span
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.effectAllowed = 'move';
+              // Перетаскиваем весь блок, а не только ручку
+              const card = e.currentTarget.closest('[data-testid=report-chart]');
+              if (card) e.dataTransfer.setDragImage(card, 24, 24);
+              onDragStart();
+            }}
+            onDragEnd={onDragEnd}
+            className="-ml-1 cursor-grab rounded p-1 text-ink/40 hover:bg-surface hover:text-ink active:cursor-grabbing"
+            title="Перетащите, чтобы поменять место блока"
+            aria-hidden
+            data-testid="chart-drag"
+          >
+            <GripVertical className="size-4" />
+          </span>
+        )}
+        <h2 className="text-lg font-semibold">{chart.title}</h2>
+        {count > 1 && (
+          <div className="ml-auto flex gap-1">
+            <Button
+              variant="ghost"
+              size="iconSm"
+              disabled={index === 0}
+              onClick={() => onMove(index - 1)}
+              aria-label={`Переместить «${chart.title}» раньше`}
+              title="Раньше"
+              data-testid="chart-move-up"
+            >
+              <ArrowLeft />
+            </Button>
+            <Button
+              variant="ghost"
+              size="iconSm"
+              disabled={index === count - 1}
+              onClick={() => onMove(index + 1)}
+              aria-label={`Переместить «${chart.title}» дальше`}
+              title="Дальше"
+              data-testid="chart-move-down"
+            >
+              <ArrowRight />
+            </Button>
+          </div>
+        )}
+      </div>
       {/* Диаграмма — по центру блока по вертикали, таблица — сверху */}
       <div className="mt-2 grid flex-1 grid-cols-1 items-start gap-6 md:grid-cols-[312px_minmax(0,1fr)] md:gap-8">
         <div className="self-center py-2">
@@ -209,7 +327,7 @@ function ChartCard({ chart }: { chart: ChartDTO }) {
         <table className="w-full text-sm">
           <thead className="bg-surface text-left text-xs text-ink/70">
             <tr>
-              <th className="px-2 py-1.5">Статья</th>
+              <th className="min-w-[140px] px-2 py-1.5">Статья</th>
               <th className="whitespace-nowrap px-2 py-1.5 text-right">{chart.unit}</th>
               {hasNotes && <th className="px-2 py-1.5 text-right">Доп.</th>}
               <th className="w-16 px-2 py-1.5 text-right">Доля</th>
@@ -231,7 +349,7 @@ function ChartCard({ chart }: { chart: ChartDTO }) {
                   {formatAmount(s.amount)}
                 </td>
                 {hasNotes && (
-                  <td className="whitespace-nowrap px-2 py-1.5 text-right text-ink/70">
+                  <td className="max-w-[180px] px-2 py-1.5 text-right text-ink/70">
                     {s.note ?? ''}
                   </td>
                 )}
@@ -246,7 +364,9 @@ function ChartCard({ chart }: { chart: ChartDTO }) {
                 {formatAmount(total)}
               </td>
               {hasNotes && <td />}
-              <td className="px-2 py-1.5 text-right tabular-nums">{total > 0 ? '100 %' : '—'}</td>
+              <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
+                {total > 0 ? '100 %' : '—'}
+              </td>
             </tr>
           </tbody>
         </table>

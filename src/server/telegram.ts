@@ -1,6 +1,6 @@
 import 'server-only';
 import { createHmac } from 'node:crypto';
-import { canLinkButton, splitMessage } from '@/lib/telegram-format';
+import { canLinkButton, splitMessage, tgEscape } from '@/lib/telegram-format';
 
 export function telegramConfigured(): boolean {
   return Boolean(process.env.TELEGRAM_BOT_TOKEN);
@@ -59,13 +59,28 @@ export async function sendTelegram(
       ? { inline_keyboard: [[{ text: 'Открыть сайт', url: siteUrl }]] }
       : undefined;
   for (const [i, part] of parts.entries()) {
-    await tgApi('sendMessage', {
-      chat_id: chatId,
-      text: part,
-      parse_mode: 'HTML',
-      link_preview_options: { is_disabled: true },
-      ...(button && i === parts.length - 1 ? { reply_markup: button } : {}),
-    });
+    const last = i === parts.length - 1;
+    const send = (text: string, markup?: typeof button) =>
+      tgApi('sendMessage', {
+        chat_id: chatId,
+        text,
+        parse_mode: 'HTML',
+        link_preview_options: { is_disabled: true },
+        ...(markup ? { reply_markup: markup } : {}),
+      });
+    if (!(button && last)) {
+      await send(part);
+      continue;
+    }
+    try {
+      await send(part, button);
+    } catch (e) {
+      // Telegram не принял адрес для кнопки — отправляем без кнопки, ссылкой в тексте,
+      // чтобы напоминание всё равно дошло
+      if (!/BUTTON/i.test(e instanceof Error ? e.message : '')) throw e;
+      console.warn('Telegram отклонил кнопку со ссылкой', JSON.stringify(siteUrl), e);
+      await send(`${part}\n\n<a href="${tgEscape(siteUrl!)}">Открыть сайт</a>`);
+    }
   }
 }
 

@@ -141,7 +141,11 @@ export function splitMessage(text: string, limit = 3900): string[] {
  * берём основной домен проекта на Vercel.
  */
 export function appUrl(env: Record<string, string | undefined> = process.env): string | undefined {
-  let raw = (env.APP_URL || env.VERCEL_PROJECT_PRODUCTION_URL || '').trim();
+  // Убираем пробелы, невидимые символы и кавычки, случайно попавшие при копировании
+  let raw = (env.APP_URL || env.VERCEL_PROJECT_PRODUCTION_URL || '').replace(
+    /[\s\u200B-\u200D\u2060\uFEFF"'«»<>]/g,
+    '',
+  );
   if (!raw) return undefined;
   if (!/^https?:\/\//i.test(raw)) raw = `https://${raw}`;
   try {

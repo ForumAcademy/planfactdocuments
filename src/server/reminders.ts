@@ -203,6 +203,12 @@ export async function runReminders(opts: { force?: boolean } = {}): Promise<RunR
   const textUrl = canLinkButton(url) ? undefined : url;
   // Пояснения для итогового сообщения: почему что-то не отправилось
   const notes: string[] = [];
+  const rawUrl = process.env.APP_URL ?? '';
+  if (/[^\x00-\x7F]/.test(rawUrl) || (url && /xn--/.test(url))) {
+    notes.push(
+      'в переменной APP_URL есть русские или другие не латинские буквы — перепечатайте адрес в английской раскладке, иначе ссылка на сайт не работает',
+    );
+  }
   let personalSent = 0;
   let personalSkipped = 0;
 
