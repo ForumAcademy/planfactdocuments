@@ -81,7 +81,7 @@ export function TasksView() {
             type="button"
             onClick={() => changeMode('table')}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded px-3',
+              'inline-flex items-baseline gap-1.5 rounded px-3 leading-[30px] [&_svg]:self-baseline [&_svg]:translate-y-[0.23em]',
               mode === 'table' ? 'bg-white font-medium text-brand shadow-sm' : 'text-ink/70',
             )}
           >
@@ -91,7 +91,7 @@ export function TasksView() {
             type="button"
             onClick={() => changeMode('kanban')}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded px-3',
+              'inline-flex items-baseline gap-1.5 rounded px-3 leading-[30px] [&_svg]:self-baseline [&_svg]:translate-y-[0.23em]',
               mode === 'kanban' ? 'bg-white font-medium text-brand shadow-sm' : 'text-ink/70',
             )}
           >

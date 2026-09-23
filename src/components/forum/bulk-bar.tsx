@@ -20,6 +20,12 @@ export function BulkBar({ ids, onClear }: { ids: number[]; onClear: () => void }
   const [shift, setShift] = React.useState('7');
   const [empOpen, setEmpOpen] = React.useState(false);
   const [shiftOpen, setShiftOpen] = React.useState(false);
+  // После успешного массового действия выделение снимается — галочки сбрасываются
+  const apply = async (input: Parameters<typeof bulkUpdate>[1]) => {
+    const ok = await bulkUpdate(ids, input);
+    if (ok) onClear();
+    return ok;
+  };
 
   return (
     <div
@@ -35,7 +41,7 @@ export function BulkBar({ ids, onClear }: { ids: number[]; onClear: () => void }
         aria-label="Сменить статус"
         onChange={async (e) => {
           const s = e.target.value as TaskStatusCode;
-          if (s) await bulkUpdate(ids, { status: s });
+          if (s) await apply({ status: s });
         }}
       >
         <option value="">Сменить статус…</option>
@@ -86,7 +92,7 @@ export function BulkBar({ ids, onClear }: { ids: number[]; onClear: () => void }
             className="w-full"
             disabled={!emps.length && empMode === 'add'}
             onClick={async () => {
-              if (await bulkUpdate(ids, { employeeIds: emps.map(Number), employeeMode: empMode })) {
+              if (await apply({ employeeIds: emps.map(Number), employeeMode: empMode })) {
                 setEmpOpen(false);
                 setEmps([]);
               }
@@ -100,7 +106,7 @@ export function BulkBar({ ids, onClear }: { ids: number[]; onClear: () => void }
               variant="outline"
               className="w-full"
               onClick={async () => {
-                if (await bulkUpdate(ids, { autoAssign: true })) setEmpOpen(false);
+                if (await apply({ autoAssign: true })) setEmpOpen(false);
               }}
               data-testid="bulk-auto-assign"
             >
@@ -135,7 +141,7 @@ export function BulkBar({ ids, onClear }: { ids: number[]; onClear: () => void }
             onClick={async () => {
               const n = Number(shift);
               if (!Number.isInteger(n) || n === 0) return;
-              if (await bulkUpdate(ids, { shiftDays: n })) setShiftOpen(false);
+              if (await apply({ shiftDays: n })) setShiftOpen(false);
             }}
           >
             Сдвинуть
