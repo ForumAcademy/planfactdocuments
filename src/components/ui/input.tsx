@@ -24,11 +24,14 @@ export const Textarea = React.forwardRef<
 ));
 Textarea.displayName = 'Textarea';
 
+// Своя стрелка вместо стандартной — отступ 12 px от правого края (класс в globals.css)
+const selectClass = 'select-chevron cursor-pointer appearance-none pr-10';
+
 export const Select = React.forwardRef<
   HTMLSelectElement,
   React.SelectHTMLAttributes<HTMLSelectElement>
 >(({ className, ...props }, ref) => (
-  <select ref={ref} className={cn(inputClass, 'pr-8', className)} {...props} />
+  <select ref={ref} className={cn(inputClass, selectClass, className)} {...props} />
 ));
 Select.displayName = 'Select';
 
