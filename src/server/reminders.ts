@@ -200,6 +200,10 @@ export async function runReminders(opts: { force?: boolean } = {}): Promise<RunR
   const sentKey = new Set(sentLogs.map((s) => `${s.taskId}:${s.employeeId}:${s.kind}`));
   const sentOnce = (kind: string) => sentLogs.some((s) => s.kind === kind);
   const url = appUrl();
+  // Пояснения для итогового сообщения: почему что-то не отправилось
+  const notes: string[] = [];
+  let personalSent = 0;
+  let personalSkipped = 0;
 
   // Личные сообщения
   if (settings.telegramPersonal) {
@@ -207,11 +211,18 @@ export async function runReminders(opts: { force?: boolean } = {}): Promise<RunR
       where: { active: true, telegramChatId: { not: null } },
     });
     const chatOf = new Map(linked.map((e) => [e.id, e.telegramChatId!]));
+    if (linked.length === 0) {
+      notes.push('ни один сотрудник ещё не подключился к боту — личные сообщения некому отправить');
+    }
     const byChat = new Map<string, { name: string; ids: number[]; items: ReminderItem[] }>();
     for (const it of items) {
       for (const e of it.employees) {
         const chat = chatOf.get(e.id);
-        if (!chat || sentKey.has(`${it.taskId}:${e.id}:${it.kind}`)) continue;
+        if (!chat) continue;
+        if (sentKey.has(`${it.taskId}:${e.id}:${it.kind}`)) {
+          personalSkipped++;
+          continue;
+        }
         if (!byChat.has(chat)) byChat.set(chat, { name: e.fullName, ids: [], items: [] });
         const g = byChat.get(chat)!;
         if (!g.ids.includes(e.id)) g.ids.push(e.id);
@@ -226,6 +237,7 @@ export async function runReminders(opts: { force?: boolean } = {}): Promise<RunR
       try {
         await sendTelegram(chat, formatPersonalDigest(g.name, g.items.map(toTg), url));
         result.telegramSent++;
+        personalSent++;
       } catch (e) {
         status = 'error';
         error = errText(e);
@@ -251,8 +263,15 @@ export async function runReminders(opts: { force?: boolean } = {}): Promise<RunR
     }
   }
 
+  if (settings.telegramPersonal && personalSent === 0 && personalSkipped > 0) {
+    notes.push('личные напоминания по этим задачам сегодня уже отправлялись — повтор будет завтра');
+  }
+  if (!settings.telegramPersonal) notes.push('личные напоминания выключены');
+
   // Общий чат команды
   const group = settings.telegramGroupChatId;
+  if (!settings.telegramGroup) notes.push('сводка в общий чат выключена');
+  else if (!group) notes.push('общий чат команды не подключён (команда /connect в чате)');
   if (settings.telegramGroup && group) {
     const recipient = `Чат «${settings.telegramGroupTitle ?? group}»`;
     const send = async (kind: string, subject: string, text: string) => {
@@ -270,6 +289,7 @@ export async function runReminders(opts: { force?: boolean } = {}): Promise<RunR
         data: { dayKey: today, channel: 'telegram', kind, recipient, subject, status, error },
       });
     };
+    if (!items.length) notes.push('задач, требующих внимания, нет — сводка в чат не нужна');
     if (items.length && (opts.force || !sentOnce('group_daily'))) {
       const sorted = [...items];
       sortItems(sorted);
@@ -292,6 +312,7 @@ export async function runReminders(opts: { force?: boolean } = {}): Promise<RunR
 
   result.message =
     `Отправлено сообщений в Telegram: ${result.telegramSent}` +
-    (result.errors ? `, ошибок: ${result.errors}` : '');
+    (result.errors ? `, ошибок: ${result.errors} (подробности — в журнале ниже)` : '') +
+    (notes.length ? `. ${notes.map((n) => n[0].toUpperCase() + n.slice(1)).join('. ')}.` : '.');
   return result;
 }

@@ -308,7 +308,12 @@ export function SettingsForm({
               variant="outline"
               disabled={busy !== null}
               onClick={() =>
-                act('run', runRemindersNow, (r) => `Напоминаний: ${r.reminders}. ${r.message}`)
+                act(
+                  'run',
+                  runRemindersNow,
+                  (r) =>
+                    `Задач, требующих внимания (просрочены, скоро срок или пора начинать): ${r.reminders}. ${r.message}`,
+                )
               }
             >
               <Send /> {busy === 'run' ? 'Отправляем…' : 'Отправить напоминания сейчас'}
