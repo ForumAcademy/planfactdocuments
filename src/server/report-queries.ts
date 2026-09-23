@@ -8,7 +8,7 @@ export interface ChartDTO {
   palette: PaletteKey;
   unit: string;
   order: number;
-  items: { id: number; name: string; amount: number; order: number }[];
+  items: { id: number; name: string; amount: number; note: string | null; order: number }[];
 }
 
 export async function getReportCharts(forumId: number): Promise<ChartDTO[]> {
@@ -27,6 +27,7 @@ export async function getReportCharts(forumId: number): Promise<ChartDTO[]> {
       id: i.id,
       name: i.name,
       amount: Number(i.amount),
+      note: i.note,
       order: i.order,
     })),
   }));

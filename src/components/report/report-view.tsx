@@ -34,7 +34,8 @@ import {
   setReportDate,
 } from '@/server/actions/report';
 import type { ChartDTO } from '@/server/report-queries';
-import { ChartLegend, DonutChart } from './donut-chart';
+import { DonutChart } from './donut-chart';
+import { ReportExcelButtons } from './report-excel';
 
 export function ReportView({
   forum,
@@ -117,6 +118,12 @@ export function ReportView({
           <Button variant="outline" onClick={() => setCopyOpen(true)}>
             <Copy /> Скопировать из другого форума
           </Button>
+          <ReportExcelButtons
+            forum={forum}
+            reportDate={reportDate}
+            charts={charts}
+            onImported={setCharts}
+          />
           <Button
             onClick={() => exportAs('pptx')}
             disabled={!!busy || !charts.length}
@@ -147,7 +154,7 @@ export function ReportView({
 
       {editing && <ChartsEditor forumId={forum.id} charts={charts} apply={apply} />}
 
-      <div className="mt-4 grid grid-cols-1 gap-4 2xl:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-4">
         {charts.map((c) => (
           <ChartCard key={c.id} chart={c} />
         ))}
@@ -174,48 +181,58 @@ export function ReportView({
 function ChartCard({ chart }: { chart: ChartDTO }) {
   const total = chartTotal(chart.items);
   const segments = computeSegments(chart.items, chart.palette);
+  const hasNotes = segments.some((s) => s.note);
   return (
     <Card className="p-4" data-testid="report-chart">
       <h2 className="text-lg font-semibold">{chart.title}</h2>
-      <div className="mt-2 flex flex-col gap-4 lg:flex-row">
-        <div className="min-w-0 flex-1">
-          <DonutChart items={chart.items} palette={chart.palette} unit={chart.unit} />
-        </div>
-        <div className="lg:w-72 lg:pt-6">
-          <ChartLegend items={chart.items} palette={chart.palette} />
-        </div>
-      </div>
-      <table className="mt-4 w-full text-sm">
-        <thead className="bg-surface text-left text-xs text-ink/70">
-          <tr>
-            <th className="px-2 py-1.5">Название</th>
-            <th className="px-2 py-1.5 text-right">Сумма, {chart.unit}</th>
-            <th className="w-20 px-2 py-1.5 text-right">Доля</th>
-          </tr>
-        </thead>
-        <tbody>
-          {segments.map((s) => (
-            <tr key={s.index} className="border-t border-line">
-              <td className="px-2 py-1.5">
-                <span
-                  className="mr-2 inline-block size-2.5 rounded-sm align-middle"
-                  style={{ background: s.color }}
-                />
-                {s.name}
-              </td>
-              <td className="px-2 py-1.5 text-right tabular-nums">{formatAmount(s.amount)}</td>
-              <td className="px-2 py-1.5 text-right tabular-nums text-ink/70">
-                {formatPct(s.pct)}
-              </td>
+      <div className="mt-2 grid grid-cols-1 items-center gap-4 xl:grid-cols-[minmax(0,640px)_minmax(320px,520px)]">
+        <DonutChart items={chart.items} palette={chart.palette} unit={chart.unit} />
+        {/* Таблица справа — она же легенда */}
+        <table className="w-full text-sm">
+          <thead className="bg-surface text-left text-xs text-ink/70">
+            <tr>
+              <th className="px-2 py-1.5">Статья</th>
+              <th className="px-2 py-1.5 text-right">{chart.unit}</th>
+              {hasNotes && <th className="px-2 py-1.5 text-right">Доп.</th>}
+              <th className="w-16 px-2 py-1.5 text-right">Доля</th>
             </tr>
-          ))}
-          <tr className="border-t-2 border-ink/20 font-semibold">
-            <td className="px-2 py-1.5">Итого</td>
-            <td className="px-2 py-1.5 text-right tabular-nums">{formatAmount(total)}</td>
-            <td className="px-2 py-1.5 text-right tabular-nums">{total > 0 ? '100 %' : '—'}</td>
-          </tr>
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {segments.map((s) => (
+              <tr key={s.index} className="border-t border-line align-top">
+                <td className="px-2 py-1.5">
+                  <span className="flex items-start gap-2">
+                    <span
+                      className="mt-1 size-2.5 shrink-0 rounded-sm"
+                      style={{ background: s.color }}
+                    />
+                    {s.name}
+                  </span>
+                </td>
+                <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
+                  {formatAmount(s.amount)}
+                </td>
+                {hasNotes && (
+                  <td className="whitespace-nowrap px-2 py-1.5 text-right text-ink/70">
+                    {s.note ?? ''}
+                  </td>
+                )}
+                <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-ink/70">
+                  {formatPct(s.pct)}
+                </td>
+              </tr>
+            ))}
+            <tr className="border-t-2 border-ink/20 font-semibold">
+              <td className="px-2 py-1.5">Итого</td>
+              <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
+                {formatAmount(total)}
+              </td>
+              {hasNotes && <td />}
+              <td className="px-2 py-1.5 text-right tabular-nums">{total > 0 ? '100 %' : '—'}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </Card>
   );
 }
@@ -328,7 +345,10 @@ interface DraftItem {
   key: string;
   name: string;
   amount: string;
+  note: string;
 }
+
+let draftSeq = 0;
 
 function ChartEditorRow({
   chart,
@@ -346,7 +366,7 @@ function ChartEditorRow({
   onMove: (from: number, to: number) => void;
   onDragStart: () => void;
   onSave: (p: Partial<{ title: string; palette: PaletteKey; unit: string }>) => void;
-  onSaveItems: (items: { name: string; amount: number }[]) => void;
+  onSaveItems: (items: { name: string; amount: number; note: string | null }[]) => Promise<boolean>;
   onDelete: () => void;
 }) {
   const [title, setTitle] = React.useState(chart.title);
@@ -357,37 +377,45 @@ function ChartEditorRow({
         key: String(i.id),
         name: i.name,
         amount: formatAmount(i.amount).replace(/\s/g, ''),
+        note: i.note ?? '',
       })),
     [chart.items],
   );
   const [items, setItems] = React.useState<DraftItem[]>(toDraft);
+  const [dirty, setDirty] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState('');
-  React.useEffect(() => setItems(toDraft()), [toDraft]);
+  // Данные с сервера принимаем, только если нет несохранённых правок
+  React.useEffect(() => {
+    if (!dirty) setItems(toDraft());
+  }, [toDraft, dirty]);
   React.useEffect(() => setTitle(chart.title), [chart.title]);
   React.useEffect(() => setUnit(chart.unit), [chart.unit]);
 
-  const commitItems = (list: DraftItem[]) => {
-    const parsed: { name: string; amount: number }[] = [];
-    for (const [k, i] of list.entries()) {
-      if (!i.name.trim() && !i.amount.trim()) continue;
-      const a = parseAmount(i.amount || '0');
-      if (!i.name.trim()) return setError(`Строка ${k + 1}: укажите название`);
-      if (a === null || a < 0)
-        return setError(`Строка ${k + 1}: сумма должна быть числом (например, 6,21)`);
-      parsed.push({ name: i.name.trim(), amount: a });
-    }
+  const change = (list: DraftItem[]) => {
+    setItems(list);
+    setDirty(true);
     setError('');
-    const same =
-      parsed.length === chart.items.length &&
-      parsed.every(
-        (p, k) =>
-          p.name === chart.items[k].name && Math.abs(p.amount - chart.items[k].amount) < 0.005,
-      );
-    if (!same) onSaveItems(parsed);
+  };
+  const update = (k: number, patch: Partial<DraftItem>) =>
+    change(items.map((x, i) => (i === k ? { ...x, ...patch } : x)));
+
+  const save = async () => {
+    const parsed: { name: string; amount: number; note: string | null }[] = [];
+    for (const [k, i] of items.entries()) {
+      if (!i.name.trim() && !i.amount.trim() && !i.note.trim()) continue;
+      const a = parseAmount(i.amount || '0');
+      if (!i.name.trim()) return setError(`Строка ${k + 1}: укажите название статьи`);
+      if (a === null || a < 0)
+        return setError(`Строка ${k + 1}: сумма должна быть числом, например 6,21`);
+      parsed.push({ name: i.name.trim(), amount: a, note: i.note.trim() || null });
+    }
+    setSaving(true);
+    const ok = await onSaveItems(parsed);
+    setSaving(false);
+    if (ok) setDirty(false);
   };
 
-  const update = (k: number, patch: Partial<DraftItem>) =>
-    setItems((l) => l.map((x, i) => (i === k ? { ...x, ...patch } : x)));
   const total = items.reduce((s, i) => s + (parseAmount(i.amount) ?? 0), 0);
 
   return (
@@ -428,7 +456,7 @@ function ChartEditorRow({
             onBlur={() => unit.trim() && unit !== chart.unit && onSave({ unit: unit.trim() })}
           />
         </Field>
-        <div className="mb-0.5 flex gap-1">
+        <div className="flex gap-1">
           <Button
             size="icon"
             variant="ghost"
@@ -459,12 +487,13 @@ function ChartEditorRow({
         </div>
       </div>
       <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[480px] text-sm">
+        <table className="w-full min-w-[560px] text-sm">
           <thead className="text-left text-xs text-ink/60">
             <tr>
               <th className="w-8" />
-              <th className="px-1 py-1">Название строки</th>
-              <th className="w-36 px-1 py-1">Сумма ({chart.unit})</th>
+              <th className="px-1 py-1">Статья</th>
+              <th className="w-32 px-1 py-1">Сумма ({chart.unit})</th>
+              <th className="w-36 px-1 py-1">Доп. единица</th>
               <th className="w-28" />
             </tr>
           </thead>
@@ -476,8 +505,7 @@ function ChartEditorRow({
                   <Input
                     value={it.name}
                     onChange={(e) => update(k, { name: e.target.value })}
-                    onBlur={() => commitItems(items)}
-                    aria-label="Название строки"
+                    aria-label="Статья"
                     className="h-8"
                   />
                 </td>
@@ -486,9 +514,18 @@ function ChartEditorRow({
                     value={it.amount}
                     inputMode="decimal"
                     onChange={(e) => update(k, { amount: e.target.value })}
-                    onBlur={() => commitItems(items)}
                     aria-label="Сумма"
+                    placeholder="0,00"
                     className="h-8 text-right tabular-nums"
+                  />
+                </td>
+                <td className="px-1 py-0.5">
+                  <Input
+                    value={it.note}
+                    onChange={(e) => update(k, { note: e.target.value })}
+                    aria-label="Доп. единица"
+                    placeholder="напр. 6 шт."
+                    className="h-8"
                   />
                 </td>
                 <td className="whitespace-nowrap px-1">
@@ -499,8 +536,7 @@ function ChartEditorRow({
                     onClick={() => {
                       const l = [...items];
                       [l[k - 1], l[k]] = [l[k], l[k - 1]];
-                      setItems(l);
-                      commitItems(l);
+                      change(l);
                     }}
                     title="Выше"
                   >
@@ -513,8 +549,7 @@ function ChartEditorRow({
                     onClick={() => {
                       const l = [...items];
                       [l[k + 1], l[k]] = [l[k], l[k + 1]];
-                      setItems(l);
-                      commitItems(l);
+                      change(l);
                     }}
                     title="Ниже"
                   >
@@ -523,11 +558,7 @@ function ChartEditorRow({
                   <Button
                     size="iconSm"
                     variant="ghost"
-                    onClick={() => {
-                      const l = items.filter((_, i) => i !== k);
-                      setItems(l);
-                      commitItems(l);
-                    }}
+                    onClick={() => change(items.filter((_, i) => i !== k))}
                     title="Удалить строку"
                   >
                     <Trash2 />
@@ -536,27 +567,37 @@ function ChartEditorRow({
               </tr>
             ))}
           </tbody>
-          <tfoot>
-            <tr>
-              <td />
-              <td className="px-1 py-1">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    setItems((l) => [...l, { key: `new-${Date.now()}`, name: '', amount: '' }])
-                  }
-                >
-                  <Plus /> Добавить строку
-                </Button>
-              </td>
-              <td className="px-2 py-1 text-right text-sm font-semibold tabular-nums">
-                Итого: {formatAmount(total)}
-              </td>
-              <td />
-            </tr>
-          </tfoot>
         </table>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              change([...items, { key: `new-${++draftSeq}`, name: '', amount: '', note: '' }])
+            }
+          >
+            <Plus /> Добавить строку
+          </Button>
+          <span className="text-sm font-semibold tabular-nums">Итого: {formatAmount(total)}</span>
+          <div className="ml-auto flex items-center gap-2">
+            {dirty && <span className="text-xs text-yellow-800">Есть несохранённые изменения</span>}
+            {dirty && (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setDirty(false);
+                  setItems(toDraft());
+                  setError('');
+                }}
+              >
+                Отменить
+              </Button>
+            )}
+            <Button onClick={save} disabled={!dirty || saving} data-testid="save-items">
+              {saving ? 'Сохраняем…' : 'Сохранить строки'}
+            </Button>
+          </div>
+        </div>
         {error && <p className="mt-1 text-xs text-status-red">{error}</p>}
       </div>
     </div>

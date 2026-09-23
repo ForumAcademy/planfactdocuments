@@ -96,6 +96,12 @@ const itemsSchema = z
     z.object({
       name: z.string().trim().min(1, 'У каждой строки должно быть название').max(300),
       amount: z.number().finite().min(0, 'Сумма не может быть отрицательной').max(1e12),
+      note: z
+        .string()
+        .trim()
+        .max(100)
+        .nullish()
+        .transform((v) => v || null),
     }),
   )
   .max(100);
@@ -118,6 +124,7 @@ export async function saveChartItems(
           chartId,
           name: i.name,
           amount: Math.round(i.amount * 100) / 100,
+          note: i.note,
           order: k + 1,
         })),
       }),
@@ -156,7 +163,55 @@ export async function copyReportFrom(
               create: c.items.map((i) => ({
                 name: i.name,
                 amount: withAmounts ? i.amount : 0,
+                note: withAmounts ? i.note : null,
                 order: i.order,
+              })),
+            },
+          },
+        });
+      }
+    });
+    refresh(forumId);
+    return getReportCharts(forumId);
+  });
+}
+
+const importSchema = z
+  .array(
+    z.object({
+      title: z.string().trim().min(1, 'У каждой диаграммы должно быть название').max(200),
+      palette,
+      unit: z.string().trim().min(1).max(50),
+      items: itemsSchema,
+    }),
+  )
+  .min(1, 'В файле нет диаграмм')
+  .max(50);
+
+/** Загрузка отчёта из Excel: диаграммы форума заменяются диаграммами из файла. */
+export async function importReport(
+  forumId: number,
+  charts: z.input<typeof importSchema>,
+): Promise<ActionResult<ChartDTO[]>> {
+  return run(async () => {
+    await requireEditor();
+    const list = importSchema.parse(charts);
+    await prisma.$transaction(async (tx) => {
+      await tx.reportChart.deleteMany({ where: { forumId } });
+      for (const [k, c] of list.entries()) {
+        await tx.reportChart.create({
+          data: {
+            forumId,
+            title: c.title,
+            palette: c.palette,
+            unit: c.unit,
+            order: k + 1,
+            items: {
+              create: c.items.map((i, j) => ({
+                name: i.name,
+                amount: Math.round(i.amount * 100) / 100,
+                note: i.note,
+                order: j + 1,
               })),
             },
           },

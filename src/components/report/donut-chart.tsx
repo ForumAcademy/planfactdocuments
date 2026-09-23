@@ -171,22 +171,3 @@ export function DonutChart({
     </div>
   );
 }
-
-/** Легенда справа: цвет, название, сумма, доля. */
-export function ChartLegend({ items, palette }: { items: ChartItem[]; palette: PaletteKey }) {
-  const segments = computeSegments(items, palette);
-  return (
-    <ul className="space-y-1.5 text-sm">
-      {segments.map((s) => (
-        <li key={s.index} className="flex items-start gap-2">
-          <span className="mt-1 size-3 shrink-0 rounded-sm" style={{ background: s.color }} />
-          <span className="flex-1 leading-snug">{s.name}</span>
-          <span className="whitespace-nowrap tabular-nums">{formatAmount(s.amount)}</span>
-          <span className="w-12 whitespace-nowrap text-right text-xs tabular-nums text-ink/60">
-            {formatPct(s.pct)}
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
-}

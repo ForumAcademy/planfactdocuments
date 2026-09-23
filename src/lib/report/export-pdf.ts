@@ -190,9 +190,16 @@ export async function buildPdf(d: ReportExportData): Promise<jsPDF> {
       doc.setFillColor(s.color);
       doc.rect(x0 + 6, y + rowH / 2 - 5, 10, 10, 'F');
       doc.setTextColor(hex(INK));
-      const name = doc.splitTextToSize(s.name, 170) as string[];
+      const name = doc.splitTextToSize(s.name, 150) as string[];
       doc.text(name[0] + (name.length > 1 ? '…' : ''), x0 + 22, y + rowH / 2 + 3.5);
-      doc.text(formatAmount(s.amount), x0 + 262, y + rowH / 2 + 3.5, { align: 'right' });
+      doc.text(
+        formatAmount(s.amount) + (s.note ? ` (${s.note})` : ''),
+        x0 + 262,
+        y + rowH / 2 + 3.5,
+        {
+          align: 'right',
+        },
+      );
       doc.setTextColor('#555555');
       doc.text(formatPct(s.pct), x0 + 314, y + rowH / 2 + 3.5, { align: 'right' });
       doc.line(x0, y + rowH, x0 + 320, y + rowH);

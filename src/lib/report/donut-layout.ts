@@ -3,12 +3,21 @@ import { paletteShades, type PaletteKey } from './palette';
 export interface ChartItem {
   name: string;
   amount: number;
+  /** Дополнительная единица в скобках: «6 шт.» */
+  note?: string | null;
+}
+
+/** «Партнерства; 8,48 (7 шт.)» */
+export function itemLabel(name: string, amount: string, note?: string | null): string {
+  // Доп. единица не разрывается между строками (неразрывные пробелы)
+  return `${name}; ${amount}${note ? `\u00a0(${note.replace(/ /g, '\u00a0')})` : ''}`;
 }
 
 export interface Segment {
   index: number;
   name: string;
   amount: number;
+  note: string | null;
   pct: number;
   color: string;
   /** Углы в радианах от «12 часов» по часовой стрелке. */
@@ -43,6 +52,7 @@ export function computeSegments(items: ChartItem[], palette: PaletteKey): Segmen
       index: k,
       name: i.name,
       amount: i.amount,
+      note: i.note ?? null,
       pct: frac * 100,
       color: colors[k],
       start,
@@ -64,7 +74,8 @@ export function formatPct(p: number): string {
 
 /** Переносит текст по словам на строки не длиннее max символов. */
 export function wrapText(s: string, max: number, maxLines = 3): string[] {
-  const words = s.split(/\s+/).filter(Boolean);
+  // Делим только по обычным пробелам — неразрывные сохраняют слова вместе
+  const words = s.split(/ +/).filter(Boolean);
   const lines: string[] = [];
   let cur = '';
   for (const w of words) {
@@ -126,7 +137,7 @@ export function layoutLabels(segments: Segment[], o: LabelOptions): LabelLayout[
     const right = Math.sin(s.mid) >= 0;
     const p0 = polar(o.cx, o.cy, o.outerR, s.mid);
     const pe = polar(o.cx, o.cy, o.outerR + o.elbow, s.mid);
-    const name = wrapText(`${s.name}; ${o.formatAmount(s.amount)}`, o.maxChars, 3);
+    const name = wrapText(itemLabel(s.name, o.formatAmount(s.amount), s.note), o.maxChars, 3);
     const lines = [...name, formatPct(s.pct)];
     const h = lines.length * o.lineHeight;
     return { s, right, p0, desiredY: pe.y, h, lines };

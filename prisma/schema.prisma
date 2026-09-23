@@ -181,6 +181,8 @@ model ReportItem {
   chart   ReportChart @relation(fields: [chartId], references: [id], onDelete: Cascade)
   name    String
   amount  Decimal     @default(0) @db.Decimal(14, 2)
+  /// Дополнительная единица, выводится в скобках: «6 шт.»
+  note    String?
   order   Int         @default(0)
 }
 

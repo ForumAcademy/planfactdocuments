@@ -7,7 +7,7 @@ export interface ExportChart {
   title: string;
   palette: PaletteKey;
   unit: string;
-  items: { name: string; amount: number }[];
+  items: { name: string; amount: number; note?: string | null }[];
 }
 
 export interface ReportExportData {

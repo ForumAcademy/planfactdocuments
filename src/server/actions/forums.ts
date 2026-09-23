@@ -227,7 +227,12 @@ export async function duplicateForum(id: number): Promise<ActionResult<{ id: num
             unit: c.unit,
             order: c.order,
             items: {
-              create: c.items.map((i) => ({ name: i.name, amount: i.amount, order: i.order })),
+              create: c.items.map((i) => ({
+                name: i.name,
+                amount: i.amount,
+                note: i.note,
+                order: i.order,
+              })),
             },
           })),
         },

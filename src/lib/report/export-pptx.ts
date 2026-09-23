@@ -174,7 +174,10 @@ export async function buildPptx(d: ReportExportData): Promise<PptxGenJS> {
       ...segs.map((s): PptxGenJS.TableRow => [
         { text: '', options: { fill: { color: s.color.replace('#', '') } } },
         { text: s.name },
-        { text: formatAmount(s.amount), options: { align: 'right' } },
+        {
+          text: formatAmount(s.amount) + (s.note ? ` (${s.note})` : ''),
+          options: { align: 'right' },
+        },
         { text: formatPct(s.pct), options: { align: 'right', color: '555555' } },
       ]),
       [
@@ -188,7 +191,7 @@ export async function buildPptx(d: ReportExportData): Promise<PptxGenJS> {
       x: 7.9,
       y: 1.35,
       w: 5.0,
-      colW: [0.22, 2.98, 1.0, 0.8],
+      colW: [0.22, 2.58, 1.4, 0.8],
       fontFace: FONT,
       fontSize: segs.length > 10 ? 10 : 12,
       color: INK,
