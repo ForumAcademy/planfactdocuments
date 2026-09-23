@@ -1,0 +1,212 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+// ---------- Пользователи (задел на персональные логины) ----------
+
+enum UserRole {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  login        String   @unique
+  name         String
+  passwordHash String?
+  role         UserRole @default(EDITOR)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+}
+
+model LoginAttempt {
+  id        Int      @id @default(autoincrement())
+  ip        String
+  createdAt DateTime @default(now())
+
+  @@index([ip, createdAt])
+}
+
+// ---------- Справочники ----------
+
+model Stage {
+  id        Int            @id @default(autoincrement())
+  name      String         @unique
+  order     Int            @default(0)
+  color     String         @default("#1F4E9E")
+  archived  Boolean        @default(false)
+  tasks     Task[]
+  templates TemplateTask[]
+}
+
+model Block {
+  id        Int            @id @default(autoincrement())
+  name      String         @unique
+  order     Int            @default(0)
+  archived  Boolean        @default(false)
+  tasks     Task[]
+  templates TemplateTask[]
+}
+
+model Role {
+  id        Int            @id @default(autoincrement())
+  name      String         @unique
+  order     Int            @default(0)
+  archived  Boolean        @default(false)
+  employees Employee[]
+  tasks     Task[]
+  templates TemplateTask[]
+}
+
+model Employee {
+  id        Int      @id @default(autoincrement())
+  fullName  String
+  position  String?
+  email     String?
+  phone     String?
+  telegram  String?
+  active    Boolean  @default(true)
+  roles     Role[]
+  tasks     Task[]
+  createdAt DateTime @default(now())
+}
+
+model TemplateTask {
+  id          Int     @id @default(autoincrement())
+  number      Int
+  stageId     Int?
+  stage       Stage?  @relation(fields: [stageId], references: [id])
+  blockId     Int?
+  block       Block?  @relation(fields: [blockId], references: [id])
+  description String
+  termText    String  @default("")
+  comment     String?
+  order       Int     @default(0)
+  roles       Role[]
+}
+
+// ---------- Форумы и задачи ----------
+
+model Forum {
+  id             Int           @id @default(autoincrement())
+  name           String
+  startDate      DateTime      @db.Date
+  endDate        DateTime?     @db.Date
+  salesStartDate DateTime      @db.Date
+  location       String?
+  archived       Boolean       @default(false)
+  reportDate     DateTime?     @db.Date
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  tasks          Task[]
+  charts         ReportChart[]
+}
+
+enum TaskStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  DONE
+}
+
+model Task {
+  id                 Int           @id @default(autoincrement())
+  forumId            Int
+  forum              Forum         @relation(fields: [forumId], references: [id], onDelete: Cascade)
+  number             Int
+  stageId            Int?
+  stage              Stage?        @relation(fields: [stageId], references: [id])
+  blockId            Int?
+  block              Block?        @relation(fields: [blockId], references: [id])
+  description        String
+  termText           String        @default("")
+  startDate          DateTime?     @db.Date
+  endDate            DateTime?     @db.Date
+  needsClarification Boolean       @default(false)
+  datesManual        Boolean       @default(false)
+  status             TaskStatus    @default(NOT_STARTED)
+  completedAt        DateTime?     @db.Date
+  comment            String?
+  order              Int           @default(0)
+  roles              Role[]
+  employees          Employee[]
+  history            TaskHistory[]
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([forumId, order])
+}
+
+model TaskHistory {
+  id        Int      @id @default(autoincrement())
+  taskId    Int
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  field     String
+  oldValue  String?
+  newValue  String?
+  changedBy String
+  changedAt DateTime @default(now())
+
+  @@index([taskId, changedAt])
+}
+
+// ---------- Отчёт ----------
+
+enum ChartPalette {
+  RED
+  GREEN
+  BLUE
+}
+
+model ReportChart {
+  id      Int          @id @default(autoincrement())
+  forumId Int
+  forum   Forum        @relation(fields: [forumId], references: [id], onDelete: Cascade)
+  title   String
+  palette ChartPalette @default(BLUE)
+  unit    String       @default("млн руб.")
+  order   Int          @default(0)
+  items   ReportItem[]
+}
+
+model ReportItem {
+  id      Int         @id @default(autoincrement())
+  chartId Int
+  chart   ReportChart @relation(fields: [chartId], references: [id], onDelete: Cascade)
+  name    String
+  amount  Decimal     @default(0) @db.Decimal(14, 2)
+  order   Int         @default(0)
+}
+
+// ---------- Напоминания ----------
+
+model ReminderSettings {
+  id                 Int     @id @default(1)
+  enabled            Boolean @default(true)
+  daysBefore         Int     @default(3)
+  managerEmails      String  @default("")
+  weeklySummary      Boolean @default(true)
+  maxEmailsPerRun    Int     @default(50)
+}
+
+model ReminderLog {
+  id         Int      @id @default(autoincrement())
+  dayKey     String
+  kind       String
+  taskId     Int?
+  employeeId Int?
+  recipient  String
+  subject    String
+  status     String
+  error      String?
+  createdAt  DateTime @default(now())
+
+  @@index([dayKey])
+  @@index([dayKey, taskId, employeeId])
+}
