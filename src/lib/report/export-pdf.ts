@@ -1,13 +1,7 @@
 import { jsPDF } from 'jspdf';
 import { formatDate } from '../dates';
 import { formatAmount } from '../utils';
-import {
-  chartTotal,
-  computeSegments,
-  formatPct,
-  radialLayout,
-  sectorPoints,
-} from './donut-layout';
+import { chartTotal, computeSegments, formatPct, radialLayout, sectorPoints } from './donut-layout';
 import {
   BRAND,
   BRAND_DARK,

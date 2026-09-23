@@ -73,3 +73,18 @@ describe('Telegram', () => {
     expect(parts.join('\n')).toBe(long);
   });
 });
+
+describe('appUrl / canLinkButton', () => {
+  it('дописывает https:// и убирает лишнее', async () => {
+    const { appUrl, canLinkButton } = await import('@/lib/telegram-format');
+    expect(appUrl({ APP_URL: 'planfactdocuments.vercel.app' })).toBe(
+      'https://planfactdocuments.vercel.app',
+    );
+    expect(appUrl({ APP_URL: ' https://site.ru/ ' })).toBe('https://site.ru');
+    expect(appUrl({ VERCEL_PROJECT_PRODUCTION_URL: 'x.vercel.app' })).toBe('https://x.vercel.app');
+    expect(appUrl({})).toBeUndefined();
+    expect(canLinkButton('https://x.vercel.app')).toBe(true);
+    expect(canLinkButton('http://localhost:3000')).toBe(false);
+    expect(canLinkButton(undefined)).toBe(false);
+  });
+});

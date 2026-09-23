@@ -6,7 +6,7 @@ import { prisma } from '@/lib/db';
 import { requireEditor } from '@/lib/auth';
 import { run, type ActionResult } from '@/server/action-utils';
 import { headers } from 'next/headers';
-import { runReminders, type RunResult } from '@/server/reminders';
+import { appUrl, runReminders, type RunResult } from '@/server/reminders';
 import {
   getBotInfo,
   sendTelegram,
@@ -72,6 +72,7 @@ export async function testTelegramGroup(): Promise<ActionResult> {
     await sendTelegram(
       s.telegramGroupChatId,
       'Проверка связи: сводки «Статус форумов» будут приходить в этот чат.',
+      appUrl(),
     );
     return null;
   });

@@ -7,6 +7,9 @@ import {
   type WeeklyForum,
 } from '@/lib/telegram-format';
 import { sendTelegram, telegramConfigured } from './telegram';
+import { appUrl, canLinkButton } from '@/lib/telegram-format';
+
+export { appUrl };
 import { autoArchivePastForums } from './queries';
 import { prisma } from '@/lib/db';
 import { addDays, dayOfWeek, dbToISO, todayMsk, type ISODate } from '@/lib/dates';
@@ -86,10 +89,6 @@ export async function collectReminders(
     });
   }
   return out;
-}
-
-function appUrl(): string | undefined {
-  return (process.env.APP_URL || '').replace(/\/$/, '') || undefined;
 }
 
 /** Данные для еженедельной сводки по активным форумам. */
@@ -200,6 +199,8 @@ export async function runReminders(opts: { force?: boolean } = {}): Promise<RunR
   const sentKey = new Set(sentLogs.map((s) => `${s.taskId}:${s.employeeId}:${s.kind}`));
   const sentOnce = (kind: string) => sentLogs.some((s) => s.kind === kind);
   const url = appUrl();
+  // Ссылка «Открыть сайт» — кнопкой под сообщением; если кнопку сделать нельзя — ссылкой в тексте
+  const textUrl = canLinkButton(url) ? undefined : url;
   // Пояснения для итогового сообщения: почему что-то не отправилось
   const notes: string[] = [];
   let personalSent = 0;
@@ -235,7 +236,7 @@ export async function runReminders(opts: { force?: boolean } = {}): Promise<RunR
       let status = 'sent';
       let error: string | null = null;
       try {
-        await sendTelegram(chat, formatPersonalDigest(g.name, g.items.map(toTg), url));
+        await sendTelegram(chat, formatPersonalDigest(g.name, g.items.map(toTg), textUrl), url);
         result.telegramSent++;
         personalSent++;
       } catch (e) {
@@ -278,7 +279,7 @@ export async function runReminders(opts: { force?: boolean } = {}): Promise<RunR
       let status = 'sent';
       let error: string | null = null;
       try {
-        await sendTelegram(group, text);
+        await sendTelegram(group, text, url);
         result.telegramSent++;
       } catch (e) {
         status = 'error';
@@ -296,7 +297,7 @@ export async function runReminders(opts: { force?: boolean } = {}): Promise<RunR
       await send(
         'group_daily',
         `Ежедневная сводка — задач: ${items.length}`,
-        formatGroupDaily(sorted.map(toTg), today, url),
+        formatGroupDaily(sorted.map(toTg), today, textUrl),
       );
     }
     const isMonday = dayOfWeek(today) === 1 || Boolean(opts.force);
@@ -304,7 +305,7 @@ export async function runReminders(opts: { force?: boolean } = {}): Promise<RunR
       await send(
         'weekly',
         'Еженедельная сводка',
-        formatWeekly(await weeklyData(today), today, url),
+        formatWeekly(await weeklyData(today), today, textUrl),
       );
       result.weekly = true;
     }

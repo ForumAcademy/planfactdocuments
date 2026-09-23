@@ -1,6 +1,6 @@
 import 'server-only';
 import { createHmac } from 'node:crypto';
-import { splitMessage } from '@/lib/telegram-format';
+import { canLinkButton, splitMessage } from '@/lib/telegram-format';
 
 export function telegramConfigured(): boolean {
   return Boolean(process.env.TELEGRAM_BOT_TOKEN);
@@ -46,13 +46,25 @@ export async function tgApi<T = unknown>(
 }
 
 /** Отправка текста (HTML), длинные сообщения делятся на части. */
-export async function sendTelegram(chatId: string | number, html: string): Promise<void> {
-  for (const part of splitMessage(html)) {
+export async function sendTelegram(
+  chatId: string | number,
+  html: string,
+  /** Адрес сайта — под сообщением появится кнопка «Открыть сайт» */
+  siteUrl?: string,
+): Promise<void> {
+  const parts = splitMessage(html);
+  // Кнопки-ссылки Telegram принимает только с полным публичным https-адресом
+  const button =
+    siteUrl && canLinkButton(siteUrl)
+      ? { inline_keyboard: [[{ text: 'Открыть сайт', url: siteUrl }]] }
+      : undefined;
+  for (const [i, part] of parts.entries()) {
     await tgApi('sendMessage', {
       chat_id: chatId,
       text: part,
       parse_mode: 'HTML',
       link_preview_options: { is_disabled: true },
+      ...(button && i === parts.length - 1 ? { reply_markup: button } : {}),
     });
   }
 }
