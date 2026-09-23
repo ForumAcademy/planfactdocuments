@@ -199,7 +199,7 @@ function ChartCard({ chart }: { chart: ChartDTO }) {
   return (
     <Card className="p-4" data-testid="report-chart">
       <h2 className="text-lg font-semibold">{chart.title}</h2>
-      <div className="mt-2 grid grid-cols-1 items-center gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="mt-2 grid grid-cols-1 items-center gap-6 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-16">
         <DonutChart items={chart.items} palette={chart.palette} unit={chart.unit} />
         {/* Таблица справа — она же легенда */}
         <table className="w-full text-sm">
