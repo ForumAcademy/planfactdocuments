@@ -4,7 +4,7 @@ import * as React from 'react';
 import { RefreshCw } from 'lucide-react';
 import { APP_VERSION } from '@/lib/app-version';
 
-const CHECK_EVERY_MS = 60_000;
+const CHECK_EVERY_MS = 30_000;
 const COUNTDOWN_S = 5;
 
 /**
@@ -14,10 +14,33 @@ const COUNTDOWN_S = 5;
 export function VersionWatcher() {
   const [left, setLeft] = React.useState<number | null>(null);
 
+  // Любой ответ сервера «сайт обновлён» (переход по странице, сохранение) сразу показывает
+  // предупреждение, а сам запрос «замирает» — страница не пытается разобрать чужой ответ.
+  React.useEffect(() => {
+    const original = window.fetch;
+    const patched: typeof window.fetch = async (...args) => {
+      const res = await original(...args);
+      const outdated =
+        res.headers.get('x-app-outdated') === '1' ||
+        (res.redirected && res.url.includes('reason=updated'));
+      if (outdated) {
+        setLeft((l) => l ?? COUNTDOWN_S);
+        return new Promise<Response>(() => undefined);
+      }
+      return res;
+    };
+    window.fetch = patched;
+    return () => {
+      if (window.fetch === patched) window.fetch = original;
+    };
+  }, []);
+
   React.useEffect(() => {
     let stopped = false;
+    let lastCheck = 0;
     const check = async () => {
       if (stopped || document.visibilityState === 'hidden') return;
+      lastCheck = Date.now();
       try {
         const res = await fetch('/api/version', { cache: 'no-store' });
         if (!res.ok) return;
@@ -32,13 +55,21 @@ export function VersionWatcher() {
     };
     const timer = setInterval(check, CHECK_EVERY_MS);
     const onVisible = () => void check();
+    // При действиях пользователя проверяем чаще (не чаще раза в 15 секунд)
+    const onAction = () => {
+      if (Date.now() - lastCheck > 15_000) void check();
+    };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);
+    window.addEventListener('pointerdown', onAction, { capture: true });
+    window.addEventListener('keydown', onAction, { capture: true });
     return () => {
       stopped = true;
       clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
+      window.removeEventListener('pointerdown', onAction, { capture: true });
+      window.removeEventListener('keydown', onAction, { capture: true });
     };
   }, []);
 

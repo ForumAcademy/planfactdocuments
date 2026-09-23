@@ -28,8 +28,13 @@ export async function middleware(req: NextRequest) {
   }
   if (loggedIn) return NextResponse.next();
 
+  // Фоновые запросы страницы (переходы и сохранения) — не переадресация, а явный ответ:
+  // открытая вкладка покажет предупреждение об обновлении, а не «сломается» на чужом ответе
+  const background = req.headers.get('rsc') === '1' || req.headers.has('next-action');
   let res: NextResponse;
-  if (pathname.startsWith('/api/')) {
+  if (outdated && background) {
+    res = NextResponse.json({ error: 'Сайт обновлён — войдите снова' }, { status: 401 });
+  } else if (pathname.startsWith('/api/')) {
     res = NextResponse.json(
       { error: outdated ? 'Сайт обновлён — войдите снова' : 'Требуется вход в систему' },
       { status: 401 },
@@ -42,7 +47,10 @@ export async function middleware(req: NextRequest) {
     else if (pathname !== '/') url.searchParams.set('next', pathname + search);
     res = NextResponse.redirect(url);
   }
-  if (outdated) res.cookies.delete(SESSION_COOKIE);
+  if (outdated) {
+    res.headers.set('x-app-outdated', '1');
+    res.cookies.delete(SESSION_COOKIE);
+  }
   return res;
 }
 
