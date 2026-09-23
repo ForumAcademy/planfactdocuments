@@ -500,6 +500,23 @@ function ForumsTab({ forums }: { forums: (ForumDTO & { taskCount: number })[] })
     },
     { key: 'location', label: 'Место', sortValue: (r) => r.location, render: (r) => r.location },
     {
+      key: 'website',
+      label: 'Сайт',
+      sortValue: (r) => r.website,
+      render: (r) =>
+        r.website ? (
+          <a
+            href={r.website}
+            target="_blank"
+            rel="noreferrer"
+            className="text-brand hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {r.website.replace(/^https?:\/\//, '').replace(/^www\./, '')}
+          </a>
+        ) : null,
+    },
+    {
       key: 'tasks',
       label: 'Задач',
       className: 'text-right',
@@ -564,7 +581,7 @@ function ForumsTab({ forums }: { forums: (ForumDTO & { taskCount: number })[] })
         rows={forums}
         columns={columns}
         initialSort={{ key: 'date', dir: 'asc' }}
-        searchText={(r) => [r.name, r.location].join(' ')}
+        searchText={(r) => [r.name, r.location, r.website].join(' ')}
         onRowClick={(r) => router.push(`/forums/${r.id}/gantt`)}
         rowClassName={(r) => (r.archived ? 'text-ink/50' : undefined)}
         toolbar={

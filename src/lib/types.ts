@@ -8,6 +8,7 @@ export interface ForumDTO {
   endDate: ISODate | null;
   salesStartDate: ISODate;
   location: string | null;
+  website: string | null;
   archived: boolean;
   reportDate: ISODate | null;
 }

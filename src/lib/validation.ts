@@ -13,6 +13,25 @@ export const optionalIsoDate = z
   .transform((v) => (v ? v : null))
   .refine((v) => v === null || isISODate(v), 'Неверный формат даты');
 
+/**
+ * Адрес сайта: можно ввести без https:// — дополнится.
+ * Пусто → null, неверный адрес → undefined.
+ */
+export function normalizeWebsite(v: string | null | undefined): string | null | undefined {
+  const raw = (v ?? '').trim();
+  if (!raw) return null;
+  const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const u = new URL(withProto);
+    if (!/^https?:$/.test(u.protocol) || !u.hostname.includes('.') || /\s/.test(raw)) {
+      return undefined;
+    }
+    return u.toString().replace(/\/$/, '');
+  } catch {
+    return undefined;
+  }
+}
+
 export const forumSchema = z
   .object({
     name: z.string().trim().min(1, 'Укажите название форума').max(200, 'Слишком длинное название'),
@@ -25,6 +44,14 @@ export const forumSchema = z
       .max(300)
       .nullish()
       .transform((v) => v || null),
+    website: z
+      .string()
+      .trim()
+      .max(500, 'Слишком длинный адрес')
+      .nullish()
+      .transform((v) => normalizeWebsite(v))
+      .refine((v) => v !== undefined, 'Неверный адрес сайта, пример: https://forum.ru')
+      .transform((v) => v ?? null),
   })
   .refine((f) => !f.endDate || f.endDate >= f.startDate, {
     message: 'Дата окончания не может быть раньше даты начала',

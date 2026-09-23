@@ -38,6 +38,7 @@ export function ForumFormDialog({
   const [salesStartDate, setSalesStartDate] = useState('');
   const [salesTouched, setSalesTouched] = useState(false);
   const [location, setLocation] = useState('');
+  const [website, setWebsite] = useState('');
   const [source, setSource] = useState<SourceKind>('template');
   const [copyFrom, setCopyFrom] = useState<string>('');
   const [excelRows, setExcelRows] = useState<PlanRowInput[] | null>(null);
@@ -53,6 +54,7 @@ export function ForumFormDialog({
     setSalesStartDate(forum?.salesStartDate ?? '');
     setSalesTouched(Boolean(forum));
     setLocation(forum?.location ?? '');
+    setWebsite(forum?.website ?? '');
     setSource('template');
     setCopyFrom('');
     setExcelRows(null);
@@ -111,6 +113,7 @@ export function ForumFormDialog({
       endDate: endDate || null,
       salesStartDate,
       location: location || null,
+      website: website || null,
     };
     const parsed = forumSchema.safeParse(input);
     if (!parsed.success) {
@@ -204,6 +207,16 @@ export function ForumFormDialog({
             </Field>
             <Field label="Место проведения" error={errors.location} htmlFor="f-loc">
               <Input id="f-loc" value={location} onChange={(e) => setLocation(e.target.value)} />
+            </Field>
+            <Field label="Сайт" error={errors.website} htmlFor="f-site">
+              <Input
+                id="f-site"
+                type="text"
+                inputMode="url"
+                placeholder="https://forum.ru"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+              />
             </Field>
           </div>
 

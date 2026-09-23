@@ -45,6 +45,7 @@ export async function createForum(
         endDate: isoToDb(f.endDate),
         salesStartDate: isoToDb(f.salesStartDate),
         location: f.location,
+        website: f.website,
       },
     });
     await createDefaultReport(forum.id);
@@ -175,6 +176,7 @@ export async function updateForum(
         endDate: isoToDb(f.endDate),
         salesStartDate: isoToDb(f.salesStartDate),
         location: f.location,
+        website: f.website,
       },
     });
     const datesChanged =
@@ -223,6 +225,7 @@ export async function duplicateForum(id: number): Promise<ActionResult<{ id: num
         endDate: src.endDate,
         salesStartDate: src.salesStartDate,
         location: src.location,
+        website: src.website,
         reportDate: src.reportDate,
         charts: {
           create: src.charts.map((c) => ({

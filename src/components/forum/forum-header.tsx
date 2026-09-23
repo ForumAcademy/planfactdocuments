@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { TabGroup, TabLink } from '@/components/ui/tab-links';
 import { usePathname, useSearchParams } from 'next/navigation';
 import * as React from 'react';
-import { CalendarDays, ChevronRight, MapPin, Pencil } from 'lucide-react';
+import { CalendarDays, ChevronRight, Globe, MapPin, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { ForumFormDialog } from '@/components/forums/forum-form-dialog';
@@ -121,6 +121,17 @@ export function ForumHeader({ forumOptions }: { forumOptions: { id: number; name
                   <MapPin className="size-3.5" /> {forum.location}
                 </span>
               )}
+              {forum.website && (
+                <a
+                  href={forum.website}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-brand hover:underline"
+                  data-testid="forum-website"
+                >
+                  <Globe className="size-3.5" /> {siteLabel(forum.website)}
+                </a>
+              )}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2" data-testid="status-counters">
@@ -186,4 +197,12 @@ export function ForumHeader({ forumOptions }: { forumOptions: { id: number; name
       />
     </div>
   );
+}
+
+/** «https://www.forum.ru/» → «forum.ru» */
+function siteLabel(url: string): string {
+  return url
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .replace(/\/$/, '');
 }

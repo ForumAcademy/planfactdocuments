@@ -13,6 +13,7 @@ export function toForumDTO(f: Forum): ForumDTO {
     endDate: dbToISO(f.endDate),
     salesStartDate: dbToISO(f.salesStartDate)!,
     location: f.location,
+    website: f.website,
     archived: f.archived,
     reportDate: dbToISO(f.reportDate),
   };

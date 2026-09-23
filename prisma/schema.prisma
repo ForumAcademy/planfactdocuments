@@ -103,6 +103,8 @@ model Forum {
   endDate        DateTime?     @db.Date
   salesStartDate DateTime      @db.Date
   location       String?
+  /// Сайт форума
+  website        String?
   archived       Boolean       @default(false)
   /// Возвращён из архива вручную — автоархив прошедших форумов его не трогает
   keepActive     Boolean       @default(false)
