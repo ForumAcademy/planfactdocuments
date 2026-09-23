@@ -250,6 +250,20 @@ export async function runSeed(prisma: PrismaClient, masterPlan: Uint8Array): Pro
       });
     }
 
+    // Несколько просроченных задач — чтобы сразу была видна подсветка отставания
+    for (const [i, t] of tasks.slice(30, 34).entries()) {
+      await prisma.task.update({
+        where: { id: t.id },
+        data: {
+          status: i % 2 ? 'NOT_STARTED' : 'IN_PROGRESS',
+          startDate: isoToDb(addDays(today, -20 - i * 3)),
+          endDate: isoToDb(addDays(today, -3 - i * 4)),
+          datesManual: true,
+          needsClarification: false,
+        },
+      });
+    }
+
     for (const [i, chart] of DEFAULT_REPORT.entries()) {
       await prisma.reportChart.create({
         data: {
