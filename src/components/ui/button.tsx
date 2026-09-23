@@ -16,8 +16,9 @@ export const buttonVariants = cva(
       },
       size: {
         default: 'h-9 px-3.5',
-        sm: 'h-8 px-2.5 text-xs',
-        lg: 'h-11 px-5 text-base',
+        // Все кнопки с текстом — одного размера (36 px); sm и lg оставлены для совместимости
+        sm: 'h-9 px-3.5',
+        lg: 'h-9 px-3.5',
         icon: 'h-9 w-9',
         iconSm: 'h-7 w-7',
       },

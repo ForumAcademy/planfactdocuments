@@ -350,7 +350,7 @@ export function GanttView() {
       <FilterBar />
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <div
-          className="inline-flex rounded-md border border-line bg-surface p-0.5 text-sm"
+          className="inline-flex h-9 rounded-md border border-line bg-surface p-0.5 text-sm"
           role="group"
           aria-label="Масштаб"
         >
@@ -366,7 +366,7 @@ export function GanttView() {
               type="button"
               onClick={() => setScale(k)}
               className={cn(
-                'rounded px-3 py-1.5',
+                'inline-flex items-center rounded px-3',
                 scale === k ? 'bg-white font-medium text-brand shadow-sm' : 'text-ink/70',
               )}
             >

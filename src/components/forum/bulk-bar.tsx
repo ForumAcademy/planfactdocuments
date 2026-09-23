@@ -30,7 +30,7 @@ export function BulkBar({ ids, onClear }: { ids: number[]; onClear: () => void }
         Выбрано {ids.length} {pluralRu(ids.length, 'задача', 'задачи', 'задач')}
       </span>
       <Select
-        className="h-8 w-44 text-xs"
+        className="w-48"
         value=""
         aria-label="Сменить статус"
         onChange={async (e) => {

@@ -139,7 +139,7 @@ export function FilterBar({ className }: { className?: string }) {
             type="button"
             onClick={() => setFilters({ due: filters.due === b.key ? null : b.key })}
             className={cn(
-              'h-8 rounded-md border px-2.5 text-xs',
+              'h-9 rounded-md border px-3.5 text-sm',
               filters.due === b.key
                 ? b.key === 'overdue'
                   ? 'border-status-red bg-status-red text-white'

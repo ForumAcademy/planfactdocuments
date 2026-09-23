@@ -37,18 +37,18 @@ export default async function HomePage({
       <main className="mx-auto max-w-[1600px] px-4 py-6">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="mr-auto text-2xl font-semibold">Форумы</h1>
-          <Link href="/database" className={cn(buttonVariants({ variant: 'dark', size: 'lg' }))}>
+          <Link href="/database" className={cn(buttonVariants({ variant: 'dark' }))}>
             <Database /> База данных
           </Link>
           <NewForumButton forumOptions={options} />
         </div>
 
         <div className="mt-5 flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-md border border-line bg-surface p-0.5 text-sm">
+          <div className="inline-flex h-9 rounded-md border border-line bg-surface p-0.5 text-sm">
             <Link
               href={q({ view: undefined })}
               className={cn(
-                'rounded px-3 py-1.5',
+                'inline-flex items-center rounded px-3',
                 !archived ? 'bg-white font-medium text-brand shadow-sm' : 'text-ink/70',
               )}
             >
@@ -57,7 +57,7 @@ export default async function HomePage({
             <Link
               href={q({ view: 'archive' })}
               className={cn(
-                'rounded px-3 py-1.5',
+                'inline-flex items-center rounded px-3',
                 archived ? 'bg-white font-medium text-brand shadow-sm' : 'text-ink/70',
               )}
             >
@@ -66,7 +66,7 @@ export default async function HomePage({
           </div>
           <Link
             href={q({ sort: desc ? undefined : 'desc' })}
-            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+            className={cn(buttonVariants({ variant: 'outline' }))}
             title="Сортировка по дате форума"
           >
             {desc ? <ArrowDownNarrowWide /> : <ArrowUpNarrowWide />}
