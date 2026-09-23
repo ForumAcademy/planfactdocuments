@@ -6,6 +6,7 @@ import { ConfirmProvider } from '@/components/ui/confirm-dialog';
 import { getSession } from '@/lib/auth';
 import { isSessionCurrent } from '@/lib/app-version';
 import { VersionWatcher } from '@/components/layout/version-watcher';
+import { StaleCacheRefresher } from '@/components/layout/stale-cache-refresher';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       />
       {children}
       <VersionWatcher />
+      <StaleCacheRefresher />
     </ConfirmProvider>
   );
 }

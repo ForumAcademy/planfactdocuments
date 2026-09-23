@@ -1,6 +1,6 @@
 import 'server-only';
 import { createHmac } from 'node:crypto';
-import { canLinkButton, splitMessage, tgEscape } from '@/lib/telegram-format';
+import { canLinkButton, siteLine, splitMessage } from '@/lib/telegram-format';
 
 export function telegramConfigured(): boolean {
   return Boolean(process.env.TELEGRAM_BOT_TOKEN);
@@ -79,7 +79,7 @@ export async function sendTelegram(
       // чтобы напоминание всё равно дошло
       if (!/BUTTON/i.test(e instanceof Error ? e.message : '')) throw e;
       console.warn('Telegram отклонил кнопку со ссылкой', JSON.stringify(siteUrl), e);
-      await send(`${part}\n\n<a href="${tgEscape(siteUrl!)}">Открыть сайт</a>`);
+      await send(`${part}\n\n${siteLine(siteUrl!)}`);
     }
   }
 }

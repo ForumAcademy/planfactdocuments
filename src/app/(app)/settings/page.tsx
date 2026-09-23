@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Breadcrumbs } from '@/components/layout/breadcrumbs';
 import { SettingsForm } from '@/components/settings/settings-form';
+import { appUrl } from '@/lib/telegram-format';
 import { prisma } from '@/lib/db';
 import { getSettings } from '@/server/reminders';
 import { getBotInfo, groupConnectCode, telegramConfigured } from '@/server/telegram';
@@ -47,6 +48,11 @@ export default async function SettingsPage() {
               : null
           }
           connectCode={configured ? groupConnectCode() : ''}
+          site={{
+            raw: process.env.APP_URL ?? '',
+            fallback: process.env.VERCEL_PROJECT_PRODUCTION_URL ?? '',
+            url: appUrl() ?? null,
+          }}
           employees={employees.map((e) => ({
             id: e.id,
             fullName: e.fullName,

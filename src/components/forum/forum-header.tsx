@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { TabGroup, TabLink } from '@/components/ui/tab-links';
 import { usePathname, useSearchParams } from 'next/navigation';
 import * as React from 'react';
 import { CalendarDays, ChevronRight, MapPin, Pencil } from 'lucide-react';
@@ -161,27 +162,21 @@ export function ForumHeader({ forumOptions }: { forumOptions: { id: number; name
             <PlanExportButton />
           </div>
         </div>
-        <nav className="thin-scroll mt-3 flex gap-1 overflow-x-auto" role="tablist">
-          {SECTIONS.map((s) => {
-            const active = pathname.endsWith(`/${s.key}`);
-            return (
-              <Link
-                key={s.key}
-                href={href(s.key)}
-                role="tab"
-                aria-selected={active}
-                className={cn(
-                  '-mb-px whitespace-nowrap border-b-2 px-4 py-2 text-sm',
-                  active
-                    ? 'border-brand font-medium text-brand'
-                    : 'border-transparent text-ink/70 hover:text-ink',
-                )}
-              >
-                {s.label}
-              </Link>
-            );
-          })}
-        </nav>
+        <TabGroup className="thin-scroll mt-3 flex gap-1 overflow-x-auto" role="tablist">
+          {SECTIONS.map((s) => (
+            <TabLink
+              key={s.key}
+              href={href(s.key)}
+              role="tab"
+              active={pathname.endsWith(`/${s.key}`)}
+              className="-mb-px inline-flex items-center whitespace-nowrap border-b-2 px-4 py-2 text-sm"
+              activeClassName="border-brand font-medium text-brand"
+              inactiveClassName="border-transparent text-ink/70 hover:text-ink"
+            >
+              {s.label}
+            </TabLink>
+          ))}
+        </TabGroup>
       </div>
       <ForumFormDialog
         open={editOpen}

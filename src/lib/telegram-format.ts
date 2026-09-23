@@ -75,7 +75,7 @@ export function formatPersonalDigest(name: string, items: TgItem[], appUrl?: str
     `<b>Статус форумов</b>`,
     `${tgEscape(name)}, ваши задачи, требующие внимания:`,
     ...grouped(items, false),
-    ...(appUrl ? ['', `<a href="${appUrl}">Открыть сайт</a>`] : []),
+    ...(appUrl ? ['', siteLine(appUrl)] : []),
   ].join('\n');
 }
 
@@ -84,7 +84,7 @@ export function formatGroupDaily(items: TgItem[], today: ISODate, appUrl?: strin
   return [
     `<b>Статус форумов — сводка на ${formatDate(today)}</b>`,
     ...grouped(items, true, 25),
-    ...(appUrl ? ['', `<a href="${appUrl}">Открыть сайт</a>`] : []),
+    ...(appUrl ? ['', siteLine(appUrl)] : []),
   ].join('\n');
 }
 
@@ -115,7 +115,7 @@ export function formatWeekly(forums: WeeklyForum[], today: ISODate, appUrl?: str
       );
     }
   }
-  if (appUrl) parts.push('', `<a href="${appUrl}">Открыть сайт</a>`);
+  if (appUrl) parts.push('', siteLine(appUrl));
   return parts.join('\n');
 }
 
@@ -159,4 +159,9 @@ export function appUrl(env: Record<string, string | undefined> = process.env): s
 /** Кнопки-ссылки Telegram принимает только с полным публичным https-адресом. */
 export function canLinkButton(url: string | undefined): url is string {
   return !!url && /^https:\/\/[^/]+\.[^/]+/.test(url) && !/localhost|127\.0\.0\.1/.test(url);
+}
+
+/** Строка со ссылкой на сайт: адрес виден целиком — Telegram сам делает его ссылкой. */
+export function siteLine(url: string): string {
+  return `🔗 Открыть сайт: ${tgEscape(url)}`;
 }

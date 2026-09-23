@@ -1,12 +1,10 @@
 'use client';
 
 import * as React from 'react';
-import { useRouter } from 'next/navigation';
+import { markCacheStale } from '@/lib/stale-cache';
 import { toast } from 'sonner';
 import {
   ArrowDown,
-  ArrowLeft,
-  ArrowRight,
   ArrowUp,
   Copy,
   FileDown,
@@ -56,15 +54,6 @@ export function ReportView({
   const [busy, setBusy] = React.useState<'pptx' | 'pdf' | null>(null);
 
   React.useEffect(() => setCharts(initial), [initial]);
-  // После правок при уходе со страницы обновляем кэш, чтобы «Назад» не показал старые данные
-  const router = useRouter();
-  const edited = React.useRef(false);
-  React.useEffect(
-    () => () => {
-      if (edited.current) router.refresh();
-    },
-    [router],
-  );
 
   const apply = (
     res: { ok: true; data: ChartDTO[] } | { ok: false; error: string },
@@ -74,13 +63,13 @@ export function ReportView({
       toast.error(res.error);
       return false;
     }
-    edited.current = true;
+    markCacheStale();
     setCharts(res.data);
     toast.success(msg, { id: 'saved' });
     return true;
   };
 
-  // Перестановка блоков прямо на странице: перетаскивание за ручку или стрелки
+  // Перестановка блоков прямо на странице: перетаскивание за ручку
   const [dragId, setDragId] = React.useState<number | null>(null);
   const [overId, setOverId] = React.useState<number | null>(null);
   const moveChart = async (from: number, to: number) => {
@@ -159,7 +148,7 @@ export function ReportView({
             reportDate={reportDate}
             charts={charts}
             onImported={(c) => {
-              edited.current = true;
+              markCacheStale();
               setCharts(c);
             }}
           />
@@ -219,9 +208,7 @@ export function ReportView({
           >
             <ChartCard
               chart={c}
-              index={i}
               count={charts.length}
-              onMove={(to) => void moveChart(i, to)}
               onDragStart={() => setDragId(c.id)}
               onDragEnd={() => {
                 setDragId(null);
@@ -252,16 +239,12 @@ export function ReportView({
 
 function ChartCard({
   chart,
-  index,
   count,
-  onMove,
   onDragStart,
   onDragEnd,
 }: {
   chart: ChartDTO;
-  index: number;
   count: number;
-  onMove: (to: number) => void;
   onDragStart: () => void;
   onDragEnd: () => void;
 }) {
@@ -291,32 +274,6 @@ function ChartCard({
           </span>
         )}
         <h2 className="text-lg font-semibold">{chart.title}</h2>
-        {count > 1 && (
-          <div className="ml-auto flex gap-1">
-            <Button
-              variant="ghost"
-              size="iconSm"
-              disabled={index === 0}
-              onClick={() => onMove(index - 1)}
-              aria-label={`Переместить «${chart.title}» раньше`}
-              title="Раньше"
-              data-testid="chart-move-up"
-            >
-              <ArrowLeft />
-            </Button>
-            <Button
-              variant="ghost"
-              size="iconSm"
-              disabled={index === count - 1}
-              onClick={() => onMove(index + 1)}
-              aria-label={`Переместить «${chart.title}» дальше`}
-              title="Дальше"
-              data-testid="chart-move-down"
-            >
-              <ArrowRight />
-            </Button>
-          </div>
-        )}
       </div>
       {/* Диаграмма — по центру блока по вертикали, таблица — сверху */}
       <div className="mt-2 grid flex-1 grid-cols-1 items-start gap-6 md:grid-cols-[312px_minmax(0,1fr)] md:gap-8">

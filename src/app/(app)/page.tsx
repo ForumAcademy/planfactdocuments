@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { TabGroup, TabLink } from '@/components/ui/tab-links';
 import { ArrowDownNarrowWide, ArrowUpNarrowWide, Database } from 'lucide-react';
 import { Breadcrumbs } from '@/components/layout/breadcrumbs';
 import { ForumCard } from '@/components/forums/forum-card';
@@ -44,26 +45,29 @@ export default async function HomePage({
         </div>
 
         <div className="mt-5 flex flex-wrap items-center gap-2">
-          <div className="inline-flex h-9 rounded-md border border-line bg-surface p-0.5 text-sm">
-            <Link
+          <TabGroup
+            className="inline-flex h-9 rounded-md border border-line bg-surface p-0.5 text-sm"
+            aria-label="Активные или архив"
+          >
+            <TabLink
               href={q({ view: undefined })}
-              className={cn(
-                'inline-flex items-center rounded px-3',
-                !archived ? 'bg-white font-medium text-brand shadow-sm' : 'text-ink/70',
-              )}
+              active={!archived}
+              className="inline-flex items-center rounded px-3"
+              activeClassName="bg-white font-medium text-brand shadow-sm"
+              inactiveClassName="text-ink/70 hover:text-ink"
             >
               Активные
-            </Link>
-            <Link
+            </TabLink>
+            <TabLink
               href={q({ view: 'archive' })}
-              className={cn(
-                'inline-flex items-center rounded px-3',
-                archived ? 'bg-white font-medium text-brand shadow-sm' : 'text-ink/70',
-              )}
+              active={archived}
+              className="inline-flex items-center rounded px-3"
+              activeClassName="bg-white font-medium text-brand shadow-sm"
+              inactiveClassName="text-ink/70 hover:text-ink"
             >
               Архив
-            </Link>
-          </div>
+            </TabLink>
+          </TabGroup>
           <Link
             href={q({ sort: desc ? undefined : 'desc' })}
             className={cn(buttonVariants({ variant: 'outline' }))}

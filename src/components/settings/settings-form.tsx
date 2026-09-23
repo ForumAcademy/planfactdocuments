@@ -62,6 +62,7 @@ export function SettingsForm({
   group,
   connectCode,
   employees,
+  site,
 }: {
   settings: S;
   configured: boolean;
@@ -69,6 +70,7 @@ export function SettingsForm({
   group: { title: string } | null;
   connectCode: string;
   employees: Emp[];
+  site: { raw: string; fallback: string; url: string | null };
 }) {
   const router = useRouter();
   const confirm = useConfirm();
@@ -128,6 +130,7 @@ export function SettingsForm({
             Не удалось связаться с Telegram. Проверьте токен в переменной TELEGRAM_BOT_TOKEN.
           </p>
         )}
+        <SiteUrlInfo site={site} />
         <Button
           className="mt-3"
           disabled={busy !== null}
@@ -321,6 +324,52 @@ export function SettingsForm({
           </div>
         </form>
       </Card>
+    </div>
+  );
+}
+
+/** Какой адрес сайта бот вставляет в сообщения — с подсветкой символов, которые его ломают. */
+function SiteUrlInfo({ site }: { site: { raw: string; fallback: string; url: string | null } }) {
+  const bad = /[^\x21-\x7E]/;
+  const shown = site.raw || site.fallback;
+  const hasBad = bad.test(site.raw);
+  return (
+    <div className="mt-3 rounded-md bg-surface p-3 text-sm" data-testid="site-url-info">
+      <div>
+        Ссылка на сайт в сообщениях бота:{' '}
+        {site.url ? (
+          <a href={site.url} target="_blank" rel="noreferrer" className="text-brand underline">
+            {site.url}
+          </a>
+        ) : (
+          <b>не задана</b>
+        )}
+      </div>
+      <div className="mt-1 text-xs text-ink/70">
+        {site.raw ? 'Переменная APP_URL в Vercel: ' : 'APP_URL не задана, берётся адрес проекта: '}
+        <code className="break-all rounded bg-white px-1">
+          {[...shown].map((ch, i) =>
+            bad.test(ch) ? (
+              <mark
+                key={i}
+                className="rounded bg-red-200 px-0.5 text-status-red"
+                title={`Символ U+${ch.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`}
+              >
+                {ch === ' ' ? '␣' : ch}
+              </mark>
+            ) : (
+              <React.Fragment key={i}>{ch}</React.Fragment>
+            ),
+          )}
+        </code>
+      </div>
+      {hasBad && (
+        <p className="mt-1 text-xs text-status-red">
+          В адресе есть русские буквы, пробелы или невидимые символы (подсвечены) — из-за них
+          Telegram не делает ссылку активной. Сотрите значение APP_URL в Vercel и наберите его
+          заново в английской раскладке, затем пересоберите сайт.
+        </p>
+      )}
     </div>
   );
 }
