@@ -3,16 +3,19 @@ import { AppHeader } from '@/components/layout/app-header';
 import { BellServer } from '@/components/layout/bell-server';
 import { ConfirmProvider } from '@/components/ui/confirm-dialog';
 import { getSession } from '@/lib/auth';
+import { isSessionCurrent } from '@/lib/app-version';
+import { VersionWatcher } from '@/components/layout/version-watcher';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
-  if (!session.loggedIn) redirect('/login');
+  if (!isSessionCurrent(session)) redirect('/login?reason=updated');
   return (
     <ConfirmProvider>
       <AppHeader bell={<BellServer />} />
       {children}
+      <VersionWatcher />
     </ConfirmProvider>
   );
 }

@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { isSessionCurrent } from '@/lib/app-version';
 import { runSeed } from '@/server/seed';
 
 export const runtime = 'nodejs';
@@ -12,7 +13,7 @@ export const maxDuration = 60;
 /** Загрузка начальных данных из seed/master-plan.xlsx. Доступно только после входа. */
 export async function POST() {
   const session = await getSession();
-  if (!session.loggedIn || session.role === 'VIEWER') {
+  if (!isSessionCurrent(session) || session.role === 'VIEWER') {
     return NextResponse.json({ error: 'Требуется вход в систему' }, { status: 401 });
   }
   try {

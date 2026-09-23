@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { unsealData } from 'iron-session';
 import { SESSION_COOKIE, type SessionData } from '@/lib/session';
+import { isSessionCurrent } from '@/lib/app-version';
 
-const PUBLIC_PATHS = ['/login', '/api/cron/'];
+const PUBLIC_PATHS = ['/login', '/api/cron/', '/api/version', '/api/logout'];
 
 export async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
@@ -11,26 +12,37 @@ export async function middleware(req: NextRequest) {
   }
 
   let loggedIn = false;
+  let outdated = false;
   const cookie = req.cookies.get(SESSION_COOKIE)?.value;
   const secret = process.env.SESSION_SECRET;
   if (cookie && secret && secret.length >= 32) {
     try {
       const data = await unsealData<SessionData>(cookie, { password: secret });
-      loggedIn = Boolean(data.loggedIn);
+      loggedIn = isSessionCurrent(data);
+      // Вход был, но на старой версии сайта — сессия завершается
+      outdated = Boolean(data.loggedIn) && !loggedIn;
     } catch {
       loggedIn = false;
     }
   }
   if (loggedIn) return NextResponse.next();
 
+  let res: NextResponse;
   if (pathname.startsWith('/api/')) {
-    return NextResponse.json({ error: 'Требуется вход в систему' }, { status: 401 });
+    res = NextResponse.json(
+      { error: outdated ? 'Сайт обновлён — войдите снова' : 'Требуется вход в систему' },
+      { status: 401 },
+    );
+  } else {
+    const url = req.nextUrl.clone();
+    url.pathname = '/login';
+    url.search = '';
+    if (outdated) url.searchParams.set('reason', 'updated');
+    else if (pathname !== '/') url.searchParams.set('next', pathname + search);
+    res = NextResponse.redirect(url);
   }
-  const url = req.nextUrl.clone();
-  url.pathname = '/login';
-  url.search = '';
-  if (pathname !== '/') url.searchParams.set('next', pathname + search);
-  return NextResponse.redirect(url);
+  if (outdated) res.cookies.delete(SESSION_COOKIE);
+  return res;
 }
 
 export const config = {

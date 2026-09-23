@@ -209,26 +209,40 @@ export function ForumFormDialog({
 
           {!isEdit && (
             <fieldset className="rounded-md border border-line p-3">
-              <legend className="px-1 text-xs font-medium text-ink/80">Источник плана</legend>
-              <div className="grid gap-1.5 text-sm">
+              <legend className="px-1 text-xs font-medium text-ink/80">
+                С какими задачами создать форум?
+              </legend>
+              <div className="grid gap-2.5 text-sm">
                 {(
                   [
-                    ['template', 'Копия типового мастер-плана'],
-                    ['empty', 'Пустой план'],
-                    ['forum', 'Копия плана другого форума'],
-                    ['excel', 'Загрузка из Excel'],
+                    [
+                      'template',
+                      'Стандартный список задач',
+                      'Все задачи из «Базы данных» (мастер-план). Сроки рассчитаются автоматически от даты форума',
+                    ],
+                    ['empty', 'Без задач', 'Задачи добавите вручную или загрузите позже'],
+                    [
+                      'forum',
+                      'Задачи из другого форума',
+                      'Скопировать задачи и ответственных; сроки пересчитаются, статусы обнулятся',
+                    ],
+                    ['excel', 'Задачи из файла Excel', 'Загрузить план из таблицы .xlsx'],
                   ] as const
-                ).map(([v, label]) => (
-                  <label key={v} className="flex cursor-pointer items-center gap-2">
+                ).map(([v, label, hint]) => (
+                  <label key={v} className="flex cursor-pointer items-start gap-2">
                     <input
                       type="radio"
                       name="source"
                       value={v}
                       checked={source === v}
                       onChange={() => setSource(v)}
-                      className="accent-brand"
+                      className="mt-1 accent-brand"
+                      aria-label={label}
                     />
-                    {label}
+                    <span>
+                      <span className="block">{label}</span>
+                      <span className="block text-xs text-ink/60">{hint}</span>
+                    </span>
                   </label>
                 ))}
               </div>

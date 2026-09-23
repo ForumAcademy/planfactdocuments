@@ -25,7 +25,11 @@ const securityHeaders = [
   { key: 'Content-Security-Policy', value: csp },
 ];
 
+// Версия кода: на Vercel — хеш коммита, локально — «dev»
+const appVersion = process.env.VERCEL_GIT_COMMIT_SHA || process.env.APP_VERSION || 'dev';
+
 const nextConfig: NextConfig = {
+  env: { NEXT_PUBLIC_APP_VERSION: appVersion },
   poweredByHeader: false,
   outputFileTracingIncludes: {
     '/api/admin/seed': ['./seed/master-plan.xlsx'],

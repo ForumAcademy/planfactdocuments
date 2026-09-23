@@ -4,3 +4,4 @@ public
 seed
 prisma/migrations
 package-lock.json
+.scratch

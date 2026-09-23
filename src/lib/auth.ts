@@ -2,6 +2,7 @@ import 'server-only';
 import { cookies } from 'next/headers';
 import { getIronSession } from 'iron-session';
 import { sessionOptions, type SessionData } from './session';
+import { isSessionCurrent } from './app-version';
 
 export async function getSession() {
   return getIronSession<SessionData>(await cookies(), sessionOptions());
@@ -19,7 +20,7 @@ export async function requireAuth(): Promise<{
   role: NonNullable<SessionData['role']>;
 }> {
   const session = await getSession();
-  if (!session.loggedIn) throw new AuthError();
+  if (!isSessionCurrent(session)) throw new AuthError();
   return { userName: session.userName ?? 'Общий вход', role: session.role ?? 'ADMIN' };
 }
 

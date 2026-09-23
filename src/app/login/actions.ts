@@ -5,6 +5,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { APP_VERSION } from '@/lib/app-version';
 
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 60_000;
@@ -64,6 +65,7 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
   session.userName = 'Общий вход';
   session.role = 'ADMIN';
   session.loginAt = Date.now();
+  session.version = APP_VERSION;
   await session.save();
   redirect(safeNext(formData.get('next')));
 }

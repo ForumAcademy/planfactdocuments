@@ -8,6 +8,8 @@ export interface SessionData {
   userName?: string;
   role?: AppRole;
   loginAt?: number;
+  /** Версия сайта на момент входа: после обновления кода сессия завершается. */
+  version?: string;
 }
 
 export const SESSION_COOKIE = 'sf_session';

@@ -31,7 +31,7 @@ test('вход, создание форума, импорт плана, смен
   await page.fill('#f-start', '15.06.2027');
   await page.press('#f-start', 'Tab');
   await expect(page.locator('#f-sales')).toHaveValue('15.02.2027');
-  await page.getByLabel('Пустой план').check();
+  await page.getByLabel('Без задач').check();
   await page.getByRole('button', { name: 'Создать форум' }).click();
   await expect(page).toHaveURL(/\/forums\/\d+\/gantt/);
   await expect(page.getByRole('heading', { name })).toBeVisible();
