@@ -12,7 +12,7 @@ export async function BellServer() {
         b.lag - a.lag ||
         (a.endDate ?? '').localeCompare(b.endDate ?? ''),
     );
-    const items: BellItem[] = all.slice(0, 150).map((i) => ({
+    const items: BellItem[] = all.slice(0, 500).map((i) => ({
       kind: i.kind,
       taskId: i.taskId,
       number: i.number,
