@@ -177,3 +177,39 @@ export function layoutLabels(segments: Segment[], o: LabelOptions): LabelLayout[
   }
   return out.sort((a, b) => a.segment.index - b.segment.index);
 }
+
+/** Тёмный ли цвет (для выбора белого или чёрного текста поверх). */
+export function isDarkColor(hex: string): boolean {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return 0.299 * r + 0.587 * g + 0.114 * b < 150;
+}
+
+export interface InsideLabel {
+  segment: Segment;
+  x: number;
+  y: number;
+  text: string;
+  dark: boolean;
+}
+
+/** Проценты внутри сегментов кольца — только для достаточно крупных сегментов. */
+export function insideLabels(
+  segments: Segment[],
+  cx: number,
+  cy: number,
+  midR: number,
+  minPct = 4,
+): InsideLabel[] {
+  return segments
+    .filter((s) => s.pct >= minPct)
+    .map((s) => {
+      const p = polar(cx, cy, midR, s.mid);
+      // Округляем: сервер и браузер считают тригонометрию с разницей в последнем знаке
+      const x = Math.round(p.x * 10) / 10;
+      const y = Math.round(p.y * 10) / 10;
+      return { segment: s, x, y, text: formatPct(s.pct), dark: isDarkColor(s.color) };
+    });
+}

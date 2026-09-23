@@ -5,7 +5,7 @@ import {
   chartTotal,
   computeSegments,
   formatPct,
-  layoutLabels,
+  insideLabels,
   polar,
   type Segment,
 } from './donut-layout';
@@ -135,34 +135,12 @@ export async function buildPdf(d: ReportExportData): Promise<jsPDF> {
       doc.setTextColor('#444444');
       doc.text(c.unit, cx, cy + 24, { align: 'center' });
 
-      // Подписи с выносками
-      const labels = layoutLabels(segs, {
-        cx,
-        cy,
-        outerR: r1,
-        elbow: 16,
-        shelf: 10,
-        lineHeight: 12,
-        gap: 3,
-        maxChars: 24,
-        top: 84,
-        bottom: H - 36,
-        formatAmount,
-      });
-      doc.setDrawColor(hex(GRAY));
-      doc.setLineWidth(0.6);
-      for (const l of labels) {
-        doc.line(l.p0.x, l.p0.y, l.p1.x, l.p1.y);
-        doc.line(l.p1.x, l.p1.y, l.p2.x, l.p2.y);
-        doc.setFillColor(hex(GRAY));
-        doc.circle(l.p0.x, l.p0.y, 1.3, 'F');
-        l.lines.forEach((line, k) => {
-          const last = k === l.lines.length - 1;
-          doc.setFontSize(last ? 8.5 : 9.5);
-          doc.setTextColor(last ? hex(GRAY) : hex(INK));
-          const x = l.align === 'left' ? l.p2.x + 3 : l.p2.x - 3;
-          doc.text(line, x, l.textY + 9 + k * 12, { align: l.align });
-        });
+      // Доли внутри сегментов (названия и суммы — в таблице справа)
+      doc.setFont('DejaVu', 'bold');
+      doc.setFontSize(10);
+      for (const l of insideLabels(segs, cx, cy, (r0 + r1) / 2)) {
+        doc.setTextColor(l.dark ? '#FFFFFF' : hex(INK));
+        doc.text(l.text, l.x, l.y + 3.5, { align: 'center' });
       }
     } else {
       doc.setFontSize(16);
