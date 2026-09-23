@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { diffDays, formatDate, type ISODate } from '@/lib/dates';
-import { COUNTER_CLASS, countStatuses, progressPercent, type StatusInput } from '@/lib/status';
+import { COUNTER_CLASS, progressPercent, type StatusCounts } from '@/lib/status';
 import type { ForumDTO } from '@/lib/types';
 import { pluralRu } from '@/lib/utils';
 import { deleteForum, duplicateForum, setForumArchived } from '@/server/actions/forums';
@@ -46,19 +46,19 @@ export function daysLeftText(f: Pick<ForumDTO, 'startDate' | 'endDate'>, today: 
 
 export function ForumCard({
   forum,
-  tasks,
+  counts,
   today,
   forumOptions,
 }: {
   forum: ForumDTO;
-  tasks: StatusInput[];
+  counts: StatusCounts;
   today: ISODate;
   forumOptions: { id: number; name: string }[];
 }) {
   const router = useRouter();
   const confirm = useConfirm();
   const [editOpen, setEditOpen] = useState(false);
-  const c = countStatuses(tasks, today);
+  const c = counts;
   const pct = progressPercent(c);
   const left = daysLeftText(forum, today);
 

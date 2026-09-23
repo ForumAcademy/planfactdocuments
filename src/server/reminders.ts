@@ -27,7 +27,11 @@ export interface ReminderItem {
 }
 
 export async function getSettings() {
-  return prisma.reminderSettings.upsert({ where: { id: 1 }, update: {}, create: { id: 1 } });
+  // Обычно запись уже есть — читаем без записи в базу
+  return (
+    (await prisma.reminderSettings.findUnique({ where: { id: 1 } })) ??
+    prisma.reminderSettings.upsert({ where: { id: 1 }, update: {}, create: { id: 1 } })
+  );
 }
 
 /** Все напоминания на сегодня по активным форумам. */

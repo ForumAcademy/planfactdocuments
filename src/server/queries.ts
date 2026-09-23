@@ -1,7 +1,8 @@
 import 'server-only';
 import type { Employee, Forum, Role, Task } from '@prisma/client';
 import { prisma } from '@/lib/db';
-import { dbToISO } from '@/lib/dates';
+import { dbToISO, isoToDb, todayMsk } from '@/lib/dates';
+import type { StatusCounts } from '@/lib/status';
 import type { DictsDTO, ForumDTO, TaskDTO } from '@/lib/types';
 
 export function toForumDTO(f: Forum): ForumDTO {
@@ -95,30 +96,40 @@ export async function getDicts(): Promise<DictsDTO> {
 }
 
 export interface ForumCardData extends ForumDTO {
-  tasks: {
-    status: TaskDTO['status'];
-    startDate: string | null;
-    endDate: string | null;
-    completedAt: string | null;
-  }[];
+  counts: StatusCounts;
 }
 
+/** Плашки форумов: счётчики статусов считает база одним запросом, без загрузки задач. */
 export async function getForumsForHome(archived: boolean): Promise<ForumCardData[]> {
-  const forums = await prisma.forum.findMany({
-    where: { archived },
-    include: {
-      tasks: { select: { status: true, startDate: true, endDate: true, completedAt: true } },
-    },
+  const today = isoToDb(todayMsk());
+  const [forums, rows] = await Promise.all([
+    prisma.forum.findMany({ where: { archived } }),
+    prisma.$queryRaw<
+      { forumId: number; total: bigint; ns: bigint; ip: bigint; done: bigint; overdue: bigint }[]
+    >`SELECT t."forumId",
+        count(*) AS total,
+        count(*) FILTER (WHERE t.status = 'NOT_STARTED') AS ns,
+        count(*) FILTER (WHERE t.status = 'IN_PROGRESS') AS ip,
+        count(*) FILTER (WHERE t.status = 'DONE') AS done,
+        count(*) FILTER (WHERE t.status <> 'DONE' AND t."endDate" < ${today}) AS overdue
+      FROM "Task" t JOIN "Forum" f ON f.id = t."forumId"
+      WHERE f.archived = ${archived}
+      GROUP BY t."forumId"`,
+  ]);
+  const byForum = new Map(rows.map((r) => [r.forumId, r]));
+  return forums.map((f) => {
+    const r = byForum.get(f.id);
+    return {
+      ...toForumDTO(f),
+      counts: {
+        total: Number(r?.total ?? 0),
+        notStarted: Number(r?.ns ?? 0),
+        inProgress: Number(r?.ip ?? 0),
+        done: Number(r?.done ?? 0),
+        overdue: Number(r?.overdue ?? 0),
+      },
+    };
   });
-  return forums.map((f) => ({
-    ...toForumDTO(f),
-    tasks: f.tasks.map((t) => ({
-      status: t.status,
-      startDate: dbToISO(t.startDate),
-      endDate: dbToISO(t.endDate),
-      completedAt: dbToISO(t.completedAt),
-    })),
-  }));
 }
 
 export async function getForumOptions(): Promise<

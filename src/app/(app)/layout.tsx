@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 import { AppHeader } from '@/components/layout/app-header';
 import { BellServer } from '@/components/layout/bell-server';
 import { ConfirmProvider } from '@/components/ui/confirm-dialog';
@@ -13,7 +14,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!isSessionCurrent(session)) redirect('/login?reason=updated');
   return (
     <ConfirmProvider>
-      <AppHeader bell={<BellServer />} />
+      <AppHeader
+        bell={
+          <Suspense fallback={null}>
+            <BellServer />
+          </Suspense>
+        }
+      />
       {children}
       <VersionWatcher />
     </ConfirmProvider>

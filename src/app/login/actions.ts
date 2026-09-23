@@ -16,9 +16,11 @@ const memoryAttempts = new Map<string, number[]>();
 async function tooManyAttempts(ip: string): Promise<boolean> {
   const since = new Date(Date.now() - WINDOW_MS);
   try {
-    const count = await prisma.loginAttempt.count({ where: { ip, createdAt: { gte: since } } });
-    if (count >= MAX_ATTEMPTS) return true;
-    await prisma.loginAttempt.create({ data: { ip } });
+    // Одним запросом: записываем попытку и считаем предыдущие за последнюю минуту
+    const [{ count }] = await prisma.$queryRaw<{ count: bigint }[]>`
+      WITH ins AS (INSERT INTO "LoginAttempt" (ip) VALUES (${ip}))
+      SELECT count(*) AS count FROM "LoginAttempt" WHERE ip = ${ip} AND "createdAt" >= ${since}`;
+    if (Number(count) >= MAX_ATTEMPTS) return true;
     if (Math.random() < 0.05) {
       await prisma.loginAttempt.deleteMany({
         where: { createdAt: { lt: new Date(Date.now() - 86_400_000) } },

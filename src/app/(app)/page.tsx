@@ -82,11 +82,11 @@ export default async function HomePage({
           </div>
         ) : (
           <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            {forums.map(({ tasks, ...forum }) => (
+            {forums.map(({ counts, ...forum }) => (
               <ForumCard
                 key={forum.id}
                 forum={forum}
-                tasks={tasks}
+                counts={counts}
                 today={today}
                 forumOptions={options.filter((o) => o.id !== forum.id)}
               />
