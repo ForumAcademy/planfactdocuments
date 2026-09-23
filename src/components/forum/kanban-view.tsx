@@ -18,8 +18,8 @@ import { Highlight } from './highlight';
 
 const HEAD: Record<TaskStatusCode, string> = {
   NOT_STARTED: TONE_COLOR.gray,
-  IN_PROGRESS: TONE_COLOR.green,
-  DONE: TONE_COLOR.blue,
+  IN_PROGRESS: TONE_COLOR.blue,
+  DONE: TONE_COLOR.green,
 };
 
 /** Вид «По статусам»: три колонки, карточки перетаскиваются между ними. */

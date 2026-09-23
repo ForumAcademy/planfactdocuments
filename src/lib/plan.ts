@@ -52,4 +52,4 @@ export function mergeNoteIntoComment(
   return c ? `${c}\n${line}` : line;
 }
 
-export const STAGE_COLORS = ['#1F4E9E', '#2E7DD1', '#0F2A5C', '#5B8DEF', '#7A5AF8', '#0E9384'];
+export const STAGE_COLORS = ['#0A0A9F', '#2E7DD1', '#060670', '#5B8DEF', '#7A5AF8', '#0E9384'];

@@ -33,7 +33,7 @@ describe('отчёт', () => {
   it('гаммы: от тёмного к светлому', () => {
     expect(paletteShades('RED', 3)).toEqual(['#7F1D1D', expect.any(String), '#FCA5A5']);
     expect(paletteShades('GREEN', 1)).toEqual(['#14532D']);
-    expect(paletteShades('BLUE', 2)).toEqual(['#0F2A5C', '#93C5FD']);
+    expect(paletteShades('BLUE', 2)).toEqual(['#060670', '#93C5FD']);
   });
 
   it('сегменты отсортированы по убыванию, углы покрывают круг', () => {

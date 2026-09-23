@@ -3,7 +3,7 @@ export type PaletteKey = 'RED' | 'GREEN' | 'BLUE';
 export const PALETTES: Record<PaletteKey, { label: string; dark: string; light: string }> = {
   RED: { label: 'Красная', dark: '#7F1D1D', light: '#FCA5A5' },
   GREEN: { label: 'Зелёная', dark: '#14532D', light: '#86EFAC' },
-  BLUE: { label: 'Синяя', dark: '#0F2A5C', light: '#93C5FD' },
+  BLUE: { label: 'Синяя', dark: '#060670', light: '#93C5FD' },
 };
 
 function hexToRgb(hex: string): [number, number, number] {

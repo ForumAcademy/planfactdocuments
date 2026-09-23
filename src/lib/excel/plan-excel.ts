@@ -284,8 +284,8 @@ export interface ExportTask {
 
 const STATUS_FILL: Record<TaskStatusCode, string> = {
   NOT_STARTED: 'FFF4F6FA',
-  IN_PROGRESS: 'FFE3F4EA',
-  DONE: 'FFE0E9F7',
+  IN_PROGRESS: 'FFE0E9F7', // синий
+  DONE: 'FFE3F4EA', // зелёный
 };
 
 function isoToExcelDate(d: ISODate | null): Date | null {
@@ -311,9 +311,9 @@ export async function buildPlanWorkbook(
   header.height = 36;
   header.eachCell((cell) => {
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E9E' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0A0A9F' } };
     cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-    cell.border = { bottom: { style: 'thin', color: { argb: 'FF0F2A5C' } } };
+    cell.border = { bottom: { style: 'thin', color: { argb: 'FF060670' } } };
   });
 
   for (const t of tasks) {

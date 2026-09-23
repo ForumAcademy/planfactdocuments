@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { diffDays, formatDate, type ISODate } from '@/lib/dates';
-import { countStatuses, progressPercent, type StatusInput } from '@/lib/status';
+import { COUNTER_CLASS, countStatuses, progressPercent, type StatusInput } from '@/lib/status';
 import type { ForumDTO } from '@/lib/types';
 import { pluralRu } from '@/lib/utils';
 import { deleteForum, duplicateForum, setForumArchived } from '@/server/actions/forums';
@@ -122,7 +122,7 @@ export function ForumCard({
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-surface">
             <div
-              className="h-full rounded-full bg-brand transition-all"
+              className="h-full rounded-full bg-status-green transition-all"
               style={{ width: `${pct}%` }}
             />
           </div>
@@ -130,8 +130,8 @@ export function ForumCard({
 
         <dl className="mt-4 grid grid-cols-4 gap-1 text-center">
           <Counter label="Не начато" value={c.notStarted} />
-          <Counter label="В работе" value={c.inProgress} className="text-status-green" />
-          <Counter label="Выполнено" value={c.done} className="text-brand" />
+          <Counter label="В работе" value={c.inProgress} className={COUNTER_CLASS.inProgress} />
+          <Counter label="Выполнено" value={c.done} className={COUNTER_CLASS.done} />
           <Counter
             label="Просрочено"
             value={c.overdue}

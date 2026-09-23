@@ -103,7 +103,7 @@ function digestHtml(name: string, items: ReminderItem[]): string {
   const rows = items
     .map(
       (i) => `<tr>
-<td style="padding:6px 8px;border-bottom:1px solid #E3E7EF;color:${i.kind === 'overdue' ? '#D93838' : i.kind === 'due_soon' ? '#1F4E9E' : '#B45309'};white-space:nowrap">${KIND_LABEL[i.kind]}${i.lag ? ` (+${i.lag} дн.)` : ''}</td>
+<td style="padding:6px 8px;border-bottom:1px solid #E3E7EF;color:${i.kind === 'overdue' ? '#D93838' : i.kind === 'due_soon' ? '#0A0A9F' : '#B45309'};white-space:nowrap">${KIND_LABEL[i.kind]}${i.lag ? ` (+${i.lag} дн.)` : ''}</td>
 <td style="padding:6px 8px;border-bottom:1px solid #E3E7EF">${esc(i.forumName)}</td>
 <td style="padding:6px 8px;border-bottom:1px solid #E3E7EF">${url ? `<a href="${url}/forums/${i.forumId}/tasks?q=${encodeURIComponent(i.description.slice(0, 40))}" style="color:#111">` : ''}№${i.number}. ${esc(i.description)}${url ? '</a>' : ''}</td>
 <td style="padding:6px 8px;border-bottom:1px solid #E3E7EF;white-space:nowrap">${formatDate(i.endDate)}</td>
@@ -112,13 +112,13 @@ function digestHtml(name: string, items: ReminderItem[]): string {
     )
     .join('');
   return `<div style="font-family:Arial,sans-serif;font-size:14px;color:#111">
-<div style="background:#0F2A5C;color:#fff;padding:12px 16px;font-size:18px;font-weight:bold">Статус форумы</div>
+<div style="background:#060670;color:#fff;padding:12px 16px;font-size:18px;font-weight:bold">Статус форумы</div>
 <p>Здравствуйте, ${esc(name)}!</p>
 <p>Ваши задачи, требующие внимания:</p>
 <table style="border-collapse:collapse;width:100%;font-size:13px"><thead><tr style="background:#F4F6FA;text-align:left">
 <th style="padding:6px 8px">Что</th><th style="padding:6px 8px">Форум</th><th style="padding:6px 8px">Задача</th><th style="padding:6px 8px">Срок</th><th style="padding:6px 8px">Статус</th>
 </tr></thead><tbody>${rows}</tbody></table>
-${url ? `<p><a href="${url}" style="color:#1F4E9E">Открыть «Статус форумы»</a></p>` : ''}
+${url ? `<p><a href="${url}" style="color:#0A0A9F">Открыть «Статус форумы»</a></p>` : ''}
 <p style="color:#8A94A6;font-size:12px">Письмо отправлено автоматически.</p></div>`;
 }
 
@@ -166,9 +166,9 @@ async function weeklyHtml(today: ISODate): Promise<string> {
 ${top ? `<p style="margin:6px 0 0">Топ-10 просрочек:</p><ol>${top}</ol>` : ''}`;
   });
   return `<div style="font-family:Arial,sans-serif;font-size:14px;color:#111">
-<div style="background:#0F2A5C;color:#fff;padding:12px 16px;font-size:18px;font-weight:bold">Статус форумы — сводка на ${formatDate(today)}</div>
+<div style="background:#060670;color:#fff;padding:12px 16px;font-size:18px;font-weight:bold">Статус форумы — сводка на ${formatDate(today)}</div>
 ${blocks.join('') || '<p>Активных форумов нет.</p>'}
-${appUrl() ? `<p><a href="${appUrl()}" style="color:#1F4E9E">Открыть «Статус форумы»</a></p>` : ''}</div>`;
+${appUrl() ? `<p><a href="${appUrl()}" style="color:#0A0A9F">Открыть «Статус форумы»</a></p>` : ''}</div>`;
 }
 
 export interface RunResult {

@@ -25,7 +25,10 @@ export interface StatusInput {
   completedAt: ISODate | null;
 }
 
-/** Цвет для отображения: серый, зелёный (в срок), красный (просрочено), синий (выполнено). */
+/**
+ * Единый цветовой код статусов:
+ * не начато — серый, в работе — синий, выполнено — зелёный, просрочено — красный.
+ */
 export type Tone = 'gray' | 'green' | 'red' | 'blue';
 
 /** Задача не выполнена, а срок прошёл. */
@@ -51,16 +54,16 @@ export function shouldStart(t: StatusInput, today: ISODate): boolean {
 
 /** Цвет бейджа статуса. */
 export function badgeTone(t: StatusInput, today: ISODate): Tone {
-  if (t.status === 'DONE') return 'blue';
-  if (t.status === 'IN_PROGRESS') return isOverdue(t, today) ? 'red' : 'green';
+  if (t.status === 'DONE') return 'green';
+  if (t.status === 'IN_PROGRESS') return isOverdue(t, today) ? 'red' : 'blue';
   return 'gray';
 }
 
 /** Цвет полосы на диаграмме Ганта: просроченная невыполненная задача — красная. */
 export function barTone(t: StatusInput, today: ISODate): Tone {
-  if (t.status === 'DONE') return 'blue';
+  if (t.status === 'DONE') return 'green';
   if (isOverdue(t, today)) return 'red';
-  if (t.status === 'IN_PROGRESS') return 'green';
+  if (t.status === 'IN_PROGRESS') return 'blue';
   return 'gray';
 }
 
@@ -68,8 +71,23 @@ export const TONE_COLOR: Record<Tone, string> = {
   gray: '#8A94A6',
   green: '#1E9E5A',
   red: '#D93838',
-  blue: '#1F4E9E',
+  blue: '#0A0A9F',
 };
+
+/** Цвет статуса (без учёта просрочки). */
+export const STATUS_TONE: Record<TaskStatusCode, Tone> = {
+  NOT_STARTED: 'gray',
+  IN_PROGRESS: 'blue',
+  DONE: 'green',
+};
+
+/** Классы Tailwind для чисел-счётчиков. */
+export const COUNTER_CLASS = {
+  notStarted: 'text-ink',
+  inProgress: 'text-status-blue',
+  done: 'text-status-green',
+  overdue: 'text-status-red',
+} as const;
 
 export interface StatusCounts {
   total: number;

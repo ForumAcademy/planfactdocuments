@@ -9,7 +9,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { ForumFormDialog } from '@/components/forums/forum-form-dialog';
 import { daysLeftText, forumDateRange } from '@/components/forums/forum-card';
 import { formatDate } from '@/lib/dates';
-import { countStatuses, progressPercent, type TaskStatusCode } from '@/lib/status';
+import { COUNTER_CLASS, countStatuses, progressPercent, type TaskStatusCode } from '@/lib/status';
 import { cn } from '@/lib/utils';
 import { useForum } from './forum-context';
 import { PlanImportButton } from './plan-import-dialog';
@@ -135,21 +135,21 @@ export function ForumHeader({ forumOptions }: { forumOptions: { id: number; name
               c.inProgress,
               filters.status.join() === 'IN_PROGRESS',
               () => toggleStatus('IN_PROGRESS'),
-              'text-status-green',
+              COUNTER_CLASS.inProgress,
             )}
             {counter(
               'Выполнено',
               c.done,
               filters.status.join() === 'DONE',
               () => toggleStatus('DONE'),
-              'text-brand',
+              COUNTER_CLASS.done,
             )}
             {counter(
               'Просрочено',
               c.overdue,
               filters.due === 'overdue',
               toggleOverdue,
-              c.overdue ? 'text-status-red' : 'text-ink',
+              c.overdue ? COUNTER_CLASS.overdue : 'text-ink',
             )}
             <div className="ml-1 hidden flex-col items-start sm:flex">
               <span className="text-lg font-semibold leading-tight">{progressPercent(c)}%</span>

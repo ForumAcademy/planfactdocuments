@@ -7,7 +7,13 @@ import { MultiSelect } from '@/components/ui/multi-select';
 import { DateInput } from '@/components/ui/date-input';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatDate, type ISODate } from '@/lib/dates';
-import { STATUS_LABEL, TASK_STATUSES, TONE_COLOR, type TaskStatusCode } from '@/lib/status';
+import {
+  STATUS_LABEL,
+  STATUS_TONE,
+  TASK_STATUSES,
+  TONE_COLOR,
+  type TaskStatusCode,
+} from '@/lib/status';
 import type { TaskDTO } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useForum } from './forum-context';
@@ -44,8 +50,7 @@ export function StatusCell({ task, today }: { task: TaskDTO; today: ISODate }) {
             <span
               className="size-2.5 rounded-full"
               style={{
-                background:
-                  TONE_COLOR[s === 'DONE' ? 'blue' : s === 'IN_PROGRESS' ? 'green' : 'gray'],
+                background: TONE_COLOR[STATUS_TONE[s]],
               }}
             />
             <span className="flex-1">{STATUS_LABEL[s]}</span>

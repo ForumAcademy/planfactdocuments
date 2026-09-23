@@ -58,7 +58,7 @@ export async function buildPptx(d: ReportExportData): Promise<PptxGenJS> {
     h: 0.6,
     fontFace: FONT,
     fontSize: 22,
-    color: 'DCE6F5',
+    color: 'D6D6F5',
   });
   title.addText(d.forum.name, {
     x: 0.8,
@@ -102,7 +102,7 @@ export async function buildPptx(d: ReportExportData): Promise<PptxGenJS> {
       h: 0.7,
       fontFace: FONT,
       fontSize: 14,
-      color: 'DCE6F5',
+      color: 'D6D6F5',
       align: 'right',
     });
 

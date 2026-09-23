@@ -16,8 +16,8 @@ export interface ReportExportData {
   charts: ExportChart[];
 }
 
-export const BRAND = '1F4E9E';
-export const BRAND_DARK = '0F2A5C';
+export const BRAND = '0A0A9F';
+export const BRAND_DARK = '060670';
 export const INK = '111111';
 export const GRAY = '8A94A6';
 

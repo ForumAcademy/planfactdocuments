@@ -58,7 +58,7 @@ function header(doc: jsPDF, title: string, right: string) {
   doc.text(title, 30, 43);
   doc.setFont('DejaVu', 'normal');
   doc.setFontSize(12);
-  doc.setTextColor('#DCE6F5');
+  doc.setTextColor('#D6D6F5');
   doc.text(right, W - 30, 43, { align: 'right' });
 }
 
@@ -90,7 +90,7 @@ export async function buildPdf(d: ReportExportData): Promise<jsPDF> {
   doc.rect(0, 310, W, 9, 'F');
   doc.setFont('DejaVu', 'normal');
   doc.setFontSize(18);
-  doc.setTextColor('#DCE6F5');
+  doc.setTextColor('#D6D6F5');
   doc.text('Отчёт', 58, 110);
   doc.setFont('DejaVu', 'bold');
   doc.setFontSize(40);

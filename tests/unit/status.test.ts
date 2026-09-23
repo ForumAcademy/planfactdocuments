@@ -21,20 +21,20 @@ const t = (p: Partial<StatusInput>): StatusInput => ({
 });
 
 describe('цвет статуса', () => {
-  it('«В работе» в срок — зелёный, с просрочкой — красный', () => {
-    expect(badgeTone(t({ status: 'IN_PROGRESS' }), today)).toBe('green');
-    expect(badgeTone(t({ status: 'IN_PROGRESS', endDate: '2026-09-23' }), today)).toBe('green');
+  it('«В работе» в срок — синий, с просрочкой — красный', () => {
+    expect(badgeTone(t({ status: 'IN_PROGRESS' }), today)).toBe('blue');
+    expect(badgeTone(t({ status: 'IN_PROGRESS', endDate: '2026-09-23' }), today)).toBe('blue');
     expect(badgeTone(t({ status: 'IN_PROGRESS', endDate: '2026-09-22' }), today)).toBe('red');
   });
-  it('«Не начато» — серый бейдж, «Выполнено» — синий', () => {
+  it('«Не начато» — серый бейдж, «Выполнено» — зелёный', () => {
     expect(badgeTone(t({ endDate: '2026-09-01' }), today)).toBe('gray');
-    expect(badgeTone(t({ status: 'DONE', endDate: '2026-09-01' }), today)).toBe('blue');
+    expect(badgeTone(t({ status: 'DONE', endDate: '2026-09-01' }), today)).toBe('green');
   });
   it('полоса Ганта: не выполнено после срока — красная', () => {
     expect(barTone(t({ endDate: '2026-09-01' }), today)).toBe('red');
     expect(barTone(t({}), today)).toBe('gray');
-    expect(barTone(t({ status: 'IN_PROGRESS' }), today)).toBe('green');
-    expect(barTone(t({ status: 'DONE', endDate: '2026-09-01' }), today)).toBe('blue');
+    expect(barTone(t({ status: 'IN_PROGRESS' }), today)).toBe('blue');
+    expect(barTone(t({ status: 'DONE', endDate: '2026-09-01' }), today)).toBe('green');
   });
 });
 

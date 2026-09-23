@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import type { SortKey } from '@/lib/filters';
-import { isOverdue, lagDays, shouldStart } from '@/lib/status';
+import { TONE_COLOR, isOverdue, lagDays, shouldStart } from '@/lib/status';
 import type { TaskDTO } from '@/lib/types';
 import { cn, pluralRu } from '@/lib/utils';
 import { FilterBar } from './filter-bar';
@@ -286,7 +286,7 @@ function TaskTable() {
                       <span className="ml-3 h-1.5 w-32 overflow-hidden rounded-full bg-surface">
                         <span
                           className="block h-full rounded-full"
-                          style={{ width: `${pct}%`, background: color }}
+                          style={{ width: `${pct}%`, background: TONE_COLOR.green }}
                         />
                       </span>
                       <span className="text-xs text-ink/70">{pct}% выполнено</span>

@@ -332,8 +332,8 @@ export function GanttView() {
     {
       date: forum.salesStartDate,
       label: 'Старт продаж',
-      cls: 'border-l-2 border-status-green',
-      text: 'text-status-green',
+      cls: 'border-l-2 border-amber-500',
+      text: 'text-amber-600',
     },
     {
       date: forum.startDate,
@@ -709,7 +709,7 @@ function SummaryBar({
       }}
       title={`${formatDate(s)} – ${formatDate(e)} · выполнено ${pct}%`}
     >
-      <div className="h-full" style={{ width: `${pct}%`, background: color }} />
+      <div className="h-full" style={{ width: `${pct}%`, background: TONE_COLOR.green }} />
     </div>
   );
 }
@@ -866,9 +866,9 @@ function Tooltip({ task, x, y }: { task: TaskDTO; x: number; y: number }) {
 function Legend() {
   const items = [
     { c: TONE_COLOR.gray, l: 'Не начато' },
-    { c: TONE_COLOR.green, l: 'В работе в срок' },
+    { c: TONE_COLOR.blue, l: 'В работе' },
+    { c: TONE_COLOR.green, l: 'Выполнено' },
     { c: TONE_COLOR.red, l: 'Просрочено' },
-    { c: TONE_COLOR.blue, l: 'Выполнено' },
   ];
   return (
     <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink/70">
@@ -884,7 +884,7 @@ function Legend() {
         <span className="h-3 border-l-2 border-dashed border-brand" /> сегодня
       </span>
       <span className="inline-flex items-center gap-1.5">
-        <span className="h-3 border-l-2 border-status-green" /> старт продаж
+        <span className="h-3 border-l-2 border-amber-500" /> старт продаж
       </span>
       <span className="inline-flex items-center gap-1.5">
         <span className="h-3 border-l-[3px] border-ink" /> дата форума
