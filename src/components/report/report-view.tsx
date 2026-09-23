@@ -198,10 +198,13 @@ function ChartCard({ chart }: { chart: ChartDTO }) {
   const segments = computeSegments(chart.items, chart.palette);
   const hasNotes = segments.some((s) => s.note);
   return (
-    <Card className="p-4" data-testid="report-chart">
+    <Card className="flex flex-col p-4" data-testid="report-chart">
       <h2 className="text-lg font-semibold">{chart.title}</h2>
-      <div className="mt-2 grid grid-cols-1 items-start gap-6 md:grid-cols-[280px_minmax(0,1fr)] md:gap-10">
-        <DonutChart items={chart.items} palette={chart.palette} unit={chart.unit} size={280} />
+      {/* Диаграмма — по центру блока по вертикали, таблица — сверху */}
+      <div className="mt-2 grid flex-1 grid-cols-1 items-start gap-6 md:grid-cols-[312px_minmax(0,1fr)] md:gap-8">
+        <div className="self-center py-2">
+          <DonutChart items={chart.items} palette={chart.palette} unit={chart.unit} size={280} />
+        </div>
         {/* Таблица справа — она же легенда */}
         <table className="w-full text-sm">
           <thead className="bg-surface text-left text-xs text-ink/70">
