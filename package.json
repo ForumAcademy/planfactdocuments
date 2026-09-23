@@ -23,9 +23,6 @@
     "hash-password": "tsx scripts/hash-password.ts",
     "gen-secrets": "tsx scripts/gen-secrets.ts"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
   "engines": {
     "node": ">=20"
   },
