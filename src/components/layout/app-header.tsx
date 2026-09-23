@@ -8,8 +8,12 @@ export function AppHeader({ bell }: { bell?: React.ReactNode }) {
   return (
     <header className="sticky top-0 z-40 bg-brand-dark text-white shadow-sm print:hidden">
       <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-4 px-4">
-        <Link href="/" className="flex shrink-0 items-center text-white" aria-label="На главную">
-          <Logo className="h-8 w-auto sm:h-9" />
+        <Link
+          href="/"
+          className="mr-2 flex shrink-0 items-center text-white md:mr-8"
+          aria-label="На главную"
+        >
+          <Logo className="h-6 w-auto sm:h-7" />
         </Link>
         <NavLinks />
         <div className="ml-auto flex items-center gap-1">

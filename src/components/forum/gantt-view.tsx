@@ -366,7 +366,7 @@ export function GanttView() {
               type="button"
               onClick={() => setScale(k)}
               className={cn(
-                'inline-flex items-center rounded px-3 pb-0.5',
+                'inline-flex items-center rounded px-3',
                 scale === k ? 'bg-white font-medium text-brand shadow-sm' : 'text-ink/70',
               )}
             >

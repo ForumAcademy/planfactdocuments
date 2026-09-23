@@ -48,7 +48,7 @@ export default async function HomePage({
             <Link
               href={q({ view: undefined })}
               className={cn(
-                'inline-flex items-center rounded px-3 pb-0.5',
+                'inline-flex items-center rounded px-3',
                 !archived ? 'bg-white font-medium text-brand shadow-sm' : 'text-ink/70',
               )}
             >
@@ -57,7 +57,7 @@ export default async function HomePage({
             <Link
               href={q({ view: 'archive' })}
               className={cn(
-                'inline-flex items-center rounded px-3 pb-0.5',
+                'inline-flex items-center rounded px-3',
                 archived ? 'bg-white font-medium text-brand shadow-sm' : 'text-ink/70',
               )}
             >

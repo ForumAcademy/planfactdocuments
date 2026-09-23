@@ -87,7 +87,7 @@ export function ForumHeader({ forumOptions }: { forumOptions: { id: number; name
         active ? 'border-brand bg-brand-light' : 'border-line bg-white hover:border-brand/50',
       )}
     >
-      <span className={cn('text-lg font-semibold leading-tight', cls)}>{value}</span>
+      <span className={cn('text-lg font-semibold tabular-nums leading-tight', cls)}>{value}</span>
       <span className="text-[11px] text-ink/60">{label}</span>
     </button>
   );

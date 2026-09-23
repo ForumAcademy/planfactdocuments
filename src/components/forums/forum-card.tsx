@@ -200,7 +200,9 @@ function Counter({
 }) {
   return (
     <div className="rounded bg-surface px-1 py-1.5">
-      <dd className={`text-lg font-semibold leading-none ${className ?? ''}`}>{value}</dd>
+      <dd className={`text-lg font-semibold tabular-nums leading-none ${className ?? ''}`}>
+        {value}
+      </dd>
       <dt className="mt-1 text-[11px] leading-tight text-ink/60">{label}</dt>
     </div>
   );
