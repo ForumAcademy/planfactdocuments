@@ -23,6 +23,7 @@ import {
 } from '@/lib/dates';
 import { STATUS_LABEL, TONE_COLOR, barTone, lagDays } from '@/lib/status';
 import { stageBounds } from '@/lib/term-parser';
+import { hasActiveFilters } from '@/lib/filters';
 import { stageNumber, toTermRefs } from '@/lib/plan';
 import type { TaskDTO } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -77,7 +78,11 @@ interface DragState {
 export function GanttView() {
   const { visible, tasks, forum, today, lookups, patchTask, setOpenTaskId, filters } = useForum();
   const [scale, setScale] = React.useState<Scale>('week');
+  // Свёрнутые блоки; этапы по умолчанию свёрнуты (раскрыты — при активных фильтрах и поиске)
   const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set());
+  const [stageOpen, setStageOpen] = React.useState<Map<string, boolean>>(new Map());
+  const filtering = hasActiveFilters(filters);
+  React.useEffect(() => setStageOpen(new Map()), [filtering]);
   const [undo, setUndo] = React.useState<UndoItem[]>([]);
   const [drag, setDrag] = React.useState<DragState | null>(null);
   const [hover, setHover] = React.useState<{ task: TaskDTO; x: number; y: number } | null>(null);
@@ -134,7 +139,7 @@ export function GanttView() {
       const stage = sk === 'none' ? null : lookups.stage.get(Number(sk));
       const color = stage?.color ?? '#8A94A6';
       const skey = `s${sk}`;
-      const sCollapsed = collapsed.has(skey);
+      const sCollapsed = !(stageOpen.get(skey) ?? filtering);
       out.push({
         kind: 'stage',
         key: skey,
@@ -166,20 +171,25 @@ export function GanttView() {
       }
     }
     return out;
-  }, [visible, lookups, collapsed]);
+  }, [visible, lookups, collapsed, stageOpen, filtering]);
 
-  const toggle = (key: string) =>
+  const toggle = (row: Row) => {
+    if (row.kind === 'stage') {
+      setStageOpen((m) => new Map(m).set(row.key, row.collapsed));
+      return;
+    }
     setCollapsed((s) => {
       const n = new Set(s);
-      if (n.has(key)) n.delete(key);
-      else n.add(key);
+      if (n.has(row.key)) n.delete(row.key);
+      else n.add(row.key);
       return n;
     });
+  };
 
-  const collapseAll = (to: 'stage' | 'block' | 'none') => {
-    if (to === 'none') return setCollapsed(new Set());
-    const keys = rows.filter((r) => r.kind === to).map((r) => r.key);
-    setCollapsed(new Set(keys));
+  const collapseAll = (to: 'stage' | 'none') => {
+    const stages = rows.filter((r) => r.kind === 'stage').map((r) => r.key);
+    setStageOpen(new Map(stages.map((k) => [k, to === 'none'])));
+    if (to === 'none') setCollapsed(new Set());
   };
 
   const scrollToDate = React.useCallback(
@@ -525,7 +535,7 @@ export function GanttView() {
               >
                 <TreeCell
                   row={r}
-                  onToggle={() => r.kind !== 'task' && toggle(r.key)}
+                  onToggle={() => r.kind !== 'task' && toggle(r)}
                   onOpen={(id) => setOpenTaskId(id)}
                   query={filters.q}
                 />
