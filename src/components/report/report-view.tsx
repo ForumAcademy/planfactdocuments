@@ -168,12 +168,13 @@ export function ReportView({
 
       {editing && <ChartsEditor forumId={forum.id} charts={charts} apply={apply} />}
 
-      <div className="mt-4 grid grid-cols-1 gap-4">
+      {/* На широком экране — по две диаграммы в строке */}
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
         {charts.map((c) => (
           <ChartCard key={c.id} chart={c} />
         ))}
         {charts.length === 0 && (
-          <div className="rounded-md border border-dashed border-line p-10 text-center text-status-gray">
+          <div className="rounded-md border border-dashed border-line p-10 text-center text-status-gray xl:col-span-2">
             В отчёте нет диаграмм. Нажмите «Редактировать отчёт», чтобы добавить.
           </div>
         )}
@@ -199,14 +200,14 @@ function ChartCard({ chart }: { chart: ChartDTO }) {
   return (
     <Card className="p-4" data-testid="report-chart">
       <h2 className="text-lg font-semibold">{chart.title}</h2>
-      <div className="mt-2 grid grid-cols-1 items-center gap-6 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-16">
-        <DonutChart items={chart.items} palette={chart.palette} unit={chart.unit} />
+      <div className="mt-2 grid grid-cols-1 items-start gap-6 md:grid-cols-[280px_minmax(0,1fr)] md:gap-10">
+        <DonutChart items={chart.items} palette={chart.palette} unit={chart.unit} size={280} />
         {/* Таблица справа — она же легенда */}
         <table className="w-full text-sm">
           <thead className="bg-surface text-left text-xs text-ink/70">
             <tr>
               <th className="px-2 py-1.5">Статья</th>
-              <th className="px-2 py-1.5 text-right">{chart.unit}</th>
+              <th className="whitespace-nowrap px-2 py-1.5 text-right">{chart.unit}</th>
               {hasNotes && <th className="px-2 py-1.5 text-right">Доп.</th>}
               <th className="w-16 px-2 py-1.5 text-right">Доля</th>
             </tr>
