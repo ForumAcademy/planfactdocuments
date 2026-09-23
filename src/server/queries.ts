@@ -66,9 +66,8 @@ function toEmployeeDTO(e: Employee & { roles: Role[] }) {
     id: e.id,
     fullName: e.fullName,
     position: e.position,
-    email: e.email,
-    phone: e.phone,
     telegram: e.telegram,
+    telegramLinked: Boolean(e.telegramChatId),
     active: e.active,
     roleIds: e.roles.map((r) => r.id),
   };

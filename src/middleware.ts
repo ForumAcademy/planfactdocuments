@@ -3,7 +3,8 @@ import { unsealData } from 'iron-session';
 import { SESSION_COOKIE, type SessionData } from '@/lib/session';
 import { isSessionCurrent } from '@/lib/app-version';
 
-const PUBLIC_PATHS = ['/login', '/api/cron/', '/api/version', '/api/logout'];
+// /api/telegram/ защищён собственным секретом вебхука
+const PUBLIC_PATHS = ['/login', '/api/cron/', '/api/version', '/api/logout', '/api/telegram/'];
 
 export async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;

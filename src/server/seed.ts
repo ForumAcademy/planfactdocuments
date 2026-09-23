@@ -36,31 +36,26 @@ const DEMO_EMPLOYEES = [
     fullName: 'Иванова Анна Сергеевна',
     position: 'Руководитель проекта',
     roles: ['Ивент', 'Команда проекта'],
-    email: 'ivanova@example.com',
   },
   {
     fullName: 'Петров Дмитрий Олегович',
     position: 'Менеджер по продажам',
     roles: ['Отдел продаж'],
-    email: 'petrov@example.com',
   },
   {
     fullName: 'Смирнова Екатерина Игоревна',
     position: 'Маркетолог',
     roles: ['Маркетинг', 'Дизайн'],
-    email: 'smirnova@example.com',
   },
   {
     fullName: 'Кузнецов Алексей Викторович',
     position: 'Программный директор',
     roles: ['Программа'],
-    email: 'kuznetsov@example.com',
   },
   {
     fullName: 'Орлова Мария Андреевна',
     position: 'Финансовый менеджер',
     roles: ['Финансы', 'Юрист'],
-    email: 'orlova@example.com',
   },
 ];
 
@@ -182,7 +177,6 @@ export async function runSeed(prisma: PrismaClient, masterPlan: Uint8Array): Pro
       data: {
         fullName: e.fullName,
         position: e.position,
-        email: e.email,
         roles: { connect: e.roles.map((r) => ({ id: roleId.get(key(r))! })).filter((x) => x.id) },
       },
     });

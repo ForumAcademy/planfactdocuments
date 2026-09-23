@@ -50,9 +50,9 @@ export interface EmployeeDTO {
   id: number;
   fullName: string;
   position: string | null;
-  email: string | null;
-  phone: string | null;
   telegram: string | null;
+  /** Сотрудник нажал /start у бота */
+  telegramLinked: boolean;
   active: boolean;
   roleIds: number[];
 }

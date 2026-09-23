@@ -69,9 +69,9 @@ model Employee {
   id        Int      @id @default(autoincrement())
   fullName  String
   position  String?
-  email     String?
-  phone     String?
   telegram  String?
+  /// Чат с ботом Telegram (появляется после /start у бота)
+  telegramChatId String?
   active    Boolean  @default(true)
   roles     Role[]
   tasks     Task[]
@@ -188,17 +188,22 @@ model ReportItem {
 
 model ReminderSettings {
   id                 Int     @id @default(1)
-  enabled            Boolean @default(true)
   daysBefore         Int     @default(3)
-  managerEmails      String  @default("")
   weeklySummary      Boolean @default(true)
-  maxEmailsPerRun    Int     @default(50)
+  /// Личные сообщения ответственным в Telegram
+  telegramPersonal   Boolean @default(true)
+  /// Сводка в общий чат команды
+  telegramGroup      Boolean @default(true)
+  telegramGroupChatId String?
+  telegramGroupTitle  String?
 }
 
 model ReminderLog {
   id         Int      @id @default(autoincrement())
   dayKey     String
   kind       String
+  /// канал отправки (telegram)
+  channel    String   @default("telegram")
   taskId     Int?
   employeeId Int?
   recipient  String

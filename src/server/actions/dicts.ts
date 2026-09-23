@@ -6,6 +6,7 @@ import { prisma } from '@/lib/db';
 import { requireEditor } from '@/lib/auth';
 import { colorSchema, employeeSchema, nameSchema, type EmployeeInput } from '@/lib/validation';
 import { run, UserError, type ActionResult } from '@/server/action-utils';
+import { normalizeTgUsername } from '@/lib/telegram-format';
 
 export type DictKind = 'stage' | 'block' | 'role' | 'employee' | 'template';
 
@@ -87,15 +88,21 @@ export async function saveEmployee(
     const data = {
       fullName: d.fullName,
       position: d.position,
-      email: d.email,
-      phone: d.phone,
       telegram: d.telegram,
       active: d.active,
     };
+    const prev = id ? await prisma.employee.findUnique({ where: { id } }) : null;
+    // Сменился ник в Telegram — прежняя привязка к чату больше не действительна
+    const tgChanged =
+      prev && normalizeTgUsername(prev.telegram) !== normalizeTgUsername(d.telegram);
     const row = id
       ? await prisma.employee.update({
           where: { id },
-          data: { ...data, roles: { set: d.roleIds.map((r) => ({ id: r })) } },
+          data: {
+            ...data,
+            ...(tgChanged ? { telegramChatId: null } : {}),
+            roles: { set: d.roleIds.map((r) => ({ id: r })) },
+          },
         })
       : await prisma.employee.create({
           data: { ...data, roles: { connect: d.roleIds.map((r) => ({ id: r })) } },

@@ -175,9 +175,24 @@ function EmployeesTab({ data }: { data: DatabaseData }) {
         </div>
       ),
     },
-    { key: 'email', label: 'E-mail', sortValue: (r) => r.email, render: (r) => r.email },
-    { key: 'phone', label: 'Телефон', render: (r) => r.phone },
-    { key: 'telegram', label: 'Telegram', render: (r) => r.telegram },
+    {
+      key: 'telegram',
+      label: 'Telegram',
+      sortValue: (r) => r.telegram,
+      render: (r) =>
+        r.telegram ? (
+          <span className="inline-flex flex-wrap items-center gap-1.5">
+            {r.telegram}
+            {r.telegramLinked ? (
+              <Badge className="bg-green-50 text-status-green">напоминания подключены</Badge>
+            ) : (
+              <Badge className="bg-yellow-50 text-yellow-800">ждём /start у бота</Badge>
+            )}
+          </span>
+        ) : (
+          <span className="text-status-gray">—</span>
+        ),
+    },
     {
       key: 'active',
       label: 'Активен',
@@ -227,14 +242,7 @@ function EmployeesTab({ data }: { data: DatabaseData }) {
         columns={columns}
         initialSort={{ key: 'fullName', dir: 'asc' }}
         searchText={(r) =>
-          [
-            r.fullName,
-            r.position,
-            r.email,
-            r.phone,
-            r.telegram,
-            ...r.roleIds.map((id) => roleName.get(id)),
-          ].join(' ')
+          [r.fullName, r.position, r.telegram, ...r.roleIds.map((id) => roleName.get(id))].join(' ')
         }
         onRowClick={setEdit}
         rowClassName={(r) => (r.active ? undefined : 'text-ink/50')}

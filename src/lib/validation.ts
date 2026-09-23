@@ -44,25 +44,18 @@ export const employeeSchema = z.object({
     .max(200)
     .nullish()
     .transform((v) => v || null),
-  email: z
-    .string()
-    .trim()
-    .max(200)
-    .nullish()
-    .transform((v) => v || null)
-    .refine((v) => v === null || z.email().safeParse(v).success, 'Неверный e-mail'),
-  phone: z
-    .string()
-    .trim()
-    .max(50)
-    .nullish()
-    .transform((v) => v || null),
   telegram: z
     .string()
     .trim()
     .max(100)
     .nullish()
-    .transform((v) => v || null),
+    .transform((v) => v || null)
+    .refine(
+      (v) =>
+        v === null ||
+        /^@?[A-Za-z0-9_]{3,32}$/.test(v.replace(/^https?:\/\/(www\.)?t(elegram)?\.me\//i, '')),
+      'Ник в Telegram — латиница, цифры и «_», например @ivanova',
+    ),
   active: z.boolean(),
   roleIds: z.array(z.number().int()).max(50),
 });

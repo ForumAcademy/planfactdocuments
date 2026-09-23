@@ -5,24 +5,21 @@ import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireEditor } from '@/lib/auth';
 import { run, type ActionResult } from '@/server/action-utils';
+import { headers } from 'next/headers';
 import { runReminders, type RunResult } from '@/server/reminders';
+import {
+  getBotInfo,
+  sendTelegram,
+  telegramConfigured,
+  tgApi,
+  webhookSecret,
+} from '@/server/telegram';
 
 const schema = z.object({
-  enabled: z.boolean(),
   daysBefore: z.number().int().min(0, 'Не меньше 0').max(60, 'Не больше 60'),
-  managerEmails: z
-    .string()
-    .max(1000)
-    .refine(
-      (s) =>
-        s
-          .split(/[,;\s]+/)
-          .filter(Boolean)
-          .every((e) => z.email().safeParse(e).success),
-      'Проверьте адреса e-mail (через запятую)',
-    ),
   weeklySummary: z.boolean(),
-  maxEmailsPerRun: z.number().int().min(1).max(500),
+  telegramPersonal: z.boolean(),
+  telegramGroup: z.boolean(),
 });
 
 export async function saveReminderSettings(input: z.input<typeof schema>): Promise<ActionResult> {
@@ -42,5 +39,52 @@ export async function runRemindersNow(): Promise<ActionResult<RunResult>> {
     const r = await runReminders({ force: true });
     revalidatePath('/settings');
     return r;
+  });
+}
+
+/** Подключение бота: регистрирует адрес вебхука сайта в Telegram. */
+export async function connectTelegramBot(): Promise<ActionResult<string>> {
+  return run(async () => {
+    await requireEditor();
+    if (!telegramConfigured()) throw new Error('Не задан TELEGRAM_BOT_TOKEN в настройках Vercel');
+    const h = await headers();
+    const host = h.get('x-forwarded-host') ?? h.get('host');
+    const proto = h.get('x-forwarded-proto') ?? 'https';
+    const url = `${proto}://${host}/api/telegram/webhook`;
+    await tgApi('setWebhook', {
+      url,
+      secret_token: webhookSecret(),
+      allowed_updates: ['message', 'my_chat_member'],
+      drop_pending_updates: true,
+    });
+    const bot = await getBotInfo();
+    revalidatePath('/settings');
+    return bot ? `Бот @${bot.username} подключён` : 'Бот подключён';
+  });
+}
+
+/** Проверочное сообщение в общий чат. */
+export async function testTelegramGroup(): Promise<ActionResult> {
+  return run(async () => {
+    await requireEditor();
+    const s = await prisma.reminderSettings.findUnique({ where: { id: 1 } });
+    if (!s?.telegramGroupChatId) throw new Error('Общий чат ещё не подключён');
+    await sendTelegram(
+      s.telegramGroupChatId,
+      'Проверка связи: сводки «Статус форумов» будут приходить в этот чат.',
+    );
+    return null;
+  });
+}
+
+export async function disconnectTelegramGroup(): Promise<ActionResult> {
+  return run(async () => {
+    await requireEditor();
+    await prisma.reminderSettings.update({
+      where: { id: 1 },
+      data: { telegramGroupChatId: null, telegramGroupTitle: null },
+    });
+    revalidatePath('/settings');
+    return null;
   });
 }

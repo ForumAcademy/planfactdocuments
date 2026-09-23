@@ -28,8 +28,6 @@ export function EmployeeDialog({
   const [f, setF] = useState({
     fullName: '',
     position: '',
-    email: '',
-    phone: '',
     telegram: '',
     active: true,
     roleIds: [] as number[],
@@ -42,8 +40,6 @@ export function EmployeeDialog({
     setF({
       fullName: employee?.fullName ?? '',
       position: employee?.position ?? '',
-      email: employee?.email ?? '',
-      phone: employee?.phone ?? '',
       telegram: employee?.telegram ?? '',
       active: employee?.active ?? true,
       roleIds: employee?.roleIds ?? [],
@@ -90,29 +86,21 @@ export function EmployeeDialog({
               placeholder="Выберите роли"
             />
           </Field>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="E-mail (для напоминаний)" error={errors.email}>
-              <Input
-                type="email"
-                value={f.email}
-                onChange={(e) => setF({ ...f, email: e.target.value })}
-              />
-            </Field>
-            <Field label="Телефон" error={errors.phone}>
-              <Input
-                type="tel"
-                value={f.phone}
-                onChange={(e) => setF({ ...f, phone: e.target.value })}
-              />
-            </Field>
-            <Field label="Telegram" error={errors.telegram}>
-              <Input
-                value={f.telegram}
-                placeholder="@username"
-                onChange={(e) => setF({ ...f, telegram: e.target.value })}
-              />
-            </Field>
-          </div>
+          <Field
+            label="Ник в Telegram (для напоминаний)"
+            error={errors.telegram}
+            hint={
+              employee?.telegramLinked
+                ? 'Напоминания подключены. Если сменить ник, сотруднику нужно будет снова нажать /start у бота.'
+                : 'После сохранения сотрудник открывает бота в Telegram и нажимает «Старт» — бот узнает его по нику.'
+            }
+          >
+            <Input
+              value={f.telegram}
+              placeholder="@username"
+              onChange={(e) => setF({ ...f, telegram: e.target.value })}
+            />
+          </Field>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
