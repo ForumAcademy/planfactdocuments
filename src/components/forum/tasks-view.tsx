@@ -185,171 +185,188 @@ function TaskTable() {
       void patchTask(dragged.id, { stageId: target.stageId }, { silent: true });
   };
 
+  const isMobile = useIsMobile();
   const allSelected = visible.length > 0 && visible.every((t) => selected.has(t.id));
 
   return (
     <>
       {selected.size > 0 && <BulkBar ids={[...selected]} onClear={() => setSelected(new Set())} />}
-      {/* Телефон: карточки вместо широкой таблицы */}
-      <MobileTaskList
-        groups={groups}
-        collapsed={collapsed}
-        toggle={(key) =>
-          setCollapsed((s) => {
-            const n = new Set(s);
-            if (n.has(key)) n.delete(key);
-            else n.add(key);
-            return n;
-          })
-        }
-        empty={
-          tasks.length
-            ? 'Нет задач, подходящих под фильтры'
-            : 'В плане пока нет задач. Добавьте задачу или загрузите план из Excel.'
-        }
-      />
-      <div
-        className="thin-scroll hidden overflow-x-auto rounded-md border border-line md:block"
-        data-testid="task-table"
-      >
-        <table className="w-full min-w-[1400px] border-collapse text-sm">
-          <thead className="sticky top-0 z-10 bg-surface text-left text-xs text-ink/70">
-            <tr>
-              <th className="w-8 px-2 py-2">
-                <input
-                  type="checkbox"
-                  className="accent-brand"
-                  aria-label="Выбрать все"
-                  checked={allSelected}
-                  onChange={(e) =>
-                    setSelected(e.target.checked ? new Set(visible.map((t) => t.id)) : new Set())
-                  }
-                />
-              </th>
-              <th className="w-6" />
-              {COLUMNS.map((c) => (
-                <th key={c.key} className={cn('px-2 py-2 font-medium', c.className)}>
-                  {c.sort ? (
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 hover:text-brand"
-                      onClick={() => toggleSort(c.sort!)}
-                    >
-                      {c.label}
-                      {filters.sort === c.sort ? (
-                        filters.dir === 'asc' ? (
-                          <ArrowUp className="size-3" />
-                        ) : (
-                          <ArrowDown className="size-3" />
-                        )
-                      ) : (
-                        <ArrowUpDown className="size-3 opacity-40" />
-                      )}
-                    </button>
-                  ) : (
-                    c.label
-                  )}
-                </th>
-              ))}
-              <th className="w-10" />
-            </tr>
-          </thead>
-          {groups.length === 0 && (
-            <tbody>
+      {/* Телефон: карточки вместо широкой таблицы (рисуется только один вариант) */}
+      {isMobile ? (
+        <MobileTaskList
+          groups={groups}
+          collapsed={collapsed}
+          toggle={(key) =>
+            setCollapsed((s) => {
+              const n = new Set(s);
+              if (n.has(key)) n.delete(key);
+              else n.add(key);
+              return n;
+            })
+          }
+          empty={
+            tasks.length
+              ? 'Нет задач, подходящих под фильтры'
+              : 'В плане пока нет задач. Добавьте задачу или загрузите план из Excel.'
+          }
+        />
+      ) : (
+        <div
+          className="thin-scroll overflow-x-auto rounded-md border border-line"
+          data-testid="task-table"
+        >
+          <table className="w-full min-w-[1400px] border-collapse text-sm">
+            <thead className="sticky top-0 z-10 bg-surface text-left text-xs text-ink/70">
               <tr>
-                <td
-                  colSpan={COLUMNS.length + 3}
-                  className="px-3 py-10 text-center text-status-gray"
-                >
-                  {tasks.length
-                    ? 'Нет задач, подходящих под фильтры'
-                    : 'В плане пока нет задач. Добавьте задачу или загрузите план из Excel.'}
-                </td>
+                <th className="w-8 px-2 py-2">
+                  <input
+                    type="checkbox"
+                    className="accent-brand"
+                    aria-label="Выбрать все"
+                    checked={allSelected}
+                    onChange={(e) =>
+                      setSelected(e.target.checked ? new Set(visible.map((t) => t.id)) : new Set())
+                    }
+                  />
+                </th>
+                <th className="w-6" />
+                {COLUMNS.map((c) => (
+                  <th key={c.key} className={cn('px-2 py-2 font-medium', c.className)}>
+                    {c.sort ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 hover:text-brand"
+                        onClick={() => toggleSort(c.sort!)}
+                      >
+                        {c.label}
+                        {filters.sort === c.sort ? (
+                          filters.dir === 'asc' ? (
+                            <ArrowUp className="size-3" />
+                          ) : (
+                            <ArrowDown className="size-3" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="size-3 opacity-40" />
+                        )}
+                      </button>
+                    ) : (
+                      c.label
+                    )}
+                  </th>
+                ))}
+                <th className="w-10" />
               </tr>
-            </tbody>
-          )}
-          {groups.map((g) => {
-            const isCollapsed = collapsed.has(g.key);
-            const done = g.all.filter((t) => t.status === 'DONE').length;
-            const pct = g.all.length ? Math.round((done / g.all.length) * 100) : 0;
-            const color = g.stage?.color ?? '#8A94A6';
-            return (
-              <tbody key={g.key}>
-                <tr className="border-t border-line bg-white">
-                  <td colSpan={COLUMNS.length + 3} className="px-2 py-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setCollapsed((s) => {
-                          const n = new Set(s);
-                          if (n.has(g.key)) n.delete(g.key);
-                          else n.add(g.key);
-                          return n;
-                        })
-                      }
-                      className="flex w-full items-center gap-2 text-left"
-                    >
-                      {isCollapsed ? (
-                        <ChevronRight className="size-4" />
-                      ) : (
-                        <ChevronDown className="size-4" />
-                      )}
-                      <span className="h-4 w-1.5 rounded-sm" style={{ background: color }} />
-                      <span className="font-semibold">{g.stage?.name ?? 'Без этапа'}</span>
-                      <span className="text-xs text-ink/60">
-                        {g.tasks.length !== g.all.length
-                          ? `${g.tasks.length} из ${g.all.length}`
-                          : g.all.length}{' '}
-                        {pluralRu(g.all.length, 'задача', 'задачи', 'задач')}
-                      </span>
-                      <span className="ml-3 h-1.5 w-32 overflow-hidden rounded-full bg-surface">
-                        <span
-                          className="block h-full rounded-full"
-                          style={{ width: `${pct}%`, background: TONE_COLOR.green }}
-                        />
-                      </span>
-                      <span className="text-xs text-ink/70">{pct}% выполнено</span>
-                    </button>
+            </thead>
+            {groups.length === 0 && (
+              <tbody>
+                <tr>
+                  <td
+                    colSpan={COLUMNS.length + 3}
+                    className="px-3 py-10 text-center text-status-gray"
+                  >
+                    {tasks.length
+                      ? 'Нет задач, подходящих под фильтры'
+                      : 'В плане пока нет задач. Добавьте задачу или загрузите план из Excel.'}
                   </td>
                 </tr>
-                {!isCollapsed &&
-                  g.tasks.map((t) => (
-                    <TaskRow
-                      key={t.id}
-                      task={t}
-                      selected={selected.has(t.id)}
-                      onSelect={(v) =>
-                        setSelected((s) => {
-                          const n = new Set(s);
-                          if (v) n.add(t.id);
-                          else n.delete(t.id);
-                          return n;
-                        })
-                      }
-                      canDrag={canDrag}
-                      isDropTarget={dropTarget === t.id && dragId !== t.id}
-                      onDragStart={() => setDragId(t.id)}
-                      onDragEnd={() => {
-                        setDragId(null);
-                        setDropTarget(null);
-                      }}
-                      onDragOver={() => setDropTarget(t.id)}
-                      onDrop={() => onDrop(t)}
-                    />
-                  ))}
               </tbody>
-            );
-          })}
-        </table>
-      </div>
-      {!canDrag && (
-        <p className="mt-2 hidden text-xs text-ink/60 md:block">
+            )}
+            {groups.map((g) => {
+              const isCollapsed = collapsed.has(g.key);
+              const done = g.all.filter((t) => t.status === 'DONE').length;
+              const pct = g.all.length ? Math.round((done / g.all.length) * 100) : 0;
+              const color = g.stage?.color ?? '#8A94A6';
+              return (
+                <tbody key={g.key}>
+                  <tr className="border-t border-line bg-white">
+                    <td colSpan={COLUMNS.length + 3} className="px-2 py-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCollapsed((s) => {
+                            const n = new Set(s);
+                            if (n.has(g.key)) n.delete(g.key);
+                            else n.add(g.key);
+                            return n;
+                          })
+                        }
+                        className="flex w-full items-center gap-2 text-left"
+                      >
+                        {isCollapsed ? (
+                          <ChevronRight className="size-4" />
+                        ) : (
+                          <ChevronDown className="size-4" />
+                        )}
+                        <span className="h-4 w-1.5 rounded-sm" style={{ background: color }} />
+                        <span className="font-semibold">{g.stage?.name ?? 'Без этапа'}</span>
+                        <span className="text-xs text-ink/60">
+                          {g.tasks.length !== g.all.length
+                            ? `${g.tasks.length} из ${g.all.length}`
+                            : g.all.length}{' '}
+                          {pluralRu(g.all.length, 'задача', 'задачи', 'задач')}
+                        </span>
+                        <span className="ml-3 h-1.5 w-32 overflow-hidden rounded-full bg-surface">
+                          <span
+                            className="block h-full rounded-full"
+                            style={{ width: `${pct}%`, background: TONE_COLOR.green }}
+                          />
+                        </span>
+                        <span className="text-xs text-ink/70">{pct}% выполнено</span>
+                      </button>
+                    </td>
+                  </tr>
+                  {!isCollapsed &&
+                    g.tasks.map((t) => (
+                      <TaskRow
+                        key={t.id}
+                        task={t}
+                        selected={selected.has(t.id)}
+                        onSelect={(v) =>
+                          setSelected((s) => {
+                            const n = new Set(s);
+                            if (v) n.add(t.id);
+                            else n.delete(t.id);
+                            return n;
+                          })
+                        }
+                        canDrag={canDrag}
+                        isDropTarget={dropTarget === t.id && dragId !== t.id}
+                        onDragStart={() => setDragId(t.id)}
+                        onDragEnd={() => {
+                          setDragId(null);
+                          setDropTarget(null);
+                        }}
+                        onDragOver={() => setDropTarget(t.id)}
+                        onDrop={() => onDrop(t)}
+                      />
+                    ))}
+                </tbody>
+              );
+            })}
+          </table>
+        </div>
+      )}
+      {!canDrag && !isMobile && (
+        <p className="mt-2 text-xs text-ink/60">
           Перетаскивание строк доступно без сортировки (порядок по умолчанию).
         </p>
       )}
       {dicts.stages.length === 0 && null}
     </>
   );
+}
+
+/** Узкий экран (телефон) — меньше 768 px. */
+function useIsMobile(): boolean {
+  const [mobile, setMobile] = React.useState(false);
+  React.useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const on = () => setMobile(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return mobile;
 }
 
 type Group = {
@@ -374,13 +391,13 @@ function MobileTaskList({
   const { today, lookups, filters, setOpenTaskId } = useForum();
   if (groups.length === 0) {
     return (
-      <div className="rounded-md border border-line px-3 py-10 text-center text-status-gray md:hidden">
+      <div className="rounded-md border border-line px-3 py-10 text-center text-status-gray">
         {empty}
       </div>
     );
   }
   return (
-    <div className="space-y-3 md:hidden" data-testid="task-cards">
+    <div className="space-y-3" data-testid="task-cards">
       {groups.map((g) => {
         const isCollapsed = collapsed.has(g.key);
         const done = g.all.filter((t) => t.status === 'DONE').length;
