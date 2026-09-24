@@ -167,8 +167,11 @@ export function KanbanView() {
                             </span>
                           )}
                           {t.needsClarification && (
-                            <span className="rounded bg-yellow-100 px-1 text-yellow-800">
-                              уточнить срок
+                            <span
+                              className="rounded bg-yellow-100 px-1 text-yellow-800"
+                              title="Срок в тексте не распознан — даты поставлены на весь этап. Проверьте даты или впишите срок понятнее, например «за 2 недели до форума» или «до 15.10.2026»."
+                            >
+                              примерный срок
                             </span>
                           )}
                         </div>

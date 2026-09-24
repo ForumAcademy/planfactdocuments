@@ -164,7 +164,7 @@ function PanelBody({ task, onClose }: { task: TaskDTO; onClose: () => void }) {
           label="Срок (исходный текст)"
           hint={
             task.datesManual
-              ? 'Даты изменены вручную и не пересчитываются автоматически'
+              ? 'Даты изменены вручную. Новый текст срока пересчитает их заново'
               : 'Даты вычисляются по тексту срока'
           }
         >
@@ -185,10 +185,23 @@ function PanelBody({ task, onClose }: { task: TaskDTO; onClose: () => void }) {
             </Button>
           </div>
           {task.needsClarification && (
-            <p className="mt-1 inline-block rounded bg-yellow-100 px-1.5 py-0.5 text-xs font-medium text-yellow-800">
-              Срок не распознан — уточнить срок
+            <p className="mt-1 rounded bg-yellow-100 px-2 py-1 text-xs text-yellow-900">
+              <b>Срок примерный.</b> Текст не распознан, поэтому даты поставлены на весь этап.
+              Поставьте даты вручную или впишите срок понятнее.
             </p>
           )}
+          <details className="mt-1 text-xs text-ink/70">
+            <summary className="cursor-pointer text-brand">Какие сроки понимает система</summary>
+            <ul className="mt-1 list-inside list-disc space-y-0.5">
+              <li>за 2 недели / за месяц / за 8-9 недель до форума</li>
+              <li>за 3 дня до старта продаж, до старта продаж, с начала продаж</li>
+              <li>в течение недели / через 3 дня после старта продаж</li>
+              <li>в день форума, накануне форума, в течение 5 рабочих дней после форума</li>
+              <li>до 15.10.2026, с 01.10 по 15.10, 01.12–15.12</li>
+              <li>на протяжении этапа, контрольная точка за 4 месяца</li>
+            </ul>
+            <p className="mt-1">Уточнения в скобках или после «;» переносятся в комментарий.</p>
+          </details>
         </Field>
 
         <div className="grid grid-cols-2 gap-3">

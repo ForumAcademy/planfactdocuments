@@ -214,7 +214,7 @@ function PlanImportDialog({
               <Stat label="Будет добавлено" value={analysis.added} tone="text-status-green" />
               <Stat label="Будет обновлено" value={analysis.updated} tone="text-brand" />
               <Stat
-                label="Уточнить срок / ошибки"
+                label="Примерный срок / ошибки"
                 value={new Set([...analysis.flagged, ...analysis.unknownTerm]).size}
                 tone="text-yellow-600"
               />
@@ -282,7 +282,7 @@ function PlanImportDialog({
                           {[
                             ...r.errors,
                             analysis.unknownTerm.has(r.rowNumber)
-                              ? 'срок не распознан — «уточнить срок»'
+                              ? 'срок не распознан — даты на весь этап (примерный срок)'
                               : '',
                           ]
                             .filter(Boolean)

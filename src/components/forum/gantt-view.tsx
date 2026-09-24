@@ -779,7 +779,7 @@ function TaskBar({
       >
         <span className="block size-3.5 rotate-45 cursor-grab border-2 border-yellow-500 bg-yellow-300" />
         <span className="whitespace-nowrap rounded bg-yellow-100 px-1 text-[10px] font-medium text-yellow-800">
-          уточнить срок
+          примерный срок
         </span>
       </div>
     );
@@ -873,7 +873,7 @@ function Tooltip({ task, x, y }: { task: TaskDTO; x: number; y: number }) {
       </div>
       {task.needsClarification && (
         <div className="mt-2 flex items-center gap-1 text-yellow-700">
-          <AlertTriangle className="size-3" /> Срок не распознан — уточнить срок
+          <AlertTriangle className="size-3" /> Срок примерный: текст не распознан, даты — весь этап
         </div>
       )}
       <div className="mt-2 text-[11px] text-ink/50">
@@ -898,7 +898,8 @@ function Legend() {
         </span>
       ))}
       <span className="inline-flex items-center gap-1.5">
-        <span className="size-2.5 rotate-45 border border-yellow-500 bg-yellow-300" /> уточнить срок
+        <span className="size-2.5 rotate-45 border border-yellow-500 bg-yellow-300" /> примерный
+        срок
       </span>
       <span className="inline-flex items-center gap-1.5">
         <span className="h-3 border-l-2 border-dashed border-brand" /> сегодня

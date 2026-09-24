@@ -576,8 +576,11 @@ const TaskRow = React.memo(function TaskRow({
         >
           {t.termText || <span className="text-status-gray">—</span>}
           {t.needsClarification && (
-            <span className="mt-1 block w-fit rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-medium text-yellow-800">
-              уточнить срок
+            <span
+              className="mt-1 block w-fit rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-medium text-yellow-800"
+              title="Срок в тексте не распознан — даты поставлены на весь этап. Проверьте даты или впишите срок понятнее, например «за 2 недели до форума» или «до 15.10.2026»."
+            >
+              примерный срок
             </span>
           )}
         </TextCell>

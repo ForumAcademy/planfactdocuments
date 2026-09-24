@@ -102,7 +102,8 @@ async function applyPatch(
   let start = dbToISO(task.startDate);
   let end = dbToISO(task.endDate);
   const shouldRecalc =
-    p.recalc || (p.termText !== undefined && p.termText !== task.termText && !task.datesManual);
+    // Новый текст срока всегда пересчитывает даты — даже если раньше их меняли вручную
+    p.recalc || (p.termText !== undefined && p.termText !== task.termText);
   if (shouldRecalc) {
     const stage =
       p.stageId !== undefined
