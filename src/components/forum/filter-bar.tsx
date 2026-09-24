@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Search, X, RotateCcw } from 'lucide-react';
+import { RotateCcw, Search, SlidersHorizontal, X } from 'lucide-react';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { DateInput } from '@/components/ui/date-input';
 import { Button } from '@/components/ui/button';
@@ -55,6 +55,16 @@ export function FilterBar({ className }: { className?: string }) {
       .map((x) => ({ value: String(x.id), label: label(x), color: color?.(x) }));
 
   const active = hasActiveFilters(filters);
+  // На телефоне фильтры свёрнуты под кнопку, чтобы не занимать весь экран
+  const [open, setOpen] = React.useState(false);
+  const count =
+    filters.stage.length +
+    filters.block.length +
+    filters.role.length +
+    filters.emp.length +
+    filters.status.length +
+    (filters.due ? 1 : 0) +
+    (filters.from || filters.to ? 1 : 0);
 
   return (
     <div
@@ -62,76 +72,94 @@ export function FilterBar({ className }: { className?: string }) {
       data-testid="filter-bar"
     >
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-        <div className="relative col-span-2 md:col-span-3 xl:col-span-1">
-          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-status-gray" />
-          <input
-            value={q}
-            onChange={(e) => onSearch(e.target.value)}
-            placeholder="Поиск по задачам…"
-            aria-label="Поиск по задачам"
-            className="h-9 w-full rounded-md border border-line bg-white pl-8 pr-8 text-sm focus:border-brand focus:outline-none"
-          />
-          {q && (
-            <button
-              type="button"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-status-gray hover:text-ink"
-              onClick={() => onSearch('')}
-              aria-label="Очистить поиск"
-            >
-              <X className="size-4" />
-            </button>
-          )}
+        <div className="relative col-span-2 flex gap-2 md:col-span-3 xl:col-span-1">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-status-gray" />
+            <input
+              value={q}
+              onChange={(e) => onSearch(e.target.value)}
+              placeholder="Поиск по задачам…"
+              aria-label="Поиск по задачам"
+              className="h-9 w-full rounded-md border border-line bg-white pl-8 pr-8 text-sm focus:border-brand focus:outline-none"
+            />
+            {q && (
+              <button
+                type="button"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-status-gray hover:text-ink"
+                onClick={() => onSearch('')}
+                aria-label="Очистить поиск"
+              >
+                <X className="size-4" />
+              </button>
+            )}
+          </div>
+          <Button
+            variant={count ? 'default' : 'outline'}
+            className="md:hidden"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            data-testid="filters-toggle"
+          >
+            <SlidersHorizontal /> Фильтры{count ? ` (${count})` : ''}
+          </Button>
         </div>
-        <MultiSelect
-          ariaLabel="Этап"
-          placeholder="Этап"
-          options={opt(
-            dicts.stages,
-            (s) => s.name,
-            filters.stage,
-            undefined,
-            (s) => s.color,
-          )}
-          value={filters.stage.map(String)}
-          onChange={(v) => setFilters({ stage: v.map(Number) })}
-        />
-        <MultiSelect
-          ariaLabel="Блок"
-          placeholder="Блок"
-          options={opt(dicts.blocks, (s) => s.name, filters.block, used.blocks)}
-          value={filters.block.map(String)}
-          onChange={(v) => setFilters({ block: v.map(Number) })}
-        />
-        <MultiSelect
-          ariaLabel="Роль"
-          placeholder="Роль"
-          options={opt(dicts.roles, (s) => s.name, filters.role, used.roles)}
-          value={filters.role.map(String)}
-          onChange={(v) => setFilters({ role: v.map(Number) })}
-        />
-        <MultiSelect
-          ariaLabel="Ответственный"
-          placeholder="Ответственный"
-          options={dicts.employees
-            .filter((e) => e.active || used.emps.has(e.id) || filters.emp.includes(e.id))
-            .map((e) => ({
-              value: String(e.id),
-              label: e.fullName,
-              hint: e.position ?? undefined,
-            }))}
-          value={filters.emp.map(String)}
-          onChange={(v) => setFilters({ emp: v.map(Number) })}
-        />
-        <MultiSelect
-          ariaLabel="Статус"
-          placeholder="Статус"
-          searchable={false}
-          options={TASK_STATUSES.map((s) => ({ value: s, label: STATUS_LABEL[s] }))}
-          value={filters.status}
-          onChange={(v) => setFilters({ status: v as typeof filters.status })}
-        />
+        <div className={cn('col-span-2 grid grid-cols-2 gap-2 md:contents', !open && 'hidden')}>
+          <MultiSelect
+            ariaLabel="Этап"
+            placeholder="Этап"
+            options={opt(
+              dicts.stages,
+              (s) => s.name,
+              filters.stage,
+              undefined,
+              (s) => s.color,
+            )}
+            value={filters.stage.map(String)}
+            onChange={(v) => setFilters({ stage: v.map(Number) })}
+          />
+          <MultiSelect
+            ariaLabel="Блок"
+            placeholder="Блок"
+            options={opt(dicts.blocks, (s) => s.name, filters.block, used.blocks)}
+            value={filters.block.map(String)}
+            onChange={(v) => setFilters({ block: v.map(Number) })}
+          />
+          <MultiSelect
+            ariaLabel="Роль"
+            placeholder="Роль"
+            options={opt(dicts.roles, (s) => s.name, filters.role, used.roles)}
+            value={filters.role.map(String)}
+            onChange={(v) => setFilters({ role: v.map(Number) })}
+          />
+          <MultiSelect
+            ariaLabel="Ответственный"
+            placeholder="Ответственный"
+            options={dicts.employees
+              .filter((e) => e.active || used.emps.has(e.id) || filters.emp.includes(e.id))
+              .map((e) => ({
+                value: String(e.id),
+                label: e.fullName,
+                hint: e.position ?? undefined,
+              }))}
+            value={filters.emp.map(String)}
+            onChange={(v) => setFilters({ emp: v.map(Number) })}
+          />
+          <MultiSelect
+            ariaLabel="Статус"
+            placeholder="Статус"
+            searchable={false}
+            options={TASK_STATUSES.map((s) => ({ value: s, label: STATUS_LABEL[s] }))}
+            value={filters.status}
+            onChange={(v) => setFilters({ status: v as typeof filters.status })}
+          />
+        </div>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+      <div
+        className={cn(
+          'mt-2 flex-wrap items-center gap-2 text-sm md:flex',
+          open ? 'flex' : 'hidden',
+        )}
+      >
         <span className="text-ink/70">Срок:</span>
         {DUE_BUTTONS.map((b) => (
           <button

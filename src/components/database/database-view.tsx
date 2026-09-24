@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Archive, ArchiveRestore, DatabaseZap, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Select } from '@/components/ui/input';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { Badge } from '@/components/ui/badge';
@@ -104,8 +105,21 @@ export function DatabaseView({ data }: { data: DatabaseData }) {
           <DatabaseZap /> {seeding ? 'Загружаем…' : 'Загрузить начальные данные'}
         </Button>
       </div>
+      {/* На телефоне — выпадающий список вместо ряда вкладок */}
+      <Select
+        className="mt-4 sm:hidden"
+        value={tab}
+        onChange={(e) => setTab(e.target.value as TabKey)}
+        aria-label="Раздел базы данных"
+      >
+        {TABS.map((t) => (
+          <option key={t.key} value={t.key}>
+            {t.label}
+          </option>
+        ))}
+      </Select>
       <div
-        className="thin-scroll mt-4 flex gap-1 overflow-x-auto border-b border-line"
+        className="thin-scroll mt-4 hidden gap-1 overflow-x-auto border-b border-line sm:flex"
         role="tablist"
       >
         {TABS.map((t) => (

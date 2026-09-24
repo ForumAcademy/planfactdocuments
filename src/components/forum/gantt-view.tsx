@@ -38,7 +38,9 @@ const HEADER_H = 62;
 const TOP_H = 22;
 const MARK_H = 16;
 const BOTTOM_H = HEADER_H - TOP_H - MARK_H;
-const TREE_W = 380;
+// Ширина столбца с названиями: на телефоне узкий, чтобы была видна шкала (CSS-переменная)
+const TREE_W = 'var(--tree-w)';
+const TREE_CLASS = '[--tree-w:150px] sm:[--tree-w:380px]';
 
 type Row =
   | {
@@ -196,7 +198,8 @@ export function GanttView() {
     (d: ISODate, smooth = true) => {
       const el = scrollRef.current;
       if (!el) return;
-      const left = x(d) - (el.clientWidth - TREE_W) / 3;
+      const treeW = parseFloat(getComputedStyle(el).getPropertyValue('--tree-w')) || 380;
+      const left = x(d) - (el.clientWidth - treeW) / 3;
       el.scrollTo({ left: Math.max(0, left), behavior: smooth ? 'smooth' : 'auto' });
     },
     [x],
@@ -422,18 +425,25 @@ export function GanttView() {
 
       <div
         ref={scrollRef}
-        className="thin-scroll relative mt-2 max-h-[calc(100vh-260px)] min-h-[360px] overflow-auto rounded-md border border-line bg-white"
+        className={cn(
+          'thin-scroll relative mt-2 max-h-[calc(100vh-260px)] min-h-[360px] overflow-auto rounded-md border border-line bg-white',
+          TREE_CLASS,
+        )}
         data-testid="gantt"
         onMouseLeave={() => setHover(null)}
       >
-        <div className="relative" style={{ width: TREE_W + width, height: HEADER_H + bodyH }}>
+        <div
+          className="relative"
+          style={{ width: `calc(${TREE_W} + ${width}px)`, height: HEADER_H + bodyH }}
+        >
           {/* Шапка шкалы */}
           <div className="sticky top-0 z-30 flex" style={{ height: HEADER_H }}>
             <div
               className="sticky left-0 z-40 flex shrink-0 items-end border-b border-r border-line bg-surface px-3 pb-1.5 text-xs font-medium text-ink/70"
               style={{ width: TREE_W }}
             >
-              Этап / блок / задача
+              <span className="hidden sm:inline">Этап / блок / задача</span>
+              <span className="sm:hidden">Задача</span>
             </div>
             <div className="relative shrink-0 border-b border-line bg-surface" style={{ width }}>
               {header.top.map((h, i) => (
@@ -531,7 +541,7 @@ export function GanttView() {
               <div
                 key={r.key}
                 className="absolute left-0 flex"
-                style={{ top, height: ROW_H, width: TREE_W + width }}
+                style={{ top, height: ROW_H, width: `calc(${TREE_W} + ${width}px)` }}
               >
                 <TreeCell
                   row={r}
@@ -636,7 +646,7 @@ function TreeCell({
       <button
         type="button"
         onClick={() => onOpen(t.id)}
-        className={cn(base, 'bg-white pl-9 text-left hover:bg-surface')}
+        className={cn(base, 'bg-white pl-1 text-left hover:bg-surface sm:pl-9')}
         style={{ width: TREE_W }}
         title={t.description}
       >
@@ -660,7 +670,7 @@ function TreeCell({
         'text-left',
         row.kind === 'stage'
           ? 'bg-surface pl-2 font-semibold'
-          : 'bg-white pl-5 font-medium text-ink/85',
+          : 'bg-white pl-2 font-medium text-ink/85 sm:pl-5',
       )}
       style={{ width: TREE_W }}
     >
@@ -673,7 +683,7 @@ function TreeCell({
         <span className="h-3.5 w-1.5 shrink-0 rounded-sm" style={{ background: row.color }} />
       )}
       <span className="truncate">{row.label}</span>
-      <span className="ml-auto shrink-0 text-[11px] font-normal text-ink/60">
+      <span className="ml-auto hidden shrink-0 text-[11px] font-normal text-ink/60 sm:inline">
         {row.tasks.length} · {pct}%
       </span>
     </button>

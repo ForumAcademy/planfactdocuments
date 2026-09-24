@@ -17,9 +17,9 @@ import { PlanImportButton } from './plan-import-dialog';
 import { PlanExportButton } from './plan-export-dialog';
 
 const SECTIONS = [
-  { key: 'gantt', label: 'Диаграмма Ганта' },
-  { key: 'tasks', label: 'Этапы и задачи' },
-  { key: 'report', label: 'Отчёт' },
+  { key: 'gantt', label: 'Диаграмма Ганта', short: 'Гант' },
+  { key: 'tasks', label: 'Этапы и задачи', short: 'Задачи' },
+  { key: 'report', label: 'Отчёт', short: 'Отчёт' },
 ] as const;
 
 export function ForumBreadcrumbs() {
@@ -180,11 +180,12 @@ export function ForumHeader({ forumOptions }: { forumOptions: { id: number; name
               href={href(s.key)}
               role="tab"
               active={pathname.endsWith(`/${s.key}`)}
-              className="-mb-px inline-flex items-center whitespace-nowrap border-b-2 px-4 py-2 text-sm"
+              className="-mb-px inline-flex flex-1 items-center justify-center whitespace-nowrap border-b-2 px-2 py-2 text-sm sm:flex-none sm:px-4"
               activeClassName="border-brand font-medium text-brand"
               inactiveClassName="border-transparent text-ink/70 hover:text-ink"
             >
-              {s.label}
+              <span className="sm:hidden">{s.short}</span>
+              <span className="hidden sm:inline">{s.label}</span>
             </TabLink>
           ))}
         </TabGroup>

@@ -30,6 +30,7 @@ import type { SortKey } from '@/lib/filters';
 import { TONE_COLOR, isOverdue, lagDays, shouldStart } from '@/lib/status';
 import type { TaskDTO } from '@/lib/types';
 import { cn, pluralRu } from '@/lib/utils';
+import { formatDate } from '@/lib/dates';
 import { FilterBar } from './filter-bar';
 import { useForum } from './forum-context';
 import { Highlight } from './highlight';
@@ -189,8 +190,26 @@ function TaskTable() {
   return (
     <>
       {selected.size > 0 && <BulkBar ids={[...selected]} onClear={() => setSelected(new Set())} />}
+      {/* Телефон: карточки вместо широкой таблицы */}
+      <MobileTaskList
+        groups={groups}
+        collapsed={collapsed}
+        toggle={(key) =>
+          setCollapsed((s) => {
+            const n = new Set(s);
+            if (n.has(key)) n.delete(key);
+            else n.add(key);
+            return n;
+          })
+        }
+        empty={
+          tasks.length
+            ? 'Нет задач, подходящих под фильтры'
+            : 'В плане пока нет задач. Добавьте задачу или загрузите план из Excel.'
+        }
+      />
       <div
-        className="thin-scroll overflow-x-auto rounded-md border border-line"
+        className="thin-scroll hidden overflow-x-auto rounded-md border border-line md:block"
         data-testid="task-table"
       >
         <table className="w-full min-w-[1400px] border-collapse text-sm">
@@ -324,12 +343,126 @@ function TaskTable() {
         </table>
       </div>
       {!canDrag && (
-        <p className="mt-2 text-xs text-ink/60">
+        <p className="mt-2 hidden text-xs text-ink/60 md:block">
           Перетаскивание строк доступно без сортировки (порядок по умолчанию).
         </p>
       )}
       {dicts.stages.length === 0 && null}
     </>
+  );
+}
+
+type Group = {
+  key: string;
+  stage?: { name: string; color: string } | null;
+  tasks: TaskDTO[];
+  all: TaskDTO[];
+};
+
+/** Список задач карточками — для узкого экрана. Нажатие открывает карточку задачи. */
+function MobileTaskList({
+  groups,
+  collapsed,
+  toggle,
+  empty,
+}: {
+  groups: Group[];
+  collapsed: Set<string>;
+  toggle: (key: string) => void;
+  empty: string;
+}) {
+  const { today, lookups, filters, setOpenTaskId } = useForum();
+  if (groups.length === 0) {
+    return (
+      <div className="rounded-md border border-line px-3 py-10 text-center text-status-gray md:hidden">
+        {empty}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3 md:hidden" data-testid="task-cards">
+      {groups.map((g) => {
+        const isCollapsed = collapsed.has(g.key);
+        const done = g.all.filter((t) => t.status === 'DONE').length;
+        const pct = g.all.length ? Math.round((done / g.all.length) * 100) : 0;
+        return (
+          <section key={g.key}>
+            <button
+              type="button"
+              onClick={() => toggle(g.key)}
+              className="flex w-full items-center gap-2 py-1.5 text-left"
+            >
+              {isCollapsed ? (
+                <ChevronRight className="size-4 shrink-0" />
+              ) : (
+                <ChevronDown className="size-4 shrink-0" />
+              )}
+              <span
+                className="h-4 w-1.5 shrink-0 rounded-sm"
+                style={{ background: g.stage?.color ?? '#8A94A6' }}
+              />
+              <span className="min-w-0 flex-1 font-semibold leading-tight">
+                {g.stage?.name ?? 'Без этапа'}
+              </span>
+              <span className="shrink-0 text-xs text-ink/60">
+                {g.tasks.length} · {pct}%
+              </span>
+            </button>
+            {!isCollapsed && (
+              <div className="mt-1 space-y-2">
+                {g.tasks.map((t) => {
+                  const overdue = isOverdue(t, today);
+                  const lag = lagDays(t, today);
+                  return (
+                    <div
+                      key={t.id}
+                      className={cn(
+                        'rounded-md border bg-white p-3 text-sm shadow-sm',
+                        overdue ? 'border-status-red/40 bg-red-50' : 'border-line',
+                      )}
+                      data-testid="task-card"
+                    >
+                      <button
+                        type="button"
+                        className="block w-full text-left"
+                        onClick={() => setOpenTaskId(t.id)}
+                      >
+                        <div className="text-xs text-ink/60">
+                          №{t.number}
+                          {t.blockId ? ` · ${lookups.block.get(t.blockId)}` : ''}
+                        </div>
+                        <div className="mt-0.5 leading-snug">
+                          <Highlight text={t.description} query={filters.q} />
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-ink/70">
+                          <span>
+                            {formatDate(t.startDate) || '—'} – {formatDate(t.endDate) || '—'}
+                          </span>
+                          {lag > 0 && (
+                            <span className="font-semibold text-status-red">+{lag} дн.</span>
+                          )}
+                          {shouldStart(t, today) && !overdue && (
+                            <span className="text-status-red">пора начинать</span>
+                          )}
+                        </div>
+                        {t.employeeIds.length > 0 && (
+                          <div className="mt-1 text-xs text-ink/80">
+                            {t.employeeIds.map((e) => lookups.employee.get(e)?.fullName).join(', ')}
+                          </div>
+                        )}
+                      </button>
+                      <div className="mt-2">
+                        <StatusCell task={t} today={today} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        );
+      })}
+    </div>
   );
 }
 

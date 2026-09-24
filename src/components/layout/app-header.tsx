@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { LogOut } from 'lucide-react';
 import { logoutAction } from '@/app/login/actions';
-import { NavLinks } from './nav-links';
+import { MobileNav, NavLinks } from './nav-links';
 import { Logo } from './logo';
 
 export function AppHeader({ bell }: { bell?: React.ReactNode }) {
@@ -18,6 +18,7 @@ export function AppHeader({ bell }: { bell?: React.ReactNode }) {
         <NavLinks />
         <div className="ml-auto flex items-center gap-1">
           {bell}
+          <MobileNav />
           <form action={logoutAction}>
             <button
               type="submit"
