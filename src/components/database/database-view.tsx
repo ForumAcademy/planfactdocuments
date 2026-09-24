@@ -17,12 +17,14 @@ import type { DatabaseData, TemplateDTO } from '@/server/queries';
 import { deleteDictItem, setDictArchived, type DictKind } from '@/server/actions/dicts';
 import { deleteForum, setForumArchived } from '@/server/actions/forums';
 import { EmployeeDialog, NamedDialog, TemplateDialog } from './dict-dialogs';
+import { TermsTab } from './terms-tab';
 
 const TABS = [
   { key: 'employees', label: 'Ответственные' },
   { key: 'stages', label: 'Этапы' },
   { key: 'blocks', label: 'Блоки / направления' },
   { key: 'roles', label: 'Роли' },
+  { key: 'terms', label: 'Сроки' },
   { key: 'templates', label: 'Задачи (мастер-план)' },
   { key: 'forums', label: 'Форумы' },
 ] as const;
@@ -125,6 +127,7 @@ export function DatabaseView({ data }: { data: DatabaseData }) {
         {tab === 'roles' && (
           <NamedTab kind="role" rows={data.dicts.roles} usage={data.usage.role} />
         )}
+        {tab === 'terms' && <TermsTab rows={data.dicts.terms} usage={data.usage.term} />}
         {tab === 'templates' && <TemplatesTab data={data} />}
         {tab === 'forums' && <ForumsTab forums={data.forums} />}
       </div>

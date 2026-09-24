@@ -17,6 +17,7 @@ import {
 import type { TaskDTO } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useForum } from './forum-context';
+import { TermCombobox } from '@/components/ui/term-combobox';
 
 /** Статус — выпадающий список. */
 export function StatusCell({ task, today }: { task: TaskDTO; today: ISODate }) {
@@ -212,6 +213,45 @@ export function TextCell({
       )}
     >
       {children ?? (value || <span className="text-status-gray">{placeholder}</span>)}
+    </div>
+  );
+}
+
+/** Срок текстом — по двойному клику выпадающий список формулировок с поиском. */
+export function TermCell({ task, children }: { task: TaskDTO; children: React.ReactNode }) {
+  const { dicts, forum, lookups, patchTask } = useForum();
+  const [editing, setEditing] = React.useState(false);
+  const options = React.useMemo(
+    () => dicts.terms.filter((t) => !t.archived).map((t) => t.text),
+    [dicts.terms],
+  );
+  if (editing) {
+    return (
+      <TermCombobox
+        autoFocus
+        className="min-w-[220px]"
+        inputClassName="h-8 text-xs"
+        value={task.termText}
+        options={options}
+        forum={forum}
+        stage={task.stageId ? lookups.stage.get(task.stageId) : null}
+        onCommit={(v) => {
+          setEditing(false);
+          void patchTask(task.id, { termText: v });
+        }}
+        onCancel={() => setEditing(false)}
+        onDone={() => setEditing(false)}
+      />
+    );
+  }
+  return (
+    <div
+      onDoubleClick={() => setEditing(true)}
+      title="Двойной клик — выбрать срок из списка"
+      className="cursor-text rounded px-1 py-0.5 hover:bg-brand-light/60"
+      data-testid="term-cell"
+    >
+      {children}
     </div>
   );
 }

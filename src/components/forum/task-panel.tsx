@@ -4,7 +4,7 @@ import * as React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { AlertTriangle, Copy, History, RefreshCw, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Field, Select, Textarea, Input } from '@/components/ui/input';
+import { Field, Select, Textarea } from '@/components/ui/input';
 import { DateInput } from '@/components/ui/date-input';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -20,6 +20,7 @@ import {
 import type { HistoryDTO, TaskDTO } from '@/lib/types';
 import { getTaskHistory } from '@/server/actions/tasks';
 import { useForum } from './forum-context';
+import { TermCombobox } from '@/components/ui/term-combobox';
 
 /** Боковая панель редактирования задачи. */
 export function TaskPanel() {
@@ -41,7 +42,11 @@ export function TaskPanel() {
 }
 
 function PanelBody({ task, onClose }: { task: TaskDTO; onClose: () => void }) {
-  const { patchTask, dicts, today, duplicate, removeTasks } = useForum();
+  const { patchTask, dicts, today, duplicate, removeTasks, forum, lookups } = useForum();
+  const termOptions = React.useMemo(
+    () => dicts.terms.filter((t) => !t.archived).map((t) => t.text),
+    [dicts.terms],
+  );
   const confirm = useConfirm();
   const [description, setDescription] = React.useState(task.description);
   const [termText, setTermText] = React.useState(task.termText);
@@ -169,12 +174,17 @@ function PanelBody({ task, onClose }: { task: TaskDTO; onClose: () => void }) {
           }
         >
           <div className="flex gap-2">
-            <Input
-              value={termText}
-              onChange={(e) => setTermText(e.target.value)}
-              onBlur={() =>
-                termText.trim() !== task.termText && save({ termText: termText.trim() })
-              }
+            <TermCombobox
+              className="flex-1"
+              value={task.termText}
+              options={termOptions}
+              forum={forum}
+              stage={task.stageId ? lookups.stage.get(task.stageId) : null}
+              onCommit={(v) => {
+                setTermText(v);
+                void save({ termText: v });
+              }}
+              onDraftChange={setTermText}
             />
             <Button
               variant="outline"

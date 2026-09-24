@@ -138,6 +138,12 @@ export async function runSeed(prisma: PrismaClient, masterPlan: Uint8Array): Pro
     if (!existing) await prisma.role.create({ data: { name, order: i + 1 } });
   }
 
+  // Формулировки срока — в справочник
+  const termTexts = [...new Set(parsed.rows.map((r) => r.termText.replace(/\s+/g, ' ').trim()))];
+  for (const [i, text] of termTexts.filter(Boolean).entries()) {
+    await prisma.termPhrase.upsert({ where: { text }, update: {}, create: { text, order: i + 1 } });
+  }
+
   const [stages, blocks, roles] = await Promise.all([
     prisma.stage.findMany(),
     prisma.block.findMany(),

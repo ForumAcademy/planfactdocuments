@@ -34,7 +34,7 @@ import { formatDate } from '@/lib/dates';
 import { FilterBar } from './filter-bar';
 import { useForum } from './forum-context';
 import { Highlight } from './highlight';
-import { DateCell, EmployeesCell, StatusCell, TextCell } from './cells';
+import { DateCell, EmployeesCell, StatusCell, TermCell, TextCell } from './cells';
 import { BulkBar } from './bulk-bar';
 import { KanbanView } from './kanban-view';
 
@@ -569,11 +569,7 @@ const TaskRow = React.memo(function TaskRow({
         </TextCell>
       </td>
       <td className="px-1 py-1.5 text-xs">
-        <TextCell
-          value={t.termText}
-          multiline={false}
-          onSave={(v) => patchTask(t.id, { termText: v })}
-        >
+        <TermCell task={t}>
           {t.termText || <span className="text-status-gray">—</span>}
           {t.needsClarification && (
             <span
@@ -583,7 +579,7 @@ const TaskRow = React.memo(function TaskRow({
               примерный срок
             </span>
           )}
-        </TextCell>
+        </TermCell>
       </td>
       <td className="px-1 py-1.5 text-xs">
         <DateCell

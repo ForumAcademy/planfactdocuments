@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { TermCombobox } from '@/components/ui/term-combobox';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -345,11 +346,14 @@ export function TemplateDialog({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field
               label="Срок (текстом)"
-              hint="Например: «за 6 недель до форума», «до старта продаж»"
+              hint="Выберите из справочника «Сроки» или введите свой вариант"
             >
-              <Input
+              <TermCombobox
                 value={f.termText}
-                onChange={(e) => setF({ ...f, termText: e.target.value })}
+                options={dicts.terms.filter((t) => !t.archived).map((t) => t.text)}
+                stage={dicts.stages.find((st) => String(st.id) === f.stageId) ?? null}
+                onCommit={(v) => setF((prev) => ({ ...prev, termText: v }))}
+                onDraftChange={(v) => setF((prev) => ({ ...prev, termText: v }))}
               />
             </Field>
             <Field label="Роли">

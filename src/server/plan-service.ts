@@ -154,6 +154,16 @@ export async function importPlanRows(
     }
   }
   await syncAutoAssignments(db, { forumId: forum.id });
+  // Новые формулировки срока из файла — в справочник «Сроки»
+  const terms = [
+    ...new Set(rows.map((r) => (r.termText ?? '').replace(/\s+/g, ' ').trim())),
+  ].filter(Boolean);
+  if (terms.length) {
+    await db.termPhrase.createMany({
+      data: terms.map((text) => ({ text, order: 1000 })),
+      skipDuplicates: true,
+    });
+  }
   return result;
 }
 

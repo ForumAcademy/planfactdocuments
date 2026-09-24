@@ -47,6 +47,7 @@ const tasks = [
   t({ id: 4, number: 4, order: 4, needsClarification: true, endDate: '2026-11-30' }),
 ];
 const dicts: DictsDTO = {
+  terms: [],
   stages: [
     { id: 1, name: '1', order: 1, color: '#000', archived: false },
     { id: 2, name: '2', order: 2, color: '#000', archived: false },

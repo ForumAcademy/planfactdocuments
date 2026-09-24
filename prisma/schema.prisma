@@ -80,6 +80,15 @@ model Employee {
   createdAt DateTime @default(now())
 }
 
+/// Справочник формулировок срока («за 2 недели до форума», «до старта продаж»…)
+model TermPhrase {
+  id        Int      @id @default(autoincrement())
+  text      String   @unique
+  order     Int      @default(0)
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
 model TemplateTask {
   id          Int     @id @default(autoincrement())
   number      Int

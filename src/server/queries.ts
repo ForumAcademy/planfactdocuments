@@ -76,11 +76,12 @@ function toEmployeeDTO(e: Employee & { roles: Role[] }) {
 }
 
 export async function getDicts(): Promise<DictsDTO> {
-  const [stages, blocks, roles, employees] = await Promise.all([
+  const [stages, blocks, roles, employees, terms] = await Promise.all([
     prisma.stage.findMany({ orderBy: [{ order: 'asc' }, { name: 'asc' }] }),
     prisma.block.findMany({ orderBy: [{ order: 'asc' }, { name: 'asc' }] }),
     prisma.role.findMany({ orderBy: [{ order: 'asc' }, { name: 'asc' }] }),
     prisma.employee.findMany({ include: { roles: true }, orderBy: { fullName: 'asc' } }),
+    prisma.termPhrase.findMany({ orderBy: [{ order: 'asc' }, { text: 'asc' }] }),
   ]);
   return {
     stages: stages.map(({ id, name, order, color, archived }) => ({
@@ -93,6 +94,7 @@ export async function getDicts(): Promise<DictsDTO> {
     blocks: blocks.map(({ id, name, order, archived }) => ({ id, name, order, archived })),
     roles: roles.map(({ id, name, order, archived }) => ({ id, name, order, archived })),
     employees: employees.map(toEmployeeDTO),
+    terms: terms.map(({ id, text, order, archived }) => ({ id, text, order, archived })),
   };
 }
 
@@ -219,33 +221,44 @@ export interface DatabaseData {
     block: Record<number, number>;
     role: Record<number, number>;
     employee: Record<number, number>;
+    /** Сколько задач и строк мастер-плана используют формулировку (по тексту) */
+    term: Record<string, number>;
   };
   templates: TemplateDTO[];
   forums: (ForumDTO & { taskCount: number })[];
 }
 
 export async function getDatabaseData(): Promise<DatabaseData> {
-  const [dicts, stages, blocks, roles, employees, templates, forums] = await Promise.all([
-    getDicts(),
-    prisma.stage.findMany({
-      select: { id: true, _count: { select: { tasks: true, templates: true } } },
-    }),
-    prisma.block.findMany({
-      select: { id: true, _count: { select: { tasks: true, templates: true } } },
-    }),
-    prisma.role.findMany({
-      select: { id: true, _count: { select: { tasks: true, templates: true, employees: true } } },
-    }),
-    prisma.employee.findMany({ select: { id: true, _count: { select: { tasks: true } } } }),
-    prisma.templateTask.findMany({
-      include: { roles: { select: { id: true } } },
-      orderBy: [{ order: 'asc' }, { number: 'asc' }],
-    }),
-    prisma.forum.findMany({
-      include: { _count: { select: { tasks: true } } },
-      orderBy: { startDate: 'asc' },
-    }),
-  ]);
+  const [dicts, stages, blocks, roles, employees, templates, forums, termTasks] = await Promise.all(
+    [
+      getDicts(),
+      prisma.stage.findMany({
+        select: { id: true, _count: { select: { tasks: true, templates: true } } },
+      }),
+      prisma.block.findMany({
+        select: { id: true, _count: { select: { tasks: true, templates: true } } },
+      }),
+      prisma.role.findMany({
+        select: { id: true, _count: { select: { tasks: true, templates: true, employees: true } } },
+      }),
+      prisma.employee.findMany({ select: { id: true, _count: { select: { tasks: true } } } }),
+      prisma.templateTask.findMany({
+        include: { roles: { select: { id: true } } },
+        orderBy: [{ order: 'asc' }, { number: 'asc' }],
+      }),
+      prisma.forum.findMany({
+        include: { _count: { select: { tasks: true } } },
+        orderBy: { startDate: 'asc' },
+      }),
+      prisma.task.groupBy({ by: ['termText'], _count: true }),
+    ],
+  );
+  const termUsage: Record<string, number> = {};
+  const termKey = (t: string) => t.trim().replace(/\s+/g, ' ').toLowerCase();
+  for (const r of termTasks)
+    termUsage[termKey(r.termText)] = (termUsage[termKey(r.termText)] ?? 0) + r._count;
+  for (const t of templates)
+    termUsage[termKey(t.termText)] = (termUsage[termKey(t.termText)] ?? 0) + 1;
   return {
     dicts,
     usage: {
@@ -255,6 +268,7 @@ export async function getDatabaseData(): Promise<DatabaseData> {
         roles.map((s) => [s.id, s._count.tasks + s._count.templates + s._count.employees]),
       ),
       employee: Object.fromEntries(employees.map((s) => [s.id, s._count.tasks])),
+      term: termUsage,
     },
     templates: templates.map((t) => ({
       id: t.id,

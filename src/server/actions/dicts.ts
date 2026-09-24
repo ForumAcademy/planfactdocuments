@@ -230,3 +230,63 @@ export async function setDictArchived(
     return null;
   });
 }
+
+/* ---------- Формулировки срока ---------- */
+
+const termSchema = z.object({
+  id: idSchema.optional(),
+  text: z
+    .string()
+    .transform((v) => v.replace(/\s+/g, ' ').trim())
+    .pipe(z.string().min(1, 'Введите формулировку').max(300, 'Слишком длинная формулировка')),
+  archived: z.boolean().optional(),
+});
+
+export async function saveTermPhrase(
+  input: z.input<typeof termSchema>,
+): Promise<ActionResult<{ id: number }>> {
+  return run(async () => {
+    await requireEditor();
+    const d = termSchema.parse(input);
+    const dup = await prisma.termPhrase.findFirst({
+      where: {
+        text: { equals: d.text, mode: 'insensitive' },
+        NOT: d.id ? { id: d.id } : undefined,
+      },
+    });
+    if (dup) throw new UserError(`Формулировка «${d.text}» уже есть в справочнике`);
+    const row = d.id
+      ? await prisma.termPhrase.update({
+          where: { id: d.id },
+          data: { text: d.text, archived: d.archived },
+        })
+      : await prisma.termPhrase.create({
+          data: {
+            text: d.text,
+            order:
+              ((await prisma.termPhrase.aggregate({ _max: { order: true } }))._max.order ?? 0) + 1,
+          },
+        });
+    refresh();
+    return { id: row.id };
+  });
+}
+
+/** Удаление формулировки из справочника. Задачи сохраняют свой текст срока. */
+export async function deleteTermPhrase(id: number): Promise<ActionResult> {
+  return run(async () => {
+    await requireEditor();
+    await prisma.termPhrase.delete({ where: { id: idSchema.parse(id) } });
+    refresh();
+    return null;
+  });
+}
+
+export async function setTermPhraseArchived(id: number, archived: boolean): Promise<ActionResult> {
+  return run(async () => {
+    await requireEditor();
+    await prisma.termPhrase.update({ where: { id: idSchema.parse(id) }, data: { archived } });
+    refresh();
+    return null;
+  });
+}

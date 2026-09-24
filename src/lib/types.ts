@@ -60,11 +60,20 @@ export interface EmployeeDTO {
   roleIds: number[];
 }
 
+export interface TermPhraseDTO {
+  id: number;
+  text: string;
+  order: number;
+  archived: boolean;
+}
+
 export interface DictsDTO {
   stages: StageDTO[];
   blocks: NamedDTO[];
   roles: NamedDTO[];
   employees: EmployeeDTO[];
+  /** Формулировки срока — подсказки в поле «Срок» */
+  terms: TermPhraseDTO[];
 }
 
 export interface HistoryDTO {
