@@ -31,9 +31,6 @@ const appVersion = process.env.VERCEL_GIT_COMMIT_SHA || process.env.APP_VERSION 
 const nextConfig: NextConfig = {
   env: { NEXT_PUBLIC_APP_VERSION: appVersion },
   poweredByHeader: false,
-  outputFileTracingIncludes: {
-    '/api/admin/seed': ['./seed/master-plan.xlsx'],
-  },
   experimental: {
     serverActions: { bodySizeLimit: '5mb' },
   },

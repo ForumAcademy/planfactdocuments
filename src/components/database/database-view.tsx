@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Archive, ArchiveRestore, DatabaseZap, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/input';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -76,35 +76,10 @@ export function DatabaseView({ data }: { data: DatabaseData }) {
   const sp = useSearchParams();
   const tab = (TABS.find((t) => t.key === sp.get('tab'))?.key ?? 'employees') as TabKey;
   const setTab = (t: TabKey) => router.replace(`/database?tab=${t}`, { scroll: false });
-  const [seeding, setSeeding] = useState(false);
-
-  const seed = async () => {
-    setSeeding(true);
-    try {
-      const res = await fetch('/api/admin/seed', { method: 'POST' });
-      const json = (await res.json()) as { message?: string; error?: string };
-      if (res.ok) {
-        toast.success(json.message ?? 'Готово');
-        router.refresh();
-      } else toast.error(json.error ?? 'Ошибка');
-    } finally {
-      setSeeding(false);
-    }
-  };
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="mr-auto text-2xl font-semibold">База данных</h1>
-        <Button
-          variant="outline"
-          onClick={seed}
-          disabled={seeding}
-          title="Заполнить справочники и типовой мастер-план из seed/master-plan.xlsx"
-        >
-          <DatabaseZap /> {seeding ? 'Загружаем…' : 'Загрузить начальные данные'}
-        </Button>
-      </div>
+      <h1 className="text-2xl font-semibold">База данных</h1>
       {/* На телефоне — выпадающий список вместо ряда вкладок */}
       <Select
         className="mt-4 sm:hidden"

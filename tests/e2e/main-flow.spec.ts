@@ -12,8 +12,6 @@ test('вход, создание форума, импорт плана, смен
   // Без входа — перенаправление на /login
   await page.goto('/');
   await expect(page).toHaveURL(/\/login/);
-  const api = await page.request.get('/api/admin/seed');
-  expect(api.status()).toBe(401);
 
   await page.fill('#password', 'неверный пароль');
   await page.click('button[type=submit]');
