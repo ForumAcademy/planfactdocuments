@@ -20,6 +20,10 @@ export default async function SettingsPage() {
       orderBy: { fullName: 'asc' },
     }),
   ]);
+  const lastAuto = await prisma.reminderLog.findFirst({
+    where: { kind: 'auto_run' },
+    orderBy: { createdAt: 'desc' },
+  });
   // Журнал: одна запись на сообщение
   const seen = new Set<string>();
   const messages = log.filter((l) => {
@@ -60,6 +64,32 @@ export default async function SettingsPage() {
             linked: Boolean(e.telegramChatId),
           }))}
         />
+        <div
+          className="mt-6 rounded-md border border-line bg-surface p-3 text-sm"
+          data-testid="auto-run-info"
+        >
+          <b>Автоматическая рассылка:</b> каждый день между 09:00 и 10:00 МСК (точное время выбирает
+          Vercel).{' '}
+          {lastAuto ? (
+            <>
+              Последний запуск:{' '}
+              {lastAuto.createdAt.toLocaleString('ru-RU', {
+                timeZone: 'Europe/Moscow',
+                dateStyle: 'short',
+                timeStyle: 'short',
+              })}{' '}
+              —{' '}
+              <span className={lastAuto.status === 'sent' ? 'text-ink' : 'text-status-red'}>
+                {lastAuto.subject}
+              </span>
+            </>
+          ) : (
+            <span className="text-status-red">
+              Пока ни одного запуска не было. Если прошло больше суток — проверьте в Vercel:
+              Settings → Cron Jobs (задание /api/cron/reminders должно быть включено).
+            </span>
+          )}
+        </div>
         <h2 className="mt-8 text-lg font-semibold">Журнал отправок</h2>
         <div className="thin-scroll mt-2 overflow-x-auto rounded-md border border-line">
           <table className="w-full text-sm">
