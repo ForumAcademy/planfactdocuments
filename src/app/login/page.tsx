@@ -15,7 +15,7 @@ export default async function LoginPage({
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <h1 className="sr-only">Статус форумы</h1>
-          <Logo className="mx-auto h-auto w-full max-w-md text-ink" />
+          <Logo variant="black" className="mx-auto h-auto w-full max-w-md" />
           <p className="mt-4 text-sm text-status-gray">
             Статус форумов — планирование и контроль подготовки
           </p>
