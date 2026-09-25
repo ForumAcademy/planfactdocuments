@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -239,8 +239,23 @@ export function ForumFormDialog({
                       'Задачи из другого форума',
                       'Скопировать задачи и ответственных; сроки пересчитаются, статусы обнулятся',
                     ],
-                    ['excel', 'Задачи из файла Excel', 'Загрузить план из таблицы .xlsx'],
-                  ] as const
+                    [
+                      'excel',
+                      'Задачи из файла Excel',
+                      <>
+                        Загрузить план{' '}
+                        <a
+                          href="/api/templates/master-plan"
+                          className="text-brand underline hover:text-brand-dark"
+                          onClick={(e) => e.stopPropagation()}
+                          data-testid="master-plan-template"
+                        >
+                          из таблицы Excel
+                        </a>{' '}
+                        — скачайте шаблон, заполните и загрузите
+                      </>,
+                    ],
+                  ] as [SourceKind, string, ReactNode][]
                 ).map(([v, label, hint]) => (
                   <label key={v} className="flex cursor-pointer items-start gap-2">
                     <input
