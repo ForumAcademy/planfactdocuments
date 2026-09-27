@@ -10,6 +10,10 @@ export interface Option {
   label: string;
   hint?: string;
   color?: string;
+  /** Сколько задач найдётся с этим значением при текущих остальных фильтрах */
+  count?: number;
+  /** Недоступно (при текущих фильтрах задач нет) — серое, выбрать нельзя */
+  disabled?: boolean;
 }
 
 /** Выбор нескольких значений с поиском. */
@@ -24,6 +28,7 @@ export function MultiSelect({
   searchable = true,
   disabled,
   ariaLabel,
+  showAll,
 }: {
   options: Option[];
   value: string[];
@@ -35,6 +40,8 @@ export function MultiSelect({
   searchable?: boolean;
   disabled?: boolean;
   ariaLabel?: string;
+  /** Показывать все выбранные значения целиком (без «и ещё N») */
+  showAll?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   const [q, setQ] = React.useState('');
@@ -71,10 +78,12 @@ export function MultiSelect({
             className,
           )}
         >
-          <span className={cn('line-clamp-2', labels.length === 0 && 'text-status-gray')}>
+          <span
+            className={cn(!showAll && 'line-clamp-2', labels.length === 0 && 'text-status-gray')}
+          >
             {labels.length === 0
               ? placeholder
-              : labels.length <= 2
+              : showAll || labels.length <= 2
                 ? labels.join(', ')
                 : `${labels[0]} и ещё ${labels.length - 1}`}
           </span>
@@ -103,30 +112,48 @@ export function MultiSelect({
           {filtered.length === 0 && (
             <div className="px-2 py-3 text-sm text-status-gray">{emptyText}</div>
           )}
-          {filtered.map((o) => (
-            <button
-              type="button"
-              key={o.value}
-              onClick={() => toggle(o.value)}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-surface"
-            >
-              <span
+          {filtered.map((o) => {
+            const off = Boolean(o.disabled) && !selected.has(o.value);
+            return (
+              <button
+                type="button"
+                key={o.value}
+                onClick={() => !off && toggle(o.value)}
+                disabled={off}
+                title={off ? 'При выбранных фильтрах таких задач нет' : undefined}
                 className={cn(
-                  'flex size-4 shrink-0 items-center justify-center rounded border',
-                  selected.has(o.value) ? 'border-brand bg-brand text-white' : 'border-line',
+                  'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm',
+                  off ? 'cursor-not-allowed text-ink/35' : 'hover:bg-surface',
                 )}
               >
-                {selected.has(o.value) && <Check className="size-3" />}
-              </span>
-              {o.color && (
-                <span className="size-2.5 shrink-0 rounded-full" style={{ background: o.color }} />
-              )}
-              <span className="flex-1">
-                {o.label}
-                {o.hint && <span className="block text-xs text-status-gray">{o.hint}</span>}
-              </span>
-            </button>
-          ))}
+                <span
+                  className={cn(
+                    'flex size-4 shrink-0 items-center justify-center rounded border',
+                    selected.has(o.value) ? 'border-brand bg-brand text-white' : 'border-line',
+                  )}
+                >
+                  {selected.has(o.value) && <Check className="size-3" />}
+                </span>
+                {o.color && (
+                  <span
+                    className="size-2.5 shrink-0 rounded-full"
+                    style={{ background: o.color }}
+                  />
+                )}
+                <span className="flex-1">
+                  {o.label}
+                  {o.hint && (
+                    <span className={cn('block text-xs', off ? 'text-ink/30' : 'text-status-gray')}>
+                      {o.hint}
+                    </span>
+                  )}
+                </span>
+                {o.count !== undefined && (
+                  <span className="shrink-0 text-xs tabular-nums text-ink/40">{o.count}</span>
+                )}
+              </button>
+            );
+          })}
         </div>
         {value.length > 0 && (
           <div className="border-t border-line p-1">

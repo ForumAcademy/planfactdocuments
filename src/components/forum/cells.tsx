@@ -85,9 +85,10 @@ export function EmployeesCell({ task }: { task: TaskDTO }) {
   );
   const [draft, setDraft] = React.useState<string[] | null>(null);
   return (
-    <div onBlur={() => undefined} className="min-w-[150px]" onKeyDown={(e) => e.stopPropagation()}>
+    <div onBlur={() => undefined} onKeyDown={(e) => e.stopPropagation()}>
       <MultiSelect
         compact
+        showAll
         ariaLabel="Ответственные"
         placeholder="Назначить…"
         className="border-transparent bg-transparent text-xs hover:border-line"
@@ -229,7 +230,7 @@ export function TermCell({ task, children }: { task: TaskDTO; children: React.Re
     return (
       <TermCombobox
         autoFocus
-        className="min-w-[220px]"
+        className="w-full"
         inputClassName="h-8 text-xs"
         value={task.termText}
         options={options}

@@ -56,6 +56,118 @@ export async function buildReportWorkbook(
   return (await wb.xlsx.writeBuffer()) as ArrayBuffer;
 }
 
+/** Структура по умолчанию, если в отчёте ещё нет диаграмм. */
+const TEMPLATE_DEFAULT: ReportSheetChart[] = [
+  {
+    title: 'Расходы',
+    palette: 'RED',
+    unit: 'млн руб.',
+    items: [
+      'Персонал',
+      'Площадка',
+      'Питание',
+      'Маркетинг',
+      'Деловая программа',
+      'Трансфер и логистика',
+      'Прочее',
+    ].map((name) => ({ name, amount: 0, note: null })),
+  },
+  {
+    title: 'Доходы',
+    palette: 'GREEN',
+    unit: 'млн руб.',
+    items: ['Билеты', 'Партнерства'].map((name) => ({ name, amount: 0, note: null })),
+  },
+  {
+    title: 'Кто пригласил',
+    palette: 'BLUE',
+    unit: 'млн руб.',
+    items: ['Отдел продаж'].map((name) => ({ name, amount: 0, note: null })),
+  },
+];
+
+/**
+ * Шаблон для заполнения: та же таблица, что при выгрузке, но с пустыми суммами,
+ * выпадающим списком цветовой гаммы и листом с инструкцией. Заполненный файл
+ * загружается обратно кнопкой «Загрузить из Excel».
+ */
+export async function buildReportTemplate(
+  charts: ReportSheetChart[],
+  forumName?: string,
+): Promise<ArrayBuffer> {
+  const source = charts.length ? charts : TEMPLATE_DEFAULT;
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Статус форумов';
+  if (forumName) wb.title = `Шаблон отчёта — ${forumName}`;
+  const ws = wb.addWorksheet(REPORT_SHEET, { views: [{ state: 'frozen', ySplit: 1 }] });
+  ws.columns = [
+    { header: HEADERS[0], width: 22 },
+    { header: HEADERS[1], width: 16 },
+    { header: HEADERS[2], width: 12 },
+    { header: HEADERS[3], width: 42 },
+    { header: HEADERS[4], width: 12 },
+    { header: HEADERS[5], width: 16 },
+  ];
+  ws.getRow(1).eachCell((c) => {
+    c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0A0A9F' } };
+  });
+  for (const ch of source) {
+    const names = ch.items.length ? ch.items : [{ name: '', amount: 0, note: null }];
+    for (const it of names) {
+      const r = ws.addRow([
+        ch.title,
+        PALETTES[ch.palette].label,
+        ch.unit,
+        it.name,
+        null,
+        it.note ?? '',
+      ]);
+      const amount = r.getCell(5);
+      amount.numFmt = '0.00';
+      amount.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7D6' } };
+    }
+  }
+  const last = Math.max(ws.rowCount + 200, 300);
+  for (let r = 2; r <= last; r++) {
+    ws.getCell(r, 2).dataValidation = {
+      type: 'list',
+      allowBlank: true,
+      formulae: ['"Красная,Зелёная,Синяя"'],
+    };
+    ws.getCell(r, 5).dataValidation = {
+      type: 'decimal',
+      operator: 'greaterThanOrEqual',
+      allowBlank: true,
+      formulae: [0],
+      showErrorMessage: true,
+      errorTitle: 'Сумма',
+      error: 'Введите число, например 1,25',
+    };
+  }
+
+  const help = wb.addWorksheet('Инструкция');
+  help.getColumn(1).width = 110;
+  [
+    'Как заполнить шаблон отчёта',
+    '',
+    '1. Лист «Отчёт»: одна строка — одна статья диаграммы.',
+    '2. «Диаграмма» — название диаграммы (Расходы, Доходы, Кто пригласил…). Строки с одинаковым названием попадут в одну диаграмму.',
+    '3. «Цветовая гамма» — Красная, Зелёная или Синяя (выпадающий список).',
+    '4. «Единица» — единица измерения сумм, например «млн руб.».',
+    '5. «Статья» и «Сумма» — название статьи и число (жёлтые ячейки). Строки без суммы не загружаются.',
+    '6. «Доп. единица» — необязательно, например «6 шт.»; на диаграмме будет в скобках после суммы.',
+    '7. Можно добавлять строки, новые статьи и новые диаграммы, удалять лишние.',
+    '8. На сайте: «Отчёт» → «Загрузить из Excel» → выберите файл. Перед заменой будет показан предпросмотр.',
+  ].forEach((t, i) => {
+    const c = help.getCell(i + 1, 1);
+    c.value = t;
+    c.alignment = { wrapText: true, vertical: 'top' };
+    if (i === 0) c.font = { bold: true, size: 14 };
+  });
+  return (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+}
+
 function text(v: ExcelJS.CellValue): string {
   if (v === null || v === undefined) return '';
   if (typeof v === 'object') {
@@ -133,6 +245,8 @@ export async function parseReportWorkbook(data: ArrayBuffer | Uint8Array): Promi
     }
     if (!name) continue;
     const rawAmount = c.amount > 0 ? row.getCell(c.amount).value : null;
+    // Незаполненная сумма (строка шаблона) — пропускаем без ошибки
+    if (rawAmount === null || rawAmount === undefined || text(rawAmount).trim() === '') continue;
     const amount = typeof rawAmount === 'number' ? rawAmount : parseAmount(text(rawAmount) || '0');
     if (amount === null || amount < 0) {
       errors.push(`Строка ${r}: сумма «${text(rawAmount)}» не распознана — строка пропущена`);

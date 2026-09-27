@@ -5,7 +5,8 @@ import { RotateCcw, Search, SlidersHorizontal, X } from 'lucide-react';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { DateInput } from '@/components/ui/date-input';
 import { Button } from '@/components/ui/button';
-import { hasActiveFilters, type DueFilter } from '@/lib/filters';
+import { filterTasks, hasActiveFilters, type DueFilter } from '@/lib/filters';
+import type { TaskDTO } from '@/lib/types';
 import { STATUS_LABEL, TASK_STATUSES } from '@/lib/status';
 import { cn } from '@/lib/utils';
 import { useForum } from './forum-context';
@@ -19,7 +20,7 @@ const DUE_BUTTONS: { key: DueFilter; label: string }[] = [
 
 /** Общая панель фильтров для вкладок Ганта и списка. Состояние — в URL. */
 export function FilterBar({ className }: { className?: string }) {
-  const { filters, setFilters, resetFilters, dicts, tasks, visible } = useForum();
+  const { filters, setFilters, resetFilters, dicts, tasks, visible, today } = useForum();
   const [q, setQ] = React.useState(filters.q);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -43,16 +44,44 @@ export function FilterBar({ className }: { className?: string }) {
     return { roles, emps, blocks };
   }, [tasks]);
 
+  // Сколько задач даст каждое значение фильтра при остальных выбранных фильтрах.
+  // Значения без задач показываются серыми и не выбираются (например, роль «Маркетинг»
+  // и блок, в котором у маркетинга задач нет).
+  const facets = React.useMemo(() => {
+    const count = (key: 'stage' | 'block' | 'role' | 'emp', ids: (t: TaskDTO) => number[]) => {
+      const m = new Map<number, number>();
+      for (const t of filterTasks(tasks, { ...filters, [key]: [] }, today)) {
+        for (const id of ids(t)) m.set(id, (m.get(id) ?? 0) + 1);
+      }
+      return m;
+    };
+    const statuses = new Map<string, number>();
+    for (const t of filterTasks(tasks, { ...filters, status: [] }, today)) {
+      statuses.set(t.status, (statuses.get(t.status) ?? 0) + 1);
+    }
+    return {
+      stage: count('stage', (t) => (t.stageId ? [t.stageId] : [])),
+      block: count('block', (t) => (t.blockId ? [t.blockId] : [])),
+      role: count('role', (t) => t.roleIds),
+      emp: count('emp', (t) => t.employeeIds),
+      status: statuses,
+    };
+  }, [tasks, filters, today]);
+
   const opt = <T extends { id: number; archived?: boolean }>(
     list: T[],
     label: (x: T) => string,
     selected: number[],
+    counts: Map<number, number>,
     usedSet?: Set<number>,
     color?: (x: T) => string,
   ) =>
     list
       .filter((x) => !x.archived || selected.includes(x.id) || usedSet?.has(x.id))
-      .map((x) => ({ value: String(x.id), label: label(x), color: color?.(x) }));
+      .map((x) => {
+        const n = counts.get(x.id) ?? 0;
+        return { value: String(x.id), label: label(x), color: color?.(x), count: n, disabled: !n };
+      });
 
   const active = hasActiveFilters(filters);
   // На телефоне фильтры свёрнуты под кнопку, чтобы не занимать весь экран
@@ -111,6 +140,7 @@ export function FilterBar({ className }: { className?: string }) {
               dicts.stages,
               (s) => s.name,
               filters.stage,
+              facets.stage,
               undefined,
               (s) => s.color,
             )}
@@ -120,14 +150,14 @@ export function FilterBar({ className }: { className?: string }) {
           <MultiSelect
             ariaLabel="Блок"
             placeholder="Блок"
-            options={opt(dicts.blocks, (s) => s.name, filters.block, used.blocks)}
+            options={opt(dicts.blocks, (s) => s.name, filters.block, facets.block, used.blocks)}
             value={filters.block.map(String)}
             onChange={(v) => setFilters({ block: v.map(Number) })}
           />
           <MultiSelect
             ariaLabel="Роль"
             placeholder="Роль"
-            options={opt(dicts.roles, (s) => s.name, filters.role, used.roles)}
+            options={opt(dicts.roles, (s) => s.name, filters.role, facets.role, used.roles)}
             value={filters.role.map(String)}
             onChange={(v) => setFilters({ role: v.map(Number) })}
           />
@@ -140,6 +170,8 @@ export function FilterBar({ className }: { className?: string }) {
                 value: String(e.id),
                 label: e.fullName,
                 hint: e.position ?? undefined,
+                count: facets.emp.get(e.id) ?? 0,
+                disabled: !facets.emp.get(e.id),
               }))}
             value={filters.emp.map(String)}
             onChange={(v) => setFilters({ emp: v.map(Number) })}
@@ -148,7 +180,12 @@ export function FilterBar({ className }: { className?: string }) {
             ariaLabel="Статус"
             placeholder="Статус"
             searchable={false}
-            options={TASK_STATUSES.map((s) => ({ value: s, label: STATUS_LABEL[s] }))}
+            options={TASK_STATUSES.map((s) => ({
+              value: s,
+              label: STATUS_LABEL[s],
+              count: facets.status.get(s) ?? 0,
+              disabled: !facets.status.get(s),
+            }))}
             value={filters.status}
             onChange={(v) => setFilters({ status: v as typeof filters.status })}
           />

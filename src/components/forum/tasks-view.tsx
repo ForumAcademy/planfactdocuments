@@ -108,19 +108,77 @@ export function TasksView() {
   );
 }
 
-const COLUMNS: { key: string; label: string; sort?: SortKey; className?: string }[] = [
-  { key: 'num', label: '№', sort: 'number', className: 'w-12' },
-  { key: 'block', label: 'Блок', sort: 'block', className: 'w-36' },
-  { key: 'desc', label: 'Задача', className: 'min-w-[260px]' },
-  { key: 'term', label: 'Срок (текст)', className: 'w-40' },
-  { key: 'start', label: 'Дата начала', sort: 'start', className: 'w-[112px]' },
-  { key: 'end', label: 'Дата окончания', sort: 'end', className: 'w-[112px]' },
-  { key: 'role', label: 'Роль', sort: 'role', className: 'w-32' },
-  { key: 'emp', label: 'Ответственный', sort: 'employee', className: 'w-44' },
-  { key: 'status', label: 'Статус', sort: 'status', className: 'w-36' },
-  { key: 'lag', label: 'Отставание', sort: 'lag', className: 'w-24' },
-  { key: 'comment', label: 'Комментарий', className: 'min-w-[180px]' },
-];
+const COLUMNS: { key: string; label: string; sort?: SortKey; className?: string; width: number }[] =
+  [
+    { key: 'num', label: '№', sort: 'number', width: 56 },
+    { key: 'block', label: 'Блок', sort: 'block', width: 150 },
+    { key: 'desc', label: 'Задача', width: 360 },
+    { key: 'term', label: 'Срок (текст)', width: 180 },
+    { key: 'start', label: 'Дата начала', sort: 'start', width: 118 },
+    { key: 'end', label: 'Дата окончания', sort: 'end', width: 118 },
+    { key: 'role', label: 'Роль', sort: 'role', width: 140 },
+    { key: 'emp', label: 'Ответственный', sort: 'employee', width: 200 },
+    { key: 'status', label: 'Статус', sort: 'status', width: 150 },
+    { key: 'lag', label: 'Отставание', sort: 'lag', width: 104 },
+    { key: 'comment', label: 'Комментарий', width: 260 },
+  ];
+
+// Служебные столбцы: галочка, ручка перетаскивания, меню действий
+const FIXED_W = { check: 32, drag: 24, menu: 40 };
+const WIDTHS_KEY = 'task-table-widths';
+
+/** Ширины столбцов: меняются перетаскиванием границы заголовка и запоминаются в браузере. */
+function useColumnWidths() {
+  const [widths, setWidths] = React.useState<Record<string, number>>({});
+  React.useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(WIDTHS_KEY) ?? '{}') as Record<string, number>;
+      if (saved && typeof saved === 'object') setWidths(saved);
+    } catch {
+      /* нет доступа к хранилищу — ширины по умолчанию */
+    }
+  }, []);
+  const save = (next: Record<string, number>) => {
+    try {
+      localStorage.setItem(WIDTHS_KEY, JSON.stringify(next));
+    } catch {
+      /* не сохраняем — не страшно */
+    }
+  };
+  const width = (key: string) => widths[key] ?? COLUMNS.find((c) => c.key === key)?.width ?? 120;
+  const startResize = (key: string, e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const x0 = e.clientX;
+    const w0 = width(key);
+    let latest = widths;
+    const move = (ev: PointerEvent) => {
+      const w = Math.round(Math.min(900, Math.max(48, w0 + ev.clientX - x0)));
+      setWidths((prev) => (latest = { ...prev, [key]: w }));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      document.body.style.cursor = '';
+      save(latest);
+    };
+    document.body.style.cursor = 'col-resize';
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const reset = (key?: string) => {
+    setWidths((prev) => {
+      const next = { ...prev };
+      if (key) delete next[key];
+      else for (const k of Object.keys(next)) delete next[k];
+      save(next);
+      return next;
+    });
+  };
+  const total =
+    FIXED_W.check + FIXED_W.drag + FIXED_W.menu + COLUMNS.reduce((s, c) => s + width(c.key), 0);
+  return { width, startResize, reset, total, changed: Object.keys(widths).length > 0 };
+}
 
 function TaskTable() {
   const { visible, dicts, lookups, filters, setFilters, tasks, reorder, patchTask } = useForum();
@@ -186,6 +244,7 @@ function TaskTable() {
   };
 
   const isMobile = useIsMobile();
+  const cols = useColumnWidths();
   const allSelected = visible.length > 0 && visible.every((t) => selected.has(t.id));
 
   return (
@@ -215,10 +274,21 @@ function TaskTable() {
           className="thin-scroll overflow-x-auto rounded-md border border-line"
           data-testid="task-table"
         >
-          <table className="w-full min-w-[1400px] border-collapse text-sm">
+          <table
+            className="border-collapse text-sm [&_td]:break-words"
+            style={{ tableLayout: 'fixed', width: cols.total, minWidth: '100%' }}
+          >
+            <colgroup>
+              <col style={{ width: FIXED_W.check }} />
+              <col style={{ width: FIXED_W.drag }} />
+              {COLUMNS.map((c) => (
+                <col key={c.key} style={{ width: cols.width(c.key) }} />
+              ))}
+              <col style={{ width: FIXED_W.menu }} />
+            </colgroup>
             <thead className="sticky top-0 z-10 bg-surface text-left text-xs text-ink/70">
               <tr>
-                <th className="w-8 px-2 py-2">
+                <th className="px-2 py-2">
                   <input
                     type="checkbox"
                     className="accent-brand"
@@ -229,9 +299,9 @@ function TaskTable() {
                     }
                   />
                 </th>
-                <th className="w-6" />
+                <th />
                 {COLUMNS.map((c) => (
-                  <th key={c.key} className={cn('px-2 py-2 font-medium', c.className)}>
+                  <th key={c.key} className={cn('relative px-2 py-2 font-medium', c.className)}>
                     {c.sort ? (
                       <button
                         type="button"
@@ -252,9 +322,20 @@ function TaskTable() {
                     ) : (
                       c.label
                     )}
+                    {/* Граница столбца: тянуть — изменить ширину, двойной клик — вернуть */}
+                    <span
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label={`Ширина столбца «${c.label}»`}
+                      title="Потяните, чтобы изменить ширину. Двойной клик — вернуть"
+                      onPointerDown={(e) => cols.startResize(c.key, e)}
+                      onDoubleClick={() => cols.reset(c.key)}
+                      className="absolute -right-1 top-0 z-10 h-full w-2 cursor-col-resize after:absolute after:left-1/2 after:top-1/4 after:h-1/2 after:w-px after:bg-line hover:after:w-0.5 hover:after:bg-brand"
+                      data-testid={`col-resize-${c.key}`}
+                    />
                   </th>
                 ))}
-                <th className="w-10" />
+                <th />
               </tr>
             </thead>
             {groups.length === 0 && (

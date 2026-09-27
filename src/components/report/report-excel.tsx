@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { toast } from 'sonner';
-import { FileSpreadsheet, Upload } from 'lucide-react';
+import { FileDown, FileSpreadsheet, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { Spinner } from '@/components/ui/spinner';
@@ -32,24 +32,28 @@ export function ReportExcelButtons({
   const [open, setOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
 
-  const exportXlsx = async () => {
+  const sheetCharts = () =>
+    charts.map((c) => ({
+      title: c.title,
+      palette: c.palette,
+      unit: c.unit,
+      items: c.items.map((i) => ({ name: i.name, amount: i.amount, note: i.note })),
+    }));
+
+  const exportXlsx = async (template = false) => {
     setBusy(true);
     try {
-      const { buildReportWorkbook } = await import('@/lib/excel/report-excel');
-      const buf = await buildReportWorkbook(
-        charts.map((c) => ({
-          title: c.title,
-          palette: c.palette,
-          unit: c.unit,
-          items: c.items.map((i) => ({ name: i.name, amount: i.amount, note: i.note })),
-        })),
-        forum.name,
-      );
+      const { buildReportWorkbook, buildReportTemplate } = await import('@/lib/excel/report-excel');
+      const buf = template
+        ? await buildReportTemplate(sheetCharts(), forum.name)
+        : await buildReportWorkbook(sheetCharts(), forum.name);
       downloadBlob(
         new Blob([buf], {
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         }),
-        `${safeFileName(forum.name)} — отчёт ${formatDate(reportDate)}.xlsx`,
+        template
+          ? `${safeFileName(forum.name)} — шаблон отчёта.xlsx`
+          : `${safeFileName(forum.name)} — отчёт ${formatDate(reportDate)}.xlsx`,
       );
     } catch (e) {
       console.error(e);
@@ -61,12 +65,21 @@ export function ReportExcelButtons({
 
   return (
     <>
+      <Button
+        variant="outline"
+        onClick={() => exportXlsx(true)}
+        disabled={busy}
+        title="Таблица для заполнения: статьи отчёта с пустыми суммами и инструкцией"
+        data-testid="report-template"
+      >
+        <FileDown /> Шаблон Excel
+      </Button>
       <Button variant="outline" onClick={() => setOpen(true)} data-testid="report-import">
         <Upload /> Загрузить из Excel
       </Button>
       <Button
         variant="outline"
-        onClick={exportXlsx}
+        onClick={() => exportXlsx(false)}
         disabled={busy || !charts.length}
         data-testid="report-export-xlsx"
       >
@@ -76,6 +89,7 @@ export function ReportExcelButtons({
         <ImportDialog
           forumId={forum.id}
           currentCount={charts.length}
+          onTemplate={() => exportXlsx(true)}
           onClose={() => setOpen(false)}
           onImported={(c) => {
             onImported(c);
@@ -90,11 +104,13 @@ export function ReportExcelButtons({
 function ImportDialog({
   forumId,
   currentCount,
+  onTemplate,
   onClose,
   onImported,
 }: {
   forumId: number;
   currentCount: number;
+  onTemplate: () => void;
   onClose: () => void;
   onImported: (charts: ChartDTO[]) => void;
 }) {
@@ -136,9 +152,16 @@ function ImportDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent
         title="Загрузка отчёта из Excel"
-        description="Столбцы: Диаграмма · Цветовая гамма · Единица · Статья · Сумма · Доп. единица. Образец — кнопка «Выгрузить в Excel»."
+        description="Столбцы: Диаграмма · Цветовая гамма · Единица · Статья · Сумма · Доп. единица."
         wide
       >
+        <p className="mb-3 text-sm text-ink/70">
+          Нет файла?{' '}
+          <button type="button" className="text-brand underline" onClick={onTemplate}>
+            Скачайте шаблон
+          </button>
+          , впишите суммы и загрузите его сюда.
+        </p>
         <label className="flex cursor-pointer items-center gap-3 rounded-md border border-dashed border-line p-4 hover:border-brand">
           <FileSpreadsheet className="size-6 text-brand" />
           <span className="text-sm font-medium">{fileName || 'Выберите файл .xlsx'}</span>
