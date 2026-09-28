@@ -41,6 +41,9 @@ const BOTTOM_H = HEADER_H - TOP_H - MARK_H;
 // Ширина столбца с названиями: на телефоне узкий, чтобы была видна шкала (CSS-переменная)
 const TREE_W = 'var(--tree-w)';
 const TREE_CLASS = '[--tree-w:150px] sm:[--tree-w:380px]';
+const TREE_W_KEY = 'gantt-tree-width';
+const TREE_MIN = 120;
+const TREE_MAX = 900;
 
 type Row =
   | {
@@ -80,6 +83,48 @@ interface DragState {
 export function GanttView() {
   const { visible, tasks, forum, today, lookups, patchTask, setOpenTaskId, filters } = useForum();
   const [scale, setScale] = React.useState<Scale>('week');
+  // Ширина столбца с названиями задач: меняется перетаскиванием границы, запоминается в браузере
+  const [treeW, setTreeW] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    try {
+      const v = Number(localStorage.getItem(TREE_W_KEY));
+      if (v >= TREE_MIN && v <= TREE_MAX) setTreeW(v);
+    } catch {
+      /* нет хранилища — ширина по умолчанию */
+    }
+  }, []);
+  const startTreeResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const box = e.currentTarget.parentElement!;
+    const w0 = parseFloat(getComputedStyle(box).getPropertyValue('--tree-w')) || 380;
+    const x0 = e.clientX;
+    let w = w0;
+    const move = (ev: PointerEvent) => {
+      w = Math.round(Math.min(TREE_MAX, Math.max(TREE_MIN, w0 + ev.clientX - x0)));
+      setTreeW(w);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      document.body.style.cursor = '';
+      try {
+        localStorage.setItem(TREE_W_KEY, String(w));
+      } catch {
+        /* не сохраняем */
+      }
+    };
+    document.body.style.cursor = 'col-resize';
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const resetTreeW = () => {
+    setTreeW(null);
+    try {
+      localStorage.removeItem(TREE_W_KEY);
+    } catch {
+      /* ничего */
+    }
+  };
   // Свёрнутые блоки; этапы по умолчанию свёрнуты (раскрыты — при активных фильтрах и поиске)
   const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set());
   const [stageOpen, setStageOpen] = React.useState<Map<string, boolean>>(new Map());
@@ -423,187 +468,204 @@ export function GanttView() {
       </div>
       <Legend />
 
+      {/* Обёртка задаёт ширину столбца с названиями (--tree-w) — её можно менять мышью */}
       <div
-        ref={scrollRef}
-        className={cn(
-          'thin-scroll relative mt-2 max-h-[calc(100vh-260px)] min-h-[360px] overflow-auto rounded-md border border-line bg-white',
-          TREE_CLASS,
-        )}
-        data-testid="gantt"
-        onMouseLeave={() => setHover(null)}
+        className={cn('relative mt-2', TREE_CLASS)}
+        style={treeW ? ({ '--tree-w': `${treeW}px` } as React.CSSProperties) : undefined}
       >
         <div
-          className="relative"
-          style={{ width: `calc(${TREE_W} + ${width}px)`, height: HEADER_H + bodyH }}
+          ref={scrollRef}
+          className="thin-scroll relative max-h-[calc(100vh-260px)] min-h-[360px] overflow-auto rounded-md border border-line bg-white"
+          data-testid="gantt"
+          onMouseLeave={() => setHover(null)}
         >
-          {/* Шапка шкалы */}
-          <div className="sticky top-0 z-30 flex" style={{ height: HEADER_H }}>
-            <div
-              className="sticky left-0 z-40 flex shrink-0 items-end border-b border-r border-line bg-surface px-3 pb-1.5 text-xs font-medium text-ink/70"
-              style={{ width: TREE_W }}
-            >
-              <span className="hidden sm:inline">Этап / блок / задача</span>
-              <span className="sm:hidden">Задача</span>
+          <div
+            className="relative"
+            style={{ width: `calc(${TREE_W} + ${width}px)`, height: HEADER_H + bodyH }}
+          >
+            {/* Шапка шкалы */}
+            <div className="sticky top-0 z-30 flex" style={{ height: HEADER_H }}>
+              <div
+                className="sticky left-0 z-40 flex shrink-0 items-end border-b border-r border-line bg-surface px-3 pb-1.5 text-xs font-medium text-ink/70"
+                style={{ width: TREE_W }}
+              >
+                <span className="hidden sm:inline">Этап / блок / задача</span>
+                <span className="sm:hidden">Задача</span>
+              </div>
+              <div className="relative shrink-0 border-b border-line bg-surface" style={{ width }}>
+                {header.top.map((h, i) => (
+                  <div
+                    key={i}
+                    className="absolute top-0 truncate border-l border-line px-1.5 pt-1 text-xs font-medium text-ink/80"
+                    style={{ left: h.left, width: h.width, height: TOP_H }}
+                  >
+                    {h.label}
+                  </div>
+                ))}
+                {header.bottom.map((h, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      'absolute truncate border-l border-t border-line text-center text-[11px] text-ink/60',
+                      h.weekend && 'bg-line/60',
+                    )}
+                    style={{
+                      left: h.left,
+                      width: h.width,
+                      top: TOP_H + MARK_H,
+                      height: BOTTOM_H,
+                      lineHeight: `${BOTTOM_H}px`,
+                    }}
+                  >
+                    {h.label}
+                  </div>
+                ))}
+                {markers.map((m) =>
+                  m.date >= range.from && m.date <= range.to ? (
+                    <div
+                      key={m.label}
+                      className={cn(
+                        'absolute z-10 whitespace-nowrap px-1 text-[10px] leading-4',
+                        m.text,
+                      )}
+                      style={{ left: x(m.date) + 1, top: TOP_H }}
+                    >
+                      {m.label}
+                    </div>
+                  ) : null,
+                )}
+              </div>
             </div>
-            <div className="relative shrink-0 border-b border-line bg-surface" style={{ width }}>
-              {header.top.map((h, i) => (
-                <div
-                  key={i}
-                  className="absolute top-0 truncate border-l border-line px-1.5 pt-1 text-xs font-medium text-ink/80"
-                  style={{ left: h.left, width: h.width, height: TOP_H }}
-                >
-                  {h.label}
-                </div>
-              ))}
-              {header.bottom.map((h, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    'absolute truncate border-l border-t border-line text-center text-[11px] text-ink/60',
-                    h.weekend && 'bg-line/60',
-                  )}
-                  style={{
-                    left: h.left,
-                    width: h.width,
-                    top: TOP_H + MARK_H,
-                    height: BOTTOM_H,
-                    lineHeight: `${BOTTOM_H}px`,
-                  }}
-                >
-                  {h.label}
-                </div>
-              ))}
+
+            {/* Фон: выходные и вертикальные линии */}
+            <div
+              className="pointer-events-none absolute"
+              style={{ left: TREE_W, top: HEADER_H, width, height: bodyH }}
+            >
+              {scale === 'day' &&
+                header.bottom
+                  .filter((h) => h.weekend)
+                  .map((h, i) => (
+                    <div
+                      key={i}
+                      className="absolute top-0 h-full bg-surface"
+                      style={{ left: h.left, width: h.width }}
+                    />
+                  ))}
+              {scale !== 'day' &&
+                header.bottom.map((h, i) => (
+                  <div
+                    key={i}
+                    className="absolute top-0 h-full border-l border-line/60"
+                    style={{ left: h.left }}
+                  />
+                ))}
               {markers.map((m) =>
                 m.date >= range.from && m.date <= range.to ? (
                   <div
                     key={m.label}
-                    className={cn(
-                      'absolute z-10 whitespace-nowrap px-1 text-[10px] leading-4',
-                      m.text,
-                    )}
-                    style={{ left: x(m.date) + 1, top: TOP_H }}
-                  >
-                    {m.label}
-                  </div>
+                    className={cn('absolute top-0 z-20 h-full', m.cls)}
+                    style={{ left: x(m.date) + (m.date === today ? px / 2 : 0) }}
+                    title={`${m.label}: ${formatDate(m.date)}`}
+                  />
                 ) : null,
               )}
+              {forum.endDate && forum.endDate !== forum.startDate && (
+                <div
+                  className="absolute top-0 z-10 h-full bg-ink/5"
+                  style={{
+                    left: x(forum.startDate),
+                    width: x(addDays(forum.endDate, 1)) - x(forum.startDate),
+                  }}
+                />
+              )}
             </div>
-          </div>
 
-          {/* Фон: выходные и вертикальные линии */}
-          <div
-            className="pointer-events-none absolute"
-            style={{ left: TREE_W, top: HEADER_H, width, height: bodyH }}
-          >
-            {scale === 'day' &&
-              header.bottom
-                .filter((h) => h.weekend)
-                .map((h, i) => (
-                  <div
-                    key={i}
-                    className="absolute top-0 h-full bg-surface"
-                    style={{ left: h.left, width: h.width }}
-                  />
-                ))}
-            {scale !== 'day' &&
-              header.bottom.map((h, i) => (
+            {/* Строки */}
+            {rows.map((r, i) => {
+              const top = HEADER_H + i * ROW_H;
+              return (
                 <div
-                  key={i}
-                  className="absolute top-0 h-full border-l border-line/60"
-                  style={{ left: h.left }}
-                />
-              ))}
-            {markers.map((m) =>
-              m.date >= range.from && m.date <= range.to ? (
-                <div
-                  key={m.label}
-                  className={cn('absolute top-0 z-20 h-full', m.cls)}
-                  style={{ left: x(m.date) + (m.date === today ? px / 2 : 0) }}
-                  title={`${m.label}: ${formatDate(m.date)}`}
-                />
-              ) : null,
-            )}
-            {forum.endDate && forum.endDate !== forum.startDate && (
-              <div
-                className="absolute top-0 z-10 h-full bg-ink/5"
-                style={{
-                  left: x(forum.startDate),
-                  width: x(addDays(forum.endDate, 1)) - x(forum.startDate),
-                }}
-              />
-            )}
-          </div>
-
-          {/* Строки */}
-          {rows.map((r, i) => {
-            const top = HEADER_H + i * ROW_H;
-            return (
-              <div
-                key={r.key}
-                className="absolute left-0 flex"
-                style={{ top, height: ROW_H, width: `calc(${TREE_W} + ${width}px)` }}
-              >
-                <TreeCell
-                  row={r}
-                  onToggle={() => r.kind !== 'task' && toggle(r)}
-                  onOpen={(id) => setOpenTaskId(id)}
-                  query={filters.q}
-                />
-                <div
-                  className={cn(
-                    'relative shrink-0 border-b border-line/50',
-                    r.kind !== 'task' && 'bg-surface/50',
-                  )}
-                  style={{ width }}
+                  key={r.key}
+                  className="absolute left-0 flex"
+                  style={{ top, height: ROW_H, width: `calc(${TREE_W} + ${width}px)` }}
                 >
-                  {r.kind === 'task' ? (
-                    <TaskBar
-                      task={r.task}
-                      eff={effective(r.task)}
-                      drag={drag?.id === r.task.id ? drag : null}
-                      x={x}
-                      px={px}
-                      today={today}
-                      onPointerDown={(e, mode, eff) => {
-                        if (e.button !== 0) return;
-                        e.preventDefault();
-                        setHover(null);
-                        startDrag({
-                          id: r.task.id,
-                          mode,
-                          x0: e.clientX,
-                          start: eff.start,
-                          end: eff.end,
-                          delta: 0,
-                          moved: false,
-                        });
-                      }}
-                      onHover={(e) =>
-                        !drag && setHover({ task: r.task, x: e.clientX, y: e.clientY })
-                      }
-                      onLeave={() => setHover(null)}
-                    />
-                  ) : (
-                    <SummaryBar
-                      tasks={r.tasks}
-                      color={r.color}
-                      x={x}
-                      kind={r.kind}
-                      effective={effective}
-                    />
-                  )}
+                  <TreeCell
+                    row={r}
+                    onToggle={() => r.kind !== 'task' && toggle(r)}
+                    onOpen={(id) => setOpenTaskId(id)}
+                    query={filters.q}
+                  />
+                  <div
+                    className={cn(
+                      'relative shrink-0 border-b border-line/50',
+                      r.kind !== 'task' && 'bg-surface/50',
+                    )}
+                    style={{ width }}
+                  >
+                    {r.kind === 'task' ? (
+                      <TaskBar
+                        task={r.task}
+                        eff={effective(r.task)}
+                        drag={drag?.id === r.task.id ? drag : null}
+                        x={x}
+                        px={px}
+                        today={today}
+                        onPointerDown={(e, mode, eff) => {
+                          if (e.button !== 0) return;
+                          e.preventDefault();
+                          setHover(null);
+                          startDrag({
+                            id: r.task.id,
+                            mode,
+                            x0: e.clientX,
+                            start: eff.start,
+                            end: eff.end,
+                            delta: 0,
+                            moved: false,
+                          });
+                        }}
+                        onHover={(e) =>
+                          !drag && setHover({ task: r.task, x: e.clientX, y: e.clientY })
+                        }
+                        onLeave={() => setHover(null)}
+                      />
+                    ) : (
+                      <SummaryBar
+                        tasks={r.tasks}
+                        color={r.color}
+                        x={x}
+                        kind={r.kind}
+                        effective={effective}
+                      />
+                    )}
+                  </div>
                 </div>
+              );
+            })}
+            {rows.length === 0 && (
+              <div
+                className="absolute left-0 right-0 py-16 text-center text-sm text-status-gray"
+                style={{ top: HEADER_H }}
+              >
+                Нет задач, подходящих под фильтры
               </div>
-            );
-          })}
-          {rows.length === 0 && (
-            <div
-              className="absolute left-0 right-0 py-16 text-center text-sm text-status-gray"
-              style={{ top: HEADER_H }}
-            >
-              Нет задач, подходящих под фильтры
-            </div>
-          )}
+            )}
+          </div>
+        </div>
+        {/* Граница столбца с названиями: тянуть — шире/уже, двойной клик — как было */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Ширина столбца с названиями задач"
+          title="Потяните, чтобы изменить ширину. Двойной клик — вернуть"
+          onPointerDown={startTreeResize}
+          onDoubleClick={resetTreeW}
+          className="group absolute inset-y-0 z-50 w-2.5 -translate-x-1/2 cursor-col-resize"
+          style={{ left: TREE_W }}
+          data-testid="gantt-tree-resize"
+        >
+          <span className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-transparent transition-colors group-hover:bg-brand" />
         </div>
       </div>
       {hover && !drag && <Tooltip {...hover} />}
