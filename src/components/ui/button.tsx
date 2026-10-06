@@ -23,8 +23,8 @@ export const buttonVariants = cva(
         sm: 'h-9 px-3.5',
         lg: 'h-9 px-3.5',
         // Кнопки только с иконкой — по центру
-        icon: 'h-9 w-9 items-center [&_svg]:translate-y-0',
-        iconSm: 'h-7 w-7 items-center [&_svg]:translate-y-0',
+        icon: 'h-9 w-9 items-center leading-none [&_svg]:self-center [&_svg]:translate-y-0',
+        iconSm: 'h-7 w-7 items-center leading-none [&_svg]:self-center [&_svg]:translate-y-0',
       },
     },
     defaultVariants: { variant: 'default', size: 'default' },
