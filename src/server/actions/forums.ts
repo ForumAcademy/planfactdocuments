@@ -288,8 +288,8 @@ export async function setForumColor(id: number, color: string): Promise<ActionRe
   return run(async () => {
     await requireEditor();
     const c = forumColorSchema.parse(color);
+    // Без пересборки страницы: карточка уже показывает новый цвет, ответ — мгновенный
     await prisma.forum.update({ where: { id }, data: { color: c } });
-    revalidatePath('/');
     return null;
   });
 }

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Archive,
@@ -69,9 +69,13 @@ export function ForumCard({
   const left = daysLeftText(forum, today);
 
   const onColor = async (k: ForumColor) => {
+    const prev = colorKey;
+    setColorKey(k);
     const res = await setForumColor(forum.id, k);
-    if (res.ok) router.refresh();
-    else toast.error(res.error);
+    if (!res.ok) {
+      setColorKey(prev);
+      toast.error(res.error);
+    }
   };
   const onDuplicate = async () => {
     const res = await duplicateForum(forum.id);
@@ -103,7 +107,10 @@ export function ForumCard({
     } else toast.error(res.error);
   };
 
-  const col = forumColor(forum.color);
+  // Цвет меняется сразу (без ожидания сервера), сохранение — в фоне
+  const [colorKey, setColorKey] = useState(forum.color);
+  useEffect(() => setColorKey(forum.color), [forum.color]);
+  const col = forumColor(colorKey);
   const daysLeft = diffDays(today, forum.startDate);
   // Шкала: красная, если есть просроченные задачи; зелёная — всё в срок
   const late = c.overdue > 0;
@@ -116,9 +123,9 @@ export function ForumCard({
         data-testid="forum-card"
       >
         {/* Шапка в цвете форума */}
-        <div className="px-4 pb-3 pt-4 text-white" style={{ background: col.hex }}>
+        <div className="px-4 pb-3 pt-4" style={{ background: col.hex, color: col.text }}>
           <h2 className="pr-8 text-lg font-semibold leading-tight">{forum.name}</h2>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-white/85">
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm opacity-85">
             <span className="inline-flex items-center gap-1">
               <CalendarDays className="size-3.5" /> {forumDateRange(forum)}
             </span>
@@ -136,14 +143,14 @@ export function ForumCard({
             {left === 'прошёл' ? (
               <span className="text-xl font-semibold text-status-gray">Форум прошёл</span>
             ) : left === 'идёт сейчас' ? (
-              <span className="text-xl font-semibold" style={{ color: col.hex }}>
+              <span className="text-xl font-semibold" style={{ color: col.accent }}>
                 Форум идёт сейчас
               </span>
             ) : (
               <>
                 <span
                   className="text-4xl font-bold tabular-nums leading-none"
-                  style={{ color: col.hex }}
+                  style={{ color: col.accent }}
                 >
                   {daysLeft}
                 </span>
@@ -180,7 +187,8 @@ export function ForumCard({
       <div className="absolute right-2 top-2">
         <DropdownMenu>
           <DropdownMenuTrigger
-            className="rounded p-1.5 text-white/80 hover:bg-white/15 hover:text-white"
+            className="rounded p-1.5 opacity-80 hover:bg-black/10 hover:opacity-100"
+            style={{ color: col.text }}
             aria-label="Меню форума"
           >
             <MoreVertical className="size-4" />
@@ -191,7 +199,7 @@ export function ForumCard({
             </DropdownMenuItem>
             <div className="px-2 py-1.5">
               <div className="mb-1 text-xs text-ink/60">Цвет карточки</div>
-              <div className="flex gap-1.5">
+              <div className="grid grid-cols-6 gap-1.5">
                 {FORUM_COLOR_KEYS.map((k) => (
                   <button
                     key={k}
@@ -201,7 +209,8 @@ export function ForumCard({
                     onClick={() => void onColor(k)}
                     className={cn(
                       'size-6 rounded-full ring-offset-2',
-                      forum.color === k ? 'ring-2 ring-ink/70' : 'hover:scale-110',
+                      colorKey === k ? 'ring-2 ring-ink/70' : 'hover:scale-110',
+                      'border border-black/10',
                     )}
                     style={{ background: FORUM_COLORS[k].hex }}
                   />

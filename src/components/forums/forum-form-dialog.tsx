@@ -212,7 +212,7 @@ export function ForumFormDialog({
             <Field label="Место проведения" error={errors.location} htmlFor="f-loc">
               <Input id="f-loc" value={location} onChange={(e) => setLocation(e.target.value)} />
             </Field>
-            <Field label="Цвет карточки">
+            <Field label="Цвет карточки" className="sm:col-span-2">
               <ColorPicker value={color} onChange={setColor} />
             </Field>
             <Field label="Сайт" error={errors.website} htmlFor="f-site">
@@ -339,7 +339,11 @@ export function ColorPicker({
   onChange: (c: ForumColor) => void;
 }) {
   return (
-    <div className="flex h-9 items-center gap-2" role="radiogroup" aria-label="Цвет карточки">
+    <div
+      className="flex flex-wrap items-center gap-2 py-1"
+      role="radiogroup"
+      aria-label="Цвет карточки"
+    >
       {FORUM_COLOR_KEYS.map((k) => (
         <button
           key={k}
@@ -350,7 +354,7 @@ export function ColorPicker({
           aria-label={FORUM_COLORS[k].label}
           onClick={() => onChange(k)}
           className={cn(
-            'size-7 rounded-full ring-offset-2 transition',
+            'size-7 rounded-full border border-black/10 ring-offset-2 transition',
             value === k ? 'ring-2 ring-ink/70' : 'hover:scale-110',
           )}
           style={{ background: FORUM_COLORS[k].hex }}

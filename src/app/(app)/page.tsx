@@ -18,8 +18,12 @@ export default async function HomePage({
   const archived = sp.view === 'archive';
   const desc = sp.sort === 'desc';
   const [forums, options] = await Promise.all([getForumsForHome(archived), getForumOptions()]);
-  forums.sort((a, b) =>
-    desc ? b.startDate.localeCompare(a.startDate) : a.startDate.localeCompare(b.startDate),
+  // По дате форума; при одинаковой дате — по названию, чтобы порядок не «прыгал»
+  forums.sort(
+    (a, b) =>
+      (desc ? b.startDate.localeCompare(a.startDate) : a.startDate.localeCompare(b.startDate)) ||
+      a.name.localeCompare(b.name, 'ru') ||
+      a.id - b.id,
   );
   const today = todayMsk();
   const q = (p: Record<string, string | undefined>) => {

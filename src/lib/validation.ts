@@ -32,7 +32,20 @@ export function normalizeWebsite(v: string | null | undefined): string | null | 
   }
 }
 
-export const forumColorSchema = z.enum(['blue', 'violet', 'sky', 'pink', 'orange']);
+export const forumColorSchema = z.enum([
+  'blue',
+  'turquoise',
+  'indigo',
+  'purple',
+  'magenta',
+  'pink',
+  'coral',
+  'orange',
+  'ocean',
+  'teal',
+  'mint',
+  'ice',
+]);
 
 export const forumSchema = z
   .object({
