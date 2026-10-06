@@ -131,6 +131,7 @@ const templateSchema = z.object({
     .nullish()
     .transform((v) => v || null),
   roleIds: z.array(idSchema).max(20),
+  cost: z.number().int().min(0).max(10_000_000_000).optional().default(0),
 });
 
 export async function saveTemplate(
@@ -147,6 +148,7 @@ export async function saveTemplate(
       description: d.description,
       termText: d.termText,
       comment: d.comment,
+      cost: d.cost,
     };
     const row = id
       ? await prisma.templateTask.update({

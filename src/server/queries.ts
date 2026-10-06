@@ -39,6 +39,7 @@ export function toTaskDTO(
     status: t.status,
     completedAt: dbToISO(t.completedAt),
     comment: t.comment,
+    cost: t.cost,
     order: t.order,
     roleIds: t.roles.map((r) => r.id),
     employeeIds: t.employees.map((e) => e.id),
@@ -224,6 +225,7 @@ export interface TemplateDTO {
   description: string;
   termText: string;
   comment: string | null;
+  cost: number;
   order: number;
   roleIds: number[];
 }
@@ -292,6 +294,7 @@ export async function getDatabaseData(): Promise<DatabaseData> {
       description: t.description,
       termText: t.termText,
       comment: t.comment,
+      cost: t.cost,
       order: t.order,
       roleIds: t.roles.map((r) => r.id),
     })),

@@ -15,7 +15,7 @@ import {
   type TaskStatusCode,
 } from '@/lib/status';
 import type { TaskDTO } from '@/lib/types';
-import { cn } from '@/lib/utils';
+import { cn, formatRub } from '@/lib/utils';
 import { useForum } from './forum-context';
 import { TermCombobox } from '@/components/ui/term-combobox';
 
@@ -263,5 +263,55 @@ export function TermCell({ task, children }: { task: TaskDTO; children: React.Re
     >
       {children}
     </div>
+  );
+}
+
+/** Стоимость задачи, руб. — по клику поле ввода, Enter или уход из поля сохраняют. */
+export function CostCell({ task }: { task: TaskDTO }) {
+  const { patchTask } = useForum();
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState('');
+  const commit = () => {
+    setEditing(false);
+    const n = Math.round(Number(draft.replace(/[\s  ₽]/g, '').replace(',', '.')));
+    if (!draft.trim()) return;
+    if (!Number.isFinite(n) || n < 0) return;
+    if (n !== task.cost) void patchTask(task.id, { cost: n });
+  };
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        inputMode="numeric"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onFocus={(e) => e.currentTarget.select()}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit();
+          if (e.key === 'Escape') setEditing(false);
+        }}
+        className="h-7 w-full rounded border border-brand bg-white px-1.5 text-right text-xs tabular-nums focus:outline-none focus:ring-2 focus:ring-brand/20"
+        aria-label="Стоимость, руб."
+        data-testid="cost-input"
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setDraft(String(task.cost));
+        setEditing(true);
+      }}
+      className={cn(
+        'w-full whitespace-nowrap rounded px-1 py-0.5 text-right tabular-nums hover:bg-brand-light',
+        task.cost ? 'text-ink' : 'text-status-gray',
+      )}
+      title="Изменить стоимость"
+      data-testid="cost-cell"
+    >
+      {formatRub(task.cost)}
+    </button>
   );
 }

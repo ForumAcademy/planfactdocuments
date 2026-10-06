@@ -15,6 +15,19 @@ export function formatAmount(value: number): string {
   return numberFormatter.format(value).replace(/ | /g, ' ');
 }
 
+/** «200 000 ₽» */
+export function formatRub(value: number): string {
+  return `${Math.round(value).toLocaleString('ru-RU').replace(/ | /g, ' ')} ₽`;
+}
+
+/** «7,7 млн ₽», «850 тыс. ₽», «0 ₽» — коротко для сумм по этапам */
+export function formatRubShort(value: number): string {
+  if (value >= 1_000_000)
+    return `${(Math.round(value / 100_000) / 10).toLocaleString('ru-RU')} млн ₽`;
+  if (value >= 1_000) return `${Math.round(value / 1_000).toLocaleString('ru-RU')} тыс. ₽`;
+  return `${Math.round(value)} ₽`;
+}
+
 /** Разбирает число, введённое с запятой или точкой: «1 234,56» → 1234.56 */
 export function parseAmount(input: string): number | null {
   const cleaned = input.replace(/[\s  ]/g, '').replace(',', '.');

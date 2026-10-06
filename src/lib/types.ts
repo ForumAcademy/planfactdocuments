@@ -35,6 +35,8 @@ export interface TaskDTO {
   order: number;
   roleIds: number[];
   employeeIds: number[];
+  /** Стоимость, руб. */
+  cost: number;
 }
 
 export interface StageDTO {

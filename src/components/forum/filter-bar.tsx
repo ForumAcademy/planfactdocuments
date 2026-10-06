@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { filterTasks, hasActiveFilters, type DueFilter } from '@/lib/filters';
 import type { TaskDTO } from '@/lib/types';
 import { STATUS_LABEL, TASK_STATUSES } from '@/lib/status';
-import { cn } from '@/lib/utils';
+import { cn, formatRub } from '@/lib/utils';
 import { useForum } from './forum-context';
 
 const DUE_BUTTONS: { key: DueFilter; label: string }[] = [
@@ -233,6 +233,8 @@ export function FilterBar({ className }: { className?: string }) {
         />
         <span className="ml-auto text-xs text-ink/70">
           Показано {visible.length} из {tasks.length}
+          {visible.some((t) => t.cost) &&
+            ` · стоимость ${formatRub(visible.reduce((sum, t) => sum + t.cost, 0))}`}
         </span>
         <Button variant="ghost" size="sm" onClick={resetFilters} disabled={!active}>
           <RotateCcw /> Сбросить фильтры

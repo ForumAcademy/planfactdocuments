@@ -28,6 +28,7 @@ export const EXTRA_COLUMNS = [
   { key: 'endDate', header: 'Дата окончания', width: 14 },
   { key: 'lag', header: 'Отставание, дн.', width: 12 },
   { key: 'completedAt', header: 'Дата выполнения', width: 14 },
+  { key: 'cost', header: 'Стоимость, руб.', width: 15 },
 ] as const;
 
 type ColumnKey = (typeof BASE_COLUMNS)[number]['key'] | (typeof EXTRA_COLUMNS)[number]['key'];
@@ -47,6 +48,8 @@ export interface PlanRow {
   startDate: ISODate | null;
   endDate: ISODate | null;
   completedAt: ISODate | null;
+  /** Стоимость, руб.; null — столбца нет или ячейка пустая */
+  cost: number | null;
   /** Ошибки строки (строка всё равно может быть импортирована). */
   errors: string[];
 }
@@ -69,6 +72,7 @@ export function matchHeader(raw: string): ColumnKey | null {
   if (!h) return null;
   if (h === '№' || h === 'n' || h === 'no' || h === '№ п/п' || h === 'номер') return 'number';
   if (h.startsWith('отставание')) return 'lag';
+  if (h.startsWith('стоимость') || h.startsWith('бюджет')) return 'cost';
   if (h.startsWith('дата начала')) return 'startDate';
   if (h.startsWith('дата окончания') || h === 'срок (дата)') return 'endDate';
   if (h.startsWith('дата выполнения') || h.startsWith('дата факт')) return 'completedAt';
@@ -243,6 +247,21 @@ export async function parsePlanWorkbook(data: ArrayBuffer | Uint8Array): Promise
     if (start.value && end.value && start.value > end.value)
       errors.push('Дата начала позже даты окончания');
 
+    // Стоимость: число или текст «200 000», «200 000 ₽»
+    const costRaw = get(row, 'cost');
+    let cost: number | null = null;
+    if (typeof costRaw === 'number') cost = Math.round(costRaw);
+    else {
+      const txt = cellText(costRaw)
+        .replace(/[\s ₽рубр.]/gi, '')
+        .replace(',', '.');
+      if (txt) {
+        const n = Number(txt);
+        if (Number.isFinite(n) && n >= 0) cost = Math.round(n);
+        else errors.push(`Не распознана стоимость «${cellText(costRaw).trim()}»`);
+      }
+    }
+
     rows.push({
       rowNumber: r,
       number,
@@ -257,6 +276,7 @@ export async function parsePlanWorkbook(data: ArrayBuffer | Uint8Array): Promise
       startDate: start.value,
       endDate: end.value,
       completedAt: done.value,
+      cost,
       errors,
     });
   }
@@ -280,6 +300,7 @@ export interface ExportTask {
   lag: number;
   completedAt: ISODate | null;
   overdue: boolean;
+  cost: number;
 }
 
 const STATUS_FILL: Record<TaskStatusCode, string> = {
@@ -331,6 +352,7 @@ export async function buildPlanWorkbook(
       endDate: isoToExcelDate(t.endDate),
       lag: t.lag > 0 ? t.lag : null,
       completedAt: isoToExcelDate(t.completedAt),
+      cost: t.cost,
     });
     row.alignment = { vertical: 'top', wrapText: true };
     const fill = t.overdue ? 'FFFBE3E3' : STATUS_FILL[t.status];

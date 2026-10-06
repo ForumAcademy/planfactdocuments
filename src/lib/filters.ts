@@ -4,7 +4,7 @@ import type { DictsDTO, TaskDTO } from './types';
 
 export type DueFilter = 'overdue' | 'week' | '14d' | 'nodate';
 export type SortKey =
-  'number' | 'stage' | 'block' | 'end' | 'start' | 'role' | 'employee' | 'status' | 'lag';
+  'number' | 'stage' | 'block' | 'end' | 'start' | 'role' | 'employee' | 'status' | 'lag' | 'cost';
 
 export interface Filters {
   stage: number[];
@@ -45,6 +45,7 @@ const SORTS: SortKey[] = [
   'employee',
   'status',
   'lag',
+  'cost',
 ];
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -192,6 +193,8 @@ export function sortTasks(
         return STATUS_ORDER[t.status];
       case 'lag':
         return lagDays(t, today);
+      case 'cost':
+        return t.cost;
     }
   };
   const m = dir === 'asc' ? 1 : -1;

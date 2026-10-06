@@ -27,6 +27,7 @@ export const planRowSchema = z.object({
   startDate: isoOrNull,
   endDate: isoOrNull,
   completedAt: isoOrNull,
+  cost: z.number().int().min(0).max(10_000_000_000).nullable().optional(),
 });
 export type PlanRowInput = z.infer<typeof planRowSchema>;
 
@@ -109,6 +110,8 @@ export async function importPlanRows(
       comment,
       // Ответственные указаны в файле — считаем их заданными вручную, иначе назначим по ролям
       employeesManual: employeeIds.length > 0,
+      // Стоимость: из файла; нет столбца — у новой задачи 0, у существующей не меняется
+      ...(row.cost !== null && row.cost !== undefined ? { cost: row.cost } : {}),
     };
 
     const prev = row.number !== null ? byNumber.get(row.number) : undefined;

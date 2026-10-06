@@ -153,7 +153,14 @@ export async function runSeed(prisma: PrismaClient, masterPlan: Uint8Array): Pro
   const blockId = new Map(blocks.map((b) => [key(b.name), b.id]));
   const roleId = new Map(roles.map((r) => [key(r.name), r.id]));
 
-  // Типовой мастер-план (перезаписывается целиком)
+  // Типовой мастер-план (перезаписывается целиком). Стоимость задач сохраняем:
+  // в файле её может не быть, а в базе она уже оценена или поправлена вручную.
+  const prevCost = new Map(
+    (await prisma.templateTask.findMany({ select: { number: true, cost: true } })).map((t) => [
+      t.number,
+      t.cost,
+    ]),
+  );
   await prisma.templateTask.deleteMany();
   for (const [i, r] of parsed.rows.entries()) {
     await prisma.templateTask.create({
@@ -164,6 +171,7 @@ export async function runSeed(prisma: PrismaClient, masterPlan: Uint8Array): Pro
         description: r.description,
         termText: r.termText,
         comment: r.comment || null,
+        cost: r.cost ?? prevCost.get(r.number ?? i + 1) ?? 0,
         order: i + 1,
         roles: {
           connect: r.roles

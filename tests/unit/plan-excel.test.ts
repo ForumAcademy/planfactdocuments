@@ -114,6 +114,7 @@ describe('экспорт и обратный импорт', () => {
         lag: 3,
         completedAt: null,
         overdue: true,
+        cost: 1500000,
       },
       {
         number: 2,
@@ -130,6 +131,7 @@ describe('экспорт и обратный импорт', () => {
         lag: 0,
         completedAt: '2027-03-20',
         overdue: false,
+        cost: 0,
       },
     ];
     const buf = await buildPlanWorkbook(tasks, { forumName: 'Тест' });

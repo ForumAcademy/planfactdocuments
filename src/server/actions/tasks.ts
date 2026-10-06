@@ -17,6 +17,8 @@ import { syncAutoAssignments } from '@/server/auto-assign';
 
 const id = z.number().int().positive();
 
+const formatRub = (n: number) => `${n.toLocaleString('ru-RU')} ₽`;
+
 const patchSchema = z
   .object({
     stageId: id.nullable(),
@@ -28,6 +30,7 @@ const patchSchema = z
     status: z.enum(['NOT_STARTED', 'IN_PROGRESS', 'DONE']),
     completedAt: optionalIsoDate,
     comment: z.string().max(4000),
+    cost: z.number().int().min(0).max(10_000_000_000),
     roleIds: z.array(id).max(30),
     employeeIds: z.array(id).max(30),
     needsClarification: z.boolean(),
@@ -96,6 +99,15 @@ async function applyPatch(
   if (p.comment !== undefined && p.comment.trim() !== (task.comment ?? '')) {
     data.comment = p.comment.trim() || null;
     hist.push({ field: 'Комментарий', oldValue: task.comment, newValue: p.comment.trim() || null });
+  }
+
+  if (p.cost !== undefined && p.cost !== task.cost) {
+    data.cost = p.cost;
+    hist.push({
+      field: 'Стоимость',
+      oldValue: formatRub(task.cost),
+      newValue: formatRub(p.cost),
+    });
   }
 
   // Даты

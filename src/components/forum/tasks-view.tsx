@@ -29,12 +29,12 @@ import { useConfirm } from '@/components/ui/confirm-dialog';
 import type { SortKey } from '@/lib/filters';
 import { TONE_COLOR, isOverdue, lagDays, shouldStart } from '@/lib/status';
 import type { TaskDTO } from '@/lib/types';
-import { cn, pluralRu } from '@/lib/utils';
+import { cn, formatRub, formatRubShort, pluralRu } from '@/lib/utils';
 import { formatDate } from '@/lib/dates';
 import { FilterBar } from './filter-bar';
 import { useForum } from './forum-context';
 import { Highlight } from './highlight';
-import { DateCell, EmployeesCell, StatusCell, TermCell, TextCell } from './cells';
+import { CostCell, DateCell, EmployeesCell, StatusCell, TermCell, TextCell } from './cells';
 import { BulkBar } from './bulk-bar';
 import { KanbanView } from './kanban-view';
 
@@ -120,6 +120,7 @@ const COLUMNS: { key: string; label: string; sort?: SortKey; className?: string;
     { key: 'emp', label: 'Ответственный', sort: 'employee', width: 200 },
     { key: 'status', label: 'Статус', sort: 'status', width: 150 },
     { key: 'lag', label: 'Отставание', sort: 'lag', width: 104 },
+    { key: 'cost', label: 'Стоимость', sort: 'cost', width: 120, className: 'text-right' },
     { key: 'comment', label: 'Комментарий', width: 260 },
   ];
 
@@ -393,6 +394,14 @@ function TaskTable() {
                           />
                         </span>
                         <span className="text-xs text-ink/70">{pct}% выполнено</span>
+                        {g.all.some((t) => t.cost) && (
+                          <span className="ml-3 text-xs text-ink/70" data-testid="stage-cost">
+                            Стоимость этапа:{' '}
+                            <b className="text-ink">
+                              {formatRubShort(g.tasks.reduce((sum, t) => sum + t.cost, 0))}
+                            </b>
+                          </span>
+                        )}
                       </button>
                     </td>
                   </tr>
@@ -504,6 +513,9 @@ function MobileTaskList({
               </span>
               <span className="shrink-0 text-xs text-ink/60">
                 {g.tasks.length} · {pct}%
+                {g.tasks.some((t) => t.cost)
+                  ? ` · ${formatRubShort(g.tasks.reduce((sum, t) => sum + t.cost, 0))}`
+                  : ''}
               </span>
             </button>
             {!isCollapsed && (
@@ -542,6 +554,7 @@ function MobileTaskList({
                           {shouldStart(t, today) && !overdue && (
                             <span className="text-status-red">пора начинать</span>
                           )}
+                          {t.cost > 0 && <span>{formatRub(t.cost)}</span>}
                         </div>
                         {t.employeeIds.length > 0 && (
                           <div className="mt-1 text-xs text-ink/80">
@@ -690,6 +703,9 @@ const TaskRow = React.memo(function TaskRow({
         ) : (
           <span className="text-status-gray">—</span>
         )}
+      </td>
+      <td className="px-1 py-1.5 text-xs">
+        <CostCell task={t} />
       </td>
       <td className="px-1 py-1.5 text-xs">
         <TextCell value={t.comment ?? ''} onSave={(v) => patchTask(t.id, { comment: v })}>

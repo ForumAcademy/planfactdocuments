@@ -68,16 +68,16 @@ model Role {
 }
 
 model Employee {
-  id        Int      @id @default(autoincrement())
-  fullName  String
-  position  String?
-  telegram  String?
+  id             Int      @id @default(autoincrement())
+  fullName       String
+  position       String?
+  telegram       String?
   /// Чат с ботом Telegram (появляется после /start у бота)
   telegramChatId String?
-  active    Boolean  @default(true)
-  roles     Role[]
-  tasks     Task[]
-  createdAt DateTime @default(now())
+  active         Boolean  @default(true)
+  roles          Role[]
+  tasks          Task[]
+  createdAt      DateTime @default(now())
 }
 
 /// Справочник формулировок срока («за 2 недели до форума», «до старта продаж»…)
@@ -101,6 +101,8 @@ model TemplateTask {
   comment     String?
   order       Int     @default(0)
   roles       Role[]
+  /// Стоимость выполнения задачи, руб.
+  cost        Int     @default(0)
 }
 
 // ---------- Форумы и задачи ----------
@@ -158,6 +160,8 @@ model Task {
   history            TaskHistory[]
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
+  /// Стоимость выполнения задачи, руб.
+  cost               Int           @default(0)
 
   @@index([forumId, order])
 }
@@ -208,13 +212,13 @@ model ReportItem {
 // ---------- Напоминания ----------
 
 model ReminderSettings {
-  id                 Int     @id @default(1)
-  daysBefore         Int     @default(3)
-  weeklySummary      Boolean @default(true)
+  id                  Int     @id @default(1)
+  daysBefore          Int     @default(3)
+  weeklySummary       Boolean @default(true)
   /// Личные сообщения ответственным в Telegram
-  telegramPersonal   Boolean @default(true)
+  telegramPersonal    Boolean @default(true)
   /// Сводка в общий чат команды
-  telegramGroup      Boolean @default(true)
+  telegramGroup       Boolean @default(true)
   telegramGroupChatId String?
   telegramGroupTitle  String?
 }

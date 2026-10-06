@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { forumDateRange } from '@/components/forums/forum-card';
 import { ForumFormDialog } from '@/components/forums/forum-form-dialog';
 import type { EmployeeDTO, ForumDTO, NamedDTO, StageDTO } from '@/lib/types';
-import { cn } from '@/lib/utils';
+import { cn, formatRub } from '@/lib/utils';
 import type { DatabaseData, TemplateDTO } from '@/server/queries';
 import { deleteDictItem, setDictArchived, type DictKind } from '@/server/actions/dicts';
 import { deleteForum, setForumArchived } from '@/server/actions/forums';
@@ -407,6 +407,17 @@ function TemplatesTab({ data }: { data: DatabaseData }) {
       className: 'min-w-40',
       sortValue: (r) => r.termText,
       render: (r) => r.termText,
+    },
+    {
+      key: 'cost',
+      label: 'Стоимость',
+      className: 'w-32 text-right',
+      sortValue: (r) => r.cost,
+      render: (r) => (
+        <span className={cn('whitespace-nowrap tabular-nums', !r.cost && 'text-status-gray')}>
+          {formatRub(r.cost)}
+        </span>
+      ),
     },
     {
       key: 'roles',

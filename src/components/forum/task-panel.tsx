@@ -4,7 +4,7 @@ import * as React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { AlertTriangle, Copy, History, RefreshCw, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Field, Select, Textarea } from '@/components/ui/input';
+import { Field, Input, Select, Textarea } from '@/components/ui/input';
 import { DateInput } from '@/components/ui/date-input';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -52,6 +52,8 @@ function PanelBody({ task, onClose }: { task: TaskDTO; onClose: () => void }) {
   const [description, setDescription] = React.useState(task.description);
   const [termText, setTermText] = React.useState(task.termText);
   const [comment, setComment] = React.useState(task.comment ?? '');
+  const [cost, setCost] = React.useState(String(task.cost));
+  React.useEffect(() => setCost(String(task.cost)), [task.cost]);
   const [history, setHistory] = React.useState<HistoryDTO[] | null>(null);
 
   React.useEffect(() => setDescription(task.description), [task.description]);
@@ -271,6 +273,23 @@ function PanelBody({ task, onClose }: { task: TaskDTO; onClose: () => void }) {
               <span>Назначаются автоматически по ролям задачи — можно изменить вручную.</span>
             )}
           </div>
+        </Field>
+        <Field
+          label="Стоимость, ₽"
+          hint="Сколько стоит выполнение задачи (подрядчики, закупки, реклама). Работа команды — 0 ₽"
+        >
+          <Input
+            inputMode="numeric"
+            className="w-48 text-right tabular-nums"
+            value={cost}
+            onChange={(e) => setCost(e.target.value)}
+            onBlur={() => {
+              const n = Math.round(Number(cost.replace(/[\s  ₽]/g, '').replace(',', '.')));
+              if (!cost.trim() || !Number.isFinite(n) || n < 0) return setCost(String(task.cost));
+              if (n !== task.cost) void save({ cost: n });
+            }}
+            data-testid="panel-cost"
+          />
         </Field>
         <Field label="Комментарий">
           <Textarea

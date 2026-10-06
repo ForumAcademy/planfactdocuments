@@ -43,6 +43,7 @@ export function PlanExportButton() {
           lag: lagDays(t, today),
           completedAt: t.completedAt,
           overdue: isOverdue(t, today),
+          cost: t.cost,
         })),
         { forumName: forum.name },
       );

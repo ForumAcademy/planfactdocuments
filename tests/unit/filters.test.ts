@@ -18,6 +18,7 @@ const base: TaskDTO = {
   status: 'NOT_STARTED',
   completedAt: null,
   comment: null,
+  cost: 0,
   order: 1,
   roleIds: [1],
   employeeIds: [],

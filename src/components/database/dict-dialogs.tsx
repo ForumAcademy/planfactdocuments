@@ -254,6 +254,7 @@ export function TemplateDialog({
     description: '',
     termText: '',
     comment: '',
+    cost: '0',
     roleIds: [] as number[],
   });
   const [error, setError] = useState('');
@@ -262,6 +263,7 @@ export function TemplateDialog({
   useEffect(() => {
     if (!open) return;
     setF({
+      cost: String(item?.cost ?? 0),
       number: String(item?.number ?? nextNumber),
       stageId: item?.stageId ? String(item.stageId) : '',
       blockId: item?.blockId ? String(item.blockId) : '',
@@ -278,6 +280,9 @@ export function TemplateDialog({
     if (!f.description.trim()) return setError('Укажите описание задачи');
     const num = Number(f.number);
     if (!Number.isInteger(num) || num < 1) return setError('№ — целое положительное число');
+    const cost = Math.round(Number(f.cost.replace(/[\s  ₽]/g, '').replace(',', '.') || '0'));
+    if (!Number.isFinite(cost) || cost < 0)
+      return setError('Стоимость — число в рублях, например 200000');
     setPending(true);
     const res = await saveTemplate(item?.id ?? null, {
       number: num,
@@ -287,6 +292,7 @@ export function TemplateDialog({
       termText: f.termText,
       comment: f.comment,
       roleIds: f.roleIds,
+      cost,
     });
     setPending(false);
     if (!res.ok) return setError(res.error);
@@ -366,6 +372,17 @@ export function TemplateDialog({
               />
             </Field>
           </div>
+          <Field
+            label="Стоимость, ₽"
+            hint="Переносится в задачи новых форумов; менеджер может изменить её в форуме"
+          >
+            <Input
+              inputMode="numeric"
+              className="w-48 text-right tabular-nums"
+              value={f.cost}
+              onChange={(e) => setF({ ...f, cost: e.target.value })}
+            />
+          </Field>
           <Field label="Комментарий">
             <Textarea
               rows={2}
