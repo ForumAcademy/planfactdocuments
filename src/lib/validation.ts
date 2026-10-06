@@ -36,15 +36,11 @@ export const forumColorSchema = z.enum([
   'blue',
   'turquoise',
   'indigo',
-  'purple',
-  'magenta',
-  'pink',
-  'coral',
-  'orange',
-  'ocean',
-  'teal',
-  'mint',
-  'ice',
+  'emerald',
+  'cornflower',
+  'mustard',
+  'violet',
+  'slate',
 ]);
 
 export const forumSchema = z

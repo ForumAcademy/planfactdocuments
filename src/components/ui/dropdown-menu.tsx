@@ -4,7 +4,16 @@ import * as React from 'react';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import { cn } from '@/lib/utils';
 
-export const DropdownMenu = Menu.Root;
+/**
+ * Меню по умолчанию немодальное: из пунктов меню открываются окна (редактирование,
+ * подтверждение удаления), и модальное меню оставляло страницу заблокированной для кликов.
+ */
+export function DropdownMenu({
+  modal = false,
+  ...props
+}: React.ComponentPropsWithoutRef<typeof Menu.Root>) {
+  return <Menu.Root modal={modal} {...props} />;
+}
 export const DropdownMenuTrigger = Menu.Trigger;
 
 export function DropdownMenuContent({

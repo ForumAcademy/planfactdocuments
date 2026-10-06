@@ -36,6 +36,9 @@ import {
 } from '@/server/actions/forums';
 import { ForumFormDialog } from './forum-form-dialog';
 
+/** Цифра дней до форума — всегда чёрная, независимо от цвета карточки */
+const DAYS_COLOR = '#111111';
+
 export function forumDateRange(f: Pick<ForumDTO, 'startDate' | 'endDate'>): string {
   return f.endDate && f.endDate !== f.startDate
     ? `${formatDate(f.startDate)} – ${formatDate(f.endDate)}`
@@ -71,6 +74,7 @@ export function ForumCard({
   const onColor = async (k: ForumColor) => {
     const prev = colorKey;
     setColorKey(k);
+    setMenuOpen(false);
     const res = await setForumColor(forum.id, k);
     if (!res.ok) {
       setColorKey(prev);
@@ -109,6 +113,7 @@ export function ForumCard({
 
   // Цвет меняется сразу (без ожидания сервера), сохранение — в фоне
   const [colorKey, setColorKey] = useState(forum.color);
+  const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => setColorKey(forum.color), [forum.color]);
   const col = forumColor(colorKey);
   const daysLeft = diffDays(today, forum.startDate);
@@ -123,7 +128,7 @@ export function ForumCard({
         data-testid="forum-card"
       >
         {/* Шапка в цвете форума */}
-        <div className="px-4 pb-3 pt-4" style={{ background: col.hex, color: col.text }}>
+        <div className="px-4 pb-3 pt-4 text-white" style={{ background: col.hex }}>
           <h2 className="pr-8 text-lg font-semibold leading-tight">{forum.name}</h2>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm opacity-85">
             <span className="inline-flex items-center gap-1">
@@ -143,14 +148,14 @@ export function ForumCard({
             {left === 'прошёл' ? (
               <span className="text-xl font-semibold text-status-gray">Форум прошёл</span>
             ) : left === 'идёт сейчас' ? (
-              <span className="text-xl font-semibold" style={{ color: col.accent }}>
+              <span className="text-xl font-semibold" style={{ color: DAYS_COLOR }}>
                 Форум идёт сейчас
               </span>
             ) : (
               <>
                 <span
                   className="text-4xl font-bold tabular-nums leading-none"
-                  style={{ color: col.accent }}
+                  style={{ color: DAYS_COLOR }}
                 >
                   {daysLeft}
                 </span>
@@ -185,21 +190,27 @@ export function ForumCard({
       </Link>
 
       <div className="absolute right-2 top-2">
-        <DropdownMenu>
+        {/* modal={false}: окно редактирования, открытое из меню, не «замораживает» страницу */}
+        <DropdownMenu modal={false} open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger
-            className="rounded p-1.5 opacity-80 hover:bg-black/10 hover:opacity-100"
-            style={{ color: col.text }}
+            className="rounded p-1.5 text-white/85 outline-none hover:bg-white/15 hover:text-white focus-visible:ring-2 focus-visible:ring-white/70"
             aria-label="Меню форума"
           >
             <MoreVertical className="size-4" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+          <DropdownMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
+            <DropdownMenuItem
+              onSelect={() => {
+                setMenuOpen(false);
+                // Окно открываем после закрытия меню — иначе фокус и блокировка страницы путаются
+                setTimeout(() => setEditOpen(true), 0);
+              }}
+            >
               <Pencil /> Редактировать
             </DropdownMenuItem>
             <div className="px-2 py-1.5">
               <div className="mb-1 text-xs text-ink/60">Цвет карточки</div>
-              <div className="grid grid-cols-6 gap-1.5">
+              <div className="grid grid-cols-4 gap-1.5">
                 {FORUM_COLOR_KEYS.map((k) => (
                   <button
                     key={k}
@@ -210,7 +221,6 @@ export function ForumCard({
                     className={cn(
                       'size-6 rounded-full ring-offset-2',
                       colorKey === k ? 'ring-2 ring-ink/70' : 'hover:scale-110',
-                      'border border-black/10',
                     )}
                     style={{ background: FORUM_COLORS[k].hex }}
                   />
