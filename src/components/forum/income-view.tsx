@@ -377,7 +377,6 @@ function IncomeSummary({
       label: 'План',
       value: plan,
       note: target ? `${pctOf(plan, target)} от цели` : null,
-      muted: true,
     },
     {
       key: 'fact',
@@ -386,7 +385,6 @@ function IncomeSummary({
       note: [target && `${pctOf(fact, target)} от цели`, plan && `${pctOf(fact, plan)} от плана`]
         .filter(Boolean)
         .join(' · '),
-      muted: false,
     },
   ];
   return (
@@ -420,16 +418,14 @@ function IncomeSummary({
           return (
             <React.Fragment key={r.key}>
               <div className="self-center text-sm font-medium">{r.label}</div>
-              <div className="relative h-6 self-center overflow-hidden rounded bg-surface">
-                <div
-                  className={cn(
-                    'absolute inset-y-0 left-0 rounded',
-                    LEVEL_BAR[level],
-                    r.muted && 'opacity-60',
-                  )}
-                  style={{ width: at(r.value) }}
-                  title={`${r.label}: ${formatRub(r.value)}`}
-                />
+              <div className="relative self-center">
+                <div className="h-3 w-full overflow-hidden rounded-full bg-surface">
+                  <div
+                    className={cn('h-full', LEVEL_BAR[level])}
+                    style={{ width: at(r.value) }}
+                    title={`${r.label}: ${formatRub(r.value)}`}
+                  />
+                </div>
                 {expenses > 0 && <Marker left={at(expenses)} />}
                 {target > 0 && <Marker left={at(target)} strong />}
               </div>
@@ -464,7 +460,7 @@ function IncomeSummary({
         )}
       </div>
       {target > 0 && (
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink/60">
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink/70">
           <Legend className="bg-status-red" label="Не покрывает расходы" />
           <Legend className="bg-brand" label="Расходы покрыты" />
           <Legend className="bg-status-green" label="Цель достигнута" />
@@ -478,8 +474,8 @@ function Marker({ left, strong }: { left: string; strong?: boolean }) {
   return (
     <div
       className={cn(
-        'absolute inset-y-0 w-0 border-l-2',
-        strong ? 'border-ink/80' : 'border-dashed border-ink/40',
+        'absolute -inset-y-1 w-0 border-l',
+        strong ? 'border-ink/70' : 'border-dashed border-ink/40',
       )}
       style={{ left }}
     />

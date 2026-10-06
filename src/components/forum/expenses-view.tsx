@@ -121,7 +121,7 @@ export function ExpensesView() {
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-4" data-testid="expenses-view">
-      <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+      <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
         <div>
           <div className="text-xs text-ink/60">Расходы форума по задачам</div>
           <div
@@ -144,12 +144,12 @@ export function ExpensesView() {
             label="Предельно допустимые расходы, ₽"
             onCommit={(v) => void saveLimit(v)}
             testId="expenses-limit"
-            className="-ml-1 w-auto text-left text-2xl font-semibold"
+            className="-ml-1 block w-auto py-0 text-left text-2xl font-semibold leading-8"
             inputClassName="h-8 w-48 text-left text-lg"
           />
           {limit ? (
             <>
-              <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-surface">
+              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface">
                 <div
                   className={cn('h-full', overLimit ? 'bg-status-red' : 'bg-status-green')}
                   style={{ width: `${Math.min(100, (total / limit) * 100)}%` }}
