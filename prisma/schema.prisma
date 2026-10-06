@@ -114,6 +114,8 @@ model Forum {
   location       String?
   /// Сайт форума
   website        String?
+  /// Цвет карточки: violet | sky | pink | orange | blue
+  color          String        @default("blue")
   archived       Boolean       @default(false)
   /// Возвращён из архива вручную — автоархив прошедших форумов его не трогает
   keepActive     Boolean       @default(false)

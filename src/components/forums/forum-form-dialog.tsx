@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
+import { FORUM_COLORS, FORUM_COLOR_KEYS, type ForumColor } from '@/lib/forum-colors';
 import { toast } from 'sonner';
 import { FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,7 @@ import type { ForumDTO } from '@/lib/types';
 import { fieldErrors, forumSchema } from '@/lib/validation';
 import { createForum, recalcDates, updateForum, type PlanSource } from '@/server/actions/forums';
 import type { PlanRowInput } from '@/server/plan-service';
-import { pluralRu } from '@/lib/utils';
+import { cn, pluralRu } from '@/lib/utils';
 
 type SourceKind = 'empty' | 'template' | 'forum' | 'excel';
 
@@ -39,6 +40,7 @@ export function ForumFormDialog({
   const [salesTouched, setSalesTouched] = useState(false);
   const [location, setLocation] = useState('');
   const [website, setWebsite] = useState('');
+  const [color, setColor] = useState<ForumColor>('blue');
   const [source, setSource] = useState<SourceKind>('template');
   const [copyFrom, setCopyFrom] = useState<string>('');
   const [excelRows, setExcelRows] = useState<PlanRowInput[] | null>(null);
@@ -55,6 +57,7 @@ export function ForumFormDialog({
     setSalesTouched(Boolean(forum));
     setLocation(forum?.location ?? '');
     setWebsite(forum?.website ?? '');
+    setColor((forum?.color as ForumColor) ?? 'blue');
     setSource('template');
     setCopyFrom('');
     setExcelRows(null);
@@ -114,6 +117,7 @@ export function ForumFormDialog({
       salesStartDate,
       location: location || null,
       website: website || null,
+      color,
     };
     const parsed = forumSchema.safeParse(input);
     if (!parsed.success) {
@@ -207,6 +211,9 @@ export function ForumFormDialog({
             </Field>
             <Field label="Место проведения" error={errors.location} htmlFor="f-loc">
               <Input id="f-loc" value={location} onChange={(e) => setLocation(e.target.value)} />
+            </Field>
+            <Field label="Цвет карточки">
+              <ColorPicker value={color} onChange={setColor} />
             </Field>
             <Field label="Сайт" error={errors.website} htmlFor="f-site">
               <Input
@@ -320,5 +327,36 @@ export function ForumFormDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Выбор цвета карточки форума — кружки-образцы. */
+export function ColorPicker({
+  value,
+  onChange,
+}: {
+  value: ForumColor;
+  onChange: (c: ForumColor) => void;
+}) {
+  return (
+    <div className="flex h-9 items-center gap-2" role="radiogroup" aria-label="Цвет карточки">
+      {FORUM_COLOR_KEYS.map((k) => (
+        <button
+          key={k}
+          type="button"
+          role="radio"
+          aria-checked={value === k}
+          title={FORUM_COLORS[k].label}
+          aria-label={FORUM_COLORS[k].label}
+          onClick={() => onChange(k)}
+          className={cn(
+            'size-7 rounded-full ring-offset-2 transition',
+            value === k ? 'ring-2 ring-ink/70' : 'hover:scale-110',
+          )}
+          style={{ background: FORUM_COLORS[k].hex }}
+          data-testid={`forum-color-${k}`}
+        />
+      ))}
+    </div>
   );
 }

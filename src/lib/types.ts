@@ -9,6 +9,8 @@ export interface ForumDTO {
   salesStartDate: ISODate;
   location: string | null;
   website: string | null;
+  /** Цвет карточки (см. lib/forum-colors) */
+  color: string;
   archived: boolean;
   reportDate: ISODate | null;
 }

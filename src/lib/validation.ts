@@ -32,6 +32,8 @@ export function normalizeWebsite(v: string | null | undefined): string | null | 
   }
 }
 
+export const forumColorSchema = z.enum(['blue', 'violet', 'sky', 'pink', 'orange']);
+
 export const forumSchema = z
   .object({
     name: z.string().trim().min(1, 'Укажите название форума').max(200, 'Слишком длинное название'),
@@ -44,6 +46,7 @@ export const forumSchema = z
       .max(300)
       .nullish()
       .transform((v) => v || null),
+    color: forumColorSchema.optional().default('blue'),
     website: z
       .string()
       .trim()

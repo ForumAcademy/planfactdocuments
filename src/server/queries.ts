@@ -14,6 +14,7 @@ export function toForumDTO(f: Forum): ForumDTO {
     salesStartDate: dbToISO(f.salesStartDate)!,
     location: f.location,
     website: f.website,
+    color: f.color,
     archived: f.archived,
     reportDate: dbToISO(f.reportDate),
   };

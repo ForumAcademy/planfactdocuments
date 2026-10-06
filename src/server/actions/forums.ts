@@ -6,7 +6,7 @@ import { prisma } from '@/lib/db';
 import { requireEditor } from '@/lib/auth';
 import { addDays, dbToISO, diffDays, isoToDb } from '@/lib/dates';
 import { computeTaskDates, mergeNoteIntoComment } from '@/lib/plan';
-import { forumSchema, type ForumInput } from '@/lib/validation';
+import { forumColorSchema, forumSchema, type ForumInput } from '@/lib/validation';
 import { DEFAULT_REPORT } from '@/server/seed';
 import { run, UserError, type ActionResult } from '@/server/action-utils';
 import { importPlanRows, planRowSchema, recalcForumDates } from '@/server/plan-service';
@@ -46,6 +46,7 @@ export async function createForum(
         salesStartDate: isoToDb(f.salesStartDate),
         location: f.location,
         website: f.website,
+        color: f.color,
       },
     });
     await createDefaultReport(forum.id);
@@ -177,6 +178,7 @@ export async function updateForum(
         salesStartDate: isoToDb(f.salesStartDate),
         location: f.location,
         website: f.website,
+        color: f.color,
       },
     });
     const datesChanged =
@@ -226,6 +228,7 @@ export async function duplicateForum(id: number): Promise<ActionResult<{ id: num
         salesStartDate: src.salesStartDate,
         location: src.location,
         website: src.website,
+        color: src.color,
         reportDate: src.reportDate,
         charts: {
           create: src.charts.map((c) => ({
@@ -275,6 +278,17 @@ export async function deleteForum(id: number): Promise<ActionResult> {
   return run(async () => {
     await requireEditor();
     await prisma.forum.delete({ where: { id } });
+    revalidatePath('/');
+    return null;
+  });
+}
+
+/** Смена цвета карточки форума (из меню карточки). */
+export async function setForumColor(id: number, color: string): Promise<ActionResult> {
+  return run(async () => {
+    await requireEditor();
+    const c = forumColorSchema.parse(color);
+    await prisma.forum.update({ where: { id }, data: { color: c } });
     revalidatePath('/');
     return null;
   });
