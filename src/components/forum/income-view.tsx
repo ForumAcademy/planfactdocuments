@@ -98,7 +98,7 @@ export function IncomeView({ initialItems }: { initialItems: IncomeItemValue[] }
               replace
               scroll={false}
               active={view === key}
-              className="rounded-md px-5 py-1.5 text-sm"
+              className="inline-flex items-center rounded-md px-5 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
               activeClassName="bg-white font-medium text-brand shadow-sm"
               inactiveClassName="text-ink/70 hover:text-ink"
               data-testid={`income-tab-${key}`}

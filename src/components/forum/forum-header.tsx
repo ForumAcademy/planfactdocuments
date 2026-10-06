@@ -238,7 +238,7 @@ export function ForumHeader({ forumOptions }: { forumOptions: { id: number; name
                 href={href(x.key)}
                 role="tab"
                 active={pathname.endsWith(`/${x.key}`)}
-                className="rounded-md px-4 py-1.5 text-sm"
+                className="inline-flex items-center rounded-md px-4 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
                 activeClassName="bg-white font-medium text-brand shadow-sm"
                 inactiveClassName="text-ink/70 hover:text-ink"
               >
