@@ -4,26 +4,40 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Lightbulb,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Trash2,
+} from 'lucide-react';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { NumberCell } from '@/components/ui/number-cell';
 import { Spinner } from '@/components/ui/spinner';
 import { TabGroup, TabLink } from '@/components/ui/tab-links';
 import {
   INCOME_GROUPS,
+  INCOME_ITEMS,
   INCOME_MARGIN,
+  autoPlan,
   incomeLevel,
   incomeSum,
   incomeTarget,
+  planAdvice,
   type IncomeGroup,
   type IncomeLevel,
-  type IncomeItemKey,
   type IncomeItemValue,
 } from '@/lib/income';
 import { cn, formatRub, formatRubShort } from '@/lib/utils';
-import { saveIncomeItems } from '@/server/actions/income';
+import { addIncomeItem, removeIncomeItem, saveIncomeItems } from '@/server/actions/income';
+import type { ActionResult } from '@/server/action-utils';
 import { useForum } from './forum-context';
 
-type Patch = { key: IncomeItemKey } & Partial<Omit<IncomeItemValue, 'key'>>;
+type Patch = { key: string } & Partial<Omit<IncomeItemValue, 'key' | 'group'>> & {
+    removed?: false;
+  };
 
 const pctOf = (part: number, total: number) =>
   total ? `${Math.round((part / total) * 100).toLocaleString('ru-RU')}%` : '—';
@@ -39,9 +53,13 @@ export function IncomeView({ initialItems }: { initialItems: IncomeItemValue[] }
 
   const expenses = tasks.reduce((s, t) => s + t.cost, 0);
   const target = incomeTarget(expenses);
-  const planSum = incomeSum(items, 'planQty');
-  const factSum = incomeSum(items, 'factQty');
-  const byKey = new Map(items.map((i) => [i.key, i]));
+  // План с автоподбором под цель: ручные позиции как есть, остальные добирают до цели
+  const planned = React.useMemo(() => autoPlan(items, target), [items, target]);
+  const planSum = incomeSum(planned, 'planQty');
+  const factSum = incomeSum(planned, 'factQty');
+  const confirm = useConfirm();
+  const removedDefaults = INCOME_ITEMS.filter((d) => !items.some((i) => i.key === d.key));
+  const advice = planAdvice(planned, target);
 
   const save = async (patches: Patch[]) => {
     const prev = items;
@@ -59,6 +77,25 @@ export function IncomeView({ initialItems }: { initialItems: IncomeItemValue[] }
       setItems(prev);
       toast.error(res.error);
     }
+  };
+
+  /** Добавление / удаление позиции: список целиком приходит с сервера */
+  const apply = async (call: () => Promise<ActionResult<IncomeItemValue[]>>) => {
+    setSaving(true);
+    const res = await call();
+    setSaving(false);
+    if (res.ok) setItems(res.data);
+    else toast.error(res.error);
+    return res.ok;
+  };
+  const remove = async (it: IncomeItemValue) => {
+    const ok = await confirm({
+      title: `Убрать позицию «${it.label}»?`,
+      description: 'Позиция исчезнет из плана и факта вместе с её количеством.',
+      confirmText: 'Убрать',
+      danger: true,
+    });
+    if (ok) await apply(() => removeIncomeItem(forum.id, it.key));
   };
 
   const toggle = (key: string) =>
@@ -117,8 +154,9 @@ export function IncomeView({ initialItems }: { initialItems: IncomeItemValue[] }
           <div className="mt-4">
             <h2 className="font-semibold">План продаж</h2>
             <p className="max-w-3xl text-xs text-ink/60">
-              Задайте стоимость одной единицы и плановое количество — сумма плана сразу учитывается
-              в итоге и на шкале выше.
+              Количество подбирается автоматически под цель (расходы +{' '}
+              {Math.round(INCOME_MARGIN * 100)}%). Любое количество можно изменить вручную —
+              остальные позиции пересчитаются, чтобы добрать до цели.
             </p>
           </div>
           <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
@@ -133,7 +171,7 @@ export function IncomeView({ initialItems }: { initialItems: IncomeItemValue[] }
                 </tr>
               </thead>
               {INCOME_GROUPS.map((g) => {
-                const list = g.items.map((d) => byKey.get(d.key)!);
+                const list = planned.filter((i) => i.group === g.key);
                 const open = !collapsed.has(g.key);
                 return (
                   <tbody key={g.key} data-testid={`income-group-${g.key}`}>
@@ -151,32 +189,61 @@ export function IncomeView({ initialItems }: { initialItems: IncomeItemValue[] }
                       ]}
                     />
                     {open &&
-                      g.items.map((d) => {
-                        const it = byKey.get(d.key)!;
+                      list.map((it) => {
                         return (
                           <tr
-                            key={d.key}
+                            key={it.key}
                             className="border-t border-line/60"
                             data-testid="income-row"
                           >
-                            <td className="py-1.5 pl-12 pr-3">{d.label}</td>
-                            <td className="px-1 py-1">
-                              <NumberCell
-                                value={it.price}
-                                format={formatRub}
-                                label={`Стоимость 1 ед.: ${d.label}`}
-                                onCommit={(price) => save([{ key: d.key, price }])}
-                                testId={`income-price-${d.key}`}
+                            <td className="py-1 pl-10 pr-3">
+                              <LabelCell
+                                item={it}
+                                onRename={(label) => save([{ key: it.key, label }])}
+                                onRemove={() => void remove(it)}
                               />
                             </td>
                             <td className="px-1 py-1">
                               <NumberCell
-                                value={it.planQty}
-                                format={formatQty}
-                                label={`План, шт.: ${d.label}`}
-                                onCommit={(planQty) => save([{ key: d.key, planQty }])}
-                                testId={`income-plan-${d.key}`}
+                                value={it.price}
+                                format={formatRub}
+                                label={`Стоимость 1 ед.: ${it.label}`}
+                                onCommit={(price) => save([{ key: it.key, price }])}
+                                testId={`income-price-${it.key}`}
                               />
+                            </td>
+                            <td className="px-1 py-1">
+                              <div className="flex items-center justify-end gap-1">
+                                {it.planManual ? (
+                                  <button
+                                    type="button"
+                                    className="rounded p-1 text-ink/50 hover:bg-surface hover:text-brand"
+                                    title="Вернуть автоматический подбор"
+                                    aria-label={`Вернуть автоматический подбор: ${it.label}`}
+                                    onClick={() => save([{ key: it.key, planManual: false }])}
+                                    data-testid={`income-plan-auto-${it.key}`}
+                                  >
+                                    <RotateCcw className="size-3.5" />
+                                  </button>
+                                ) : (
+                                  <span
+                                    className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-ink/50"
+                                    title="Подобрано автоматически под цель"
+                                  >
+                                    авто
+                                  </span>
+                                )}
+                                <NumberCell
+                                  value={it.planQty}
+                                  format={formatQty}
+                                  label={`План, шт.: ${it.label}`}
+                                  onCommit={(planQty) =>
+                                    save([{ key: it.key, planQty, planManual: true }])
+                                  }
+                                  testId={`income-plan-${it.key}`}
+                                  className={cn('min-w-0 flex-1', !it.planManual && 'text-ink/60')}
+                                />
+                              </div>
                             </td>
                             <td className="px-2 py-1.5 text-right tabular-nums">
                               {formatRub(it.price * it.planQty)}
@@ -187,6 +254,16 @@ export function IncomeView({ initialItems }: { initialItems: IncomeItemValue[] }
                           </tr>
                         );
                       })}
+                    {open && (
+                      <AddItemRow
+                        group={g}
+                        restore={removedDefaults.filter((x) => x.group === g.key)}
+                        onRestore={(key) => save([{ key, removed: false }])}
+                        onAdd={(label, price) =>
+                          apply(() => addIncomeItem(forum.id, { group: g.key, label, price }))
+                        }
+                      />
+                    )}
                   </tbody>
                 );
               })}
@@ -225,6 +302,22 @@ export function IncomeView({ initialItems }: { initialItems: IncomeItemValue[] }
               </tfoot>
             </table>
           </div>
+          {advice.length > 0 && (
+            <section
+              className="mt-3 rounded-lg border border-brand/20 bg-brand/5 px-4 py-3 text-sm"
+              data-testid="income-advice"
+            >
+              <h3 className="flex items-center gap-2 font-semibold text-brand">
+                <Lightbulb className="size-4" />
+                Рекомендация по плану продаж
+              </h3>
+              <ul className="mt-1.5 list-disc space-y-1 pl-6 text-ink/80">
+                {advice.map((a) => (
+                  <li key={a}>{a}</li>
+                ))}
+              </ul>
+            </section>
+          )}
         </>
       ) : (
         <>
@@ -253,7 +346,7 @@ export function IncomeView({ initialItems }: { initialItems: IncomeItemValue[] }
                 </tr>
               </thead>
               {INCOME_GROUPS.map((g) => {
-                const list = g.items.map((d) => byKey.get(d.key)!);
+                const list = planned.filter((i) => i.group === g.key);
                 const open = !collapsed.has(g.key);
                 const fact = incomeSum(list, 'factQty');
                 const plan = incomeSum(list, 'planQty');
@@ -272,15 +365,14 @@ export function IncomeView({ initialItems }: { initialItems: IncomeItemValue[] }
                       ]}
                     />
                     {open &&
-                      g.items.map((d) => {
-                        const it = byKey.get(d.key)!;
+                      list.map((it) => {
                         return (
                           <tr
-                            key={d.key}
+                            key={it.key}
                             className="border-t border-line/60"
                             data-testid="income-row"
                           >
-                            <td className="py-1.5 pl-12 pr-3">{d.label}</td>
+                            <td className="py-1.5 pl-12 pr-3">{it.label}</td>
                             <td className="px-2 py-1.5 text-right tabular-nums text-ink/70">
                               {formatRub(it.price)}
                             </td>
@@ -288,9 +380,9 @@ export function IncomeView({ initialItems }: { initialItems: IncomeItemValue[] }
                               <NumberCell
                                 value={it.factQty}
                                 format={formatQty}
-                                label={`Продано, шт.: ${d.label}`}
-                                onCommit={(factQty) => save([{ key: d.key, factQty }])}
-                                testId={`income-fact-${d.key}`}
+                                label={`Продано, шт.: ${it.label}`}
+                                onCommit={(factQty) => save([{ key: it.key, factQty }])}
+                                testId={`income-fact-${it.key}`}
                               />
                             </td>
                             <td className="px-2 py-1.5 text-right tabular-nums">
@@ -547,5 +639,168 @@ function Progress({ part, total }: { part: number; total: number }) {
       </div>
       <span className="w-11 text-right text-xs tabular-nums">{Math.round(p)}%</span>
     </div>
+  );
+}
+
+/** Название позиции: переименование по карандашу или двойному клику, удаление по корзине. */
+function LabelCell({
+  item,
+  onRename,
+  onRemove,
+}: {
+  item: IncomeItemValue;
+  onRename: (label: string) => void;
+  onRemove: () => void;
+}) {
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(item.label);
+  const commit = () => {
+    setEditing(false);
+    const v = draft.trim();
+    if (v && v !== item.label) onRename(v);
+  };
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onFocus={(e) => e.currentTarget.select()}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit();
+          if (e.key === 'Escape') setEditing(false);
+        }}
+        maxLength={120}
+        className="h-7 w-full max-w-md rounded border border-brand bg-white px-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand/20"
+        aria-label="Название позиции"
+        data-testid={`income-label-${item.key}-input`}
+      />
+    );
+  }
+  const start = () => {
+    setDraft(item.label);
+    setEditing(true);
+  };
+  return (
+    <div className="group flex items-center gap-1">
+      <span className="px-2 py-0.5" onDoubleClick={start} data-testid={`income-label-${item.key}`}>
+        {item.label}
+      </span>
+      <button
+        type="button"
+        className="rounded p-1 text-ink/40 opacity-0 hover:bg-surface hover:text-brand focus-visible:opacity-100 group-hover:opacity-100"
+        title="Переименовать"
+        aria-label={`Переименовать: ${item.label}`}
+        onClick={start}
+      >
+        <Pencil className="size-3.5" />
+      </button>
+      <button
+        type="button"
+        className="rounded p-1 text-ink/40 opacity-0 hover:bg-surface hover:text-status-red focus-visible:opacity-100 group-hover:opacity-100"
+        title="Убрать позицию"
+        aria-label={`Убрать позицию: ${item.label}`}
+        onClick={onRemove}
+        data-testid={`income-remove-${item.key}`}
+      >
+        <Trash2 className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+/** Строка «+ Добавить позицию» в конце группы; там же — возврат убранных позиций по умолчанию. */
+function AddItemRow({
+  group,
+  restore,
+  onRestore,
+  onAdd,
+}: {
+  group: IncomeGroup;
+  restore: { key: string; label: string }[];
+  onRestore: (key: string) => void;
+  onAdd: (label: string, price: number) => Promise<boolean>;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [label, setLabel] = React.useState('');
+  const [price, setPrice] = React.useState('');
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = label.trim();
+    const n = Math.round(Number(price.replace(/[\s  ₽]/g, '').replace(',', '.')) || 0);
+    if (!name) return;
+    if (await onAdd(name, Math.max(0, n))) {
+      setLabel('');
+      setPrice('');
+      setOpen(false);
+    }
+  };
+  return (
+    <tr className="border-t border-line/60">
+      <td colSpan={5} className="py-1.5 pl-12 pr-3">
+        {open ? (
+          <form className="flex flex-wrap items-center gap-2" onSubmit={submit}>
+            <input
+              autoFocus
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="Название позиции"
+              maxLength={120}
+              className="h-8 w-64 rounded border border-line px-2 text-sm focus:border-brand focus:outline-none"
+              aria-label="Название новой позиции"
+              data-testid={`income-add-label-${group.key}`}
+            />
+            <input
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              inputMode="numeric"
+              placeholder="Стоимость 1 ед., ₽"
+              className="h-8 w-44 rounded border border-line px-2 text-right text-sm tabular-nums focus:border-brand focus:outline-none"
+              aria-label="Стоимость одной единицы"
+              data-testid={`income-add-price-${group.key}`}
+            />
+            <button
+              type="submit"
+              className="h-8 rounded bg-brand px-3 text-sm font-medium text-white hover:bg-brand/90"
+              data-testid={`income-add-submit-${group.key}`}
+            >
+              Добавить
+            </button>
+            <button
+              type="button"
+              className="h-8 rounded px-2 text-sm text-ink/70 hover:bg-surface"
+              onClick={() => setOpen(false)}
+            >
+              Отмена
+            </button>
+          </form>
+        ) : (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-brand hover:bg-brand-light"
+              onClick={() => setOpen(true)}
+              data-testid={`income-add-${group.key}`}
+            >
+              <Plus className="size-4" />
+              Добавить позицию
+            </button>
+            {restore.map((r) => (
+              <button
+                key={r.key}
+                type="button"
+                className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-xs text-ink/60 hover:bg-surface hover:text-ink"
+                onClick={() => onRestore(r.key)}
+                title="Вернуть позицию по умолчанию"
+              >
+                <RotateCcw className="size-3" />
+                Вернуть «{r.label}»
+              </button>
+            ))}
+          </div>
+        )}
+      </td>
+    </tr>
   );
 }

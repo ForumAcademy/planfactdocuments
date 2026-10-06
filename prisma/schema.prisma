@@ -133,17 +133,25 @@ model Forum {
 
 /// Линия доходов: позиция (партнёрство или билет) — цена за единицу, план и факт продаж
 model IncomeItem {
-  id      Int    @id @default(autoincrement())
-  forumId Int
-  forum   Forum  @relation(fields: [forumId], references: [id], onDelete: Cascade)
+  id         Int     @id @default(autoincrement())
+  forumId    Int
+  forum      Forum   @relation(fields: [forumId], references: [id], onDelete: Cascade)
   /// Ключ позиции из src/lib/income.ts
-  key     String
+  key        String
   /// Стоимость одной единицы, руб.
-  price   Int
+  price      Int
   /// Плановое количество, шт.
-  planQty Int    @default(0)
+  planQty    Int     @default(0)
   /// Продано фактически, шт.
-  factQty Int    @default(0)
+  factQty    Int     @default(0)
+  /// План задан вручную; иначе количество подбирается под цель автоматически
+  planManual Boolean @default(false)
+  /// Название позиции (своё или переименованная позиция по умолчанию)
+  label      String?
+  /// Группа своей позиции: partners | tickets
+  group      String?
+  /// Позиция по умолчанию убрана из списка
+  removed    Boolean @default(false)
 
   @@unique([forumId, key])
 }
