@@ -33,7 +33,7 @@ const SECTIONS: {
   sub?: readonly SubSection[];
 }[] = [
   { key: 'plan', href: 'gantt', label: 'План', short: 'План', sub: PLAN_SECTIONS },
-  { key: 'expenses', href: 'expenses', label: 'Линия расходов', short: 'Расходы' },
+  { key: 'expenses', href: 'expenses', label: 'Расходы', short: 'Расходы' },
   { key: 'income', href: 'income', label: 'Доходы', short: 'Доходы' },
   { key: 'funnel', href: 'funnel', label: 'Воронка продаж', short: 'Воронка' },
   { key: 'report', href: 'report', label: 'Отчёт', short: 'Отчёт' },

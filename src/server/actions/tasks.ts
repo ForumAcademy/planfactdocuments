@@ -325,7 +325,7 @@ const expenseItemSchema = z.object({
   expenseCategory: patchSchema.shape.expenseCategory,
 });
 
-/** Загрузка заполненного шаблона «Линии расходов»: стоимость и направления задач форума. */
+/** Загрузка заполненного шаблона раздела «Расходы»: стоимость и направления задач форума. */
 export async function updateExpenses(
   forumId: number,
   items: z.input<typeof expenseItemSchema>[],

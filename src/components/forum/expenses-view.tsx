@@ -20,6 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { NumberCell } from '@/components/ui/number-cell';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { todayMsk } from '@/lib/dates';
 import { downloadBlob, safeFileName } from '@/lib/download';
@@ -34,6 +35,7 @@ import {
 } from '@/lib/expenses';
 import type { TaskDTO } from '@/lib/types';
 import { cn, formatRub, pluralRu } from '@/lib/utils';
+import { setExpenseLimit } from '@/server/actions/forums';
 import { CostCell } from './cells';
 import { ExpensesImportDialog } from './expenses-import-dialog';
 import { useForum } from './forum-context';
@@ -57,6 +59,20 @@ export function ExpensesView() {
     return groupExpenses(ordered, blockOf);
   }, [tasks, blockOf]);
   const withCost = tasks.filter((t) => t.cost > 0).length;
+  const [limit, setLimit] = React.useState(forum.expenseLimit);
+  React.useEffect(() => setLimit(forum.expenseLimit), [forum.expenseLimit]);
+  const overLimit = limit != null && total > limit;
+
+  const saveLimit = async (v: number) => {
+    const next = v || null;
+    const prev = limit;
+    setLimit(next);
+    const res = await setExpenseLimit(forum.id, next);
+    if (!res.ok) {
+      setLimit(prev);
+      toast.error(res.error);
+    }
+  };
 
   const toggle = (key: string) =>
     setExpanded((s) => {
@@ -108,13 +124,46 @@ export function ExpensesView() {
       <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
         <div>
           <div className="text-xs text-ink/60">Расходы форума по задачам</div>
-          <div className="text-2xl font-semibold tabular-nums" data-testid="expenses-total">
+          <div
+            className={cn('text-2xl font-semibold tabular-nums', overLimit && 'text-status-red')}
+            data-testid="expenses-total"
+            data-over-limit={overLimit || undefined}
+          >
             {formatRub(total)}
           </div>
           <div className="text-xs text-ink/60">
             {withCost} {pluralRu(withCost, 'статья', 'статьи', 'статей')} со стоимостью из{' '}
             {tasks.length} {pluralRu(tasks.length, 'задачи', 'задач', 'задач')}
           </div>
+        </div>
+        <div className="min-w-[220px]" data-testid="expenses-limit-block">
+          <div className="text-xs text-ink/60">Предельно допустимые расходы</div>
+          <NumberCell
+            value={limit ?? 0}
+            format={(v) => (v ? formatRub(v) : 'Не задан')}
+            label="Предельно допустимые расходы, ₽"
+            onCommit={(v) => void saveLimit(v)}
+            testId="expenses-limit"
+            className="-ml-1 w-auto text-left text-2xl font-semibold"
+            inputClassName="h-8 w-48 text-left text-lg"
+          />
+          {limit ? (
+            <>
+              <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-surface">
+                <div
+                  className={cn('h-full', overLimit ? 'bg-status-red' : 'bg-status-green')}
+                  style={{ width: `${Math.min(100, (total / limit) * 100)}%` }}
+                />
+              </div>
+              <div className={cn('mt-0.5 text-xs', overLimit ? 'text-status-red' : 'text-ink/60')}>
+                {overLimit
+                  ? `Превышение на ${formatRub(total - limit)}`
+                  : `Остаток ${formatRub(limit - total)} · ${pct(total, limit)} лимита`}
+              </div>
+            </>
+          ) : (
+            <div className="text-xs text-ink/60">Нажмите, чтобы задать</div>
+          )}
         </div>
         <div className="ml-auto flex flex-wrap gap-2">
           <Button
@@ -220,7 +269,14 @@ export function ExpensesView() {
               <td className="px-3 py-2.5" colSpan={4}>
                 Итого
               </td>
-              <td className="px-2 py-2.5 text-right tabular-nums">{formatRub(total)}</td>
+              <td
+                className={cn(
+                  'px-2 py-2.5 text-right tabular-nums',
+                  overLimit && 'text-status-red',
+                )}
+              >
+                {formatRub(total)}
+              </td>
               <td className="px-3 py-2.5 text-right tabular-nums">{total ? '100%' : '—'}</td>
             </tr>
           </tfoot>
@@ -228,8 +284,8 @@ export function ExpensesView() {
       </div>
       {total === 0 && (
         <p className="mt-3 text-sm text-ink/60">
-          Стоимость задач пока не заполнена. Укажите её в «Линии задач» (столбец «Стоимость») или
-          скачайте шаблон, заполните и загрузите его здесь.
+          Стоимость задач пока не заполнена. Укажите её во вкладке «План» → «Этапы и задачи»
+          (столбец «Стоимость») или скачайте шаблон, заполните и загрузите его здесь.
         </p>
       )}
 

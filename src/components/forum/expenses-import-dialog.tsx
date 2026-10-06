@@ -115,7 +115,7 @@ export function ExpensesImportDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        title="Загрузка линии расходов"
+        title="Загрузка расходов"
         description="Заполненный шаблон раздела: строки сопоставляются с задачами по «№ задачи»"
         wide
       >

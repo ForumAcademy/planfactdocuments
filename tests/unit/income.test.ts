@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { forecastQuantities, incomeItems, incomeSum, incomeTarget } from '@/lib/income';
+import { incomeItems, incomeLevel, incomeSum, incomeTarget } from '@/lib/income';
 
 describe('доходы', () => {
   it('подставляет цены по умолчанию и сохранённые значения', () => {
@@ -26,27 +26,10 @@ describe('доходы', () => {
     expect(incomeTarget(0)).toBe(0);
   });
 
-  it('калькулятор добирает цель в структуре плана с минимальным перебором', () => {
-    const items = incomeItems([
-      { key: 'partner', price: 500_000, planQty: 2, factQty: 0 },
-      { key: 'participant', price: 95_000, planQty: 10, factQty: 0 },
-    ]);
-    const target = 13_000_000;
-    const q = forecastQuantities(items, target);
-    const sum = items.reduce((s, i) => s + i.price * q[i.key], 0);
-    expect(sum).toBeGreaterThanOrEqual(target);
-    expect(sum - target).toBeLessThan(95_000);
-    expect(q.general).toBe(0);
-    expect(q.vip).toBe(0);
-    expect(q.partner).toBeGreaterThan(0);
-  });
-
-  it('пустой план — типовая структура; без цели — нули', () => {
-    const items = incomeItems([]);
-    const q = forecastQuantities(items, 30_000_000);
-    expect(Object.values(q).every((n) => n >= 0)).toBe(true);
-    expect(q.general + q.strategic + q.partner).toBeGreaterThan(0);
-    expect(items.reduce((s, i) => s + i.price * q[i.key], 0)).toBeGreaterThanOrEqual(30_000_000);
-    expect(Object.values(forecastQuantities(items, 0)).every((n) => n === 0)).toBe(true);
+  it('уровень дохода: убыток, расходы покрыты, цель достигнута', () => {
+    expect(incomeLevel(0, 1_000, 1_300)).toBe('loss');
+    expect(incomeLevel(1_000, 1_000, 1_300)).toBe('covered');
+    expect(incomeLevel(1_299, 1_000, 1_300)).toBe('covered');
+    expect(incomeLevel(1_300, 1_000, 1_300)).toBe('target');
   });
 });

@@ -118,6 +118,8 @@ model Forum {
   website        String?
   /// Цвет карточки (ключ из src/lib/forum-colors.ts)
   color          String        @default("blue")
+  /// Предельно допустимые расходы, руб. (null — лимит не задан)
+  expenseLimit   Int?
   archived       Boolean       @default(false)
   /// Возвращён из архива вручную — автоархив прошедших форумов его не трогает
   keepActive     Boolean       @default(false)

@@ -12,6 +12,8 @@ export interface ForumDTO {
   website: string | null;
   /** Цвет карточки (см. lib/forum-colors) */
   color: string;
+  /** Предельно допустимые расходы, руб.; null — не задан */
+  expenseLimit: number | null;
   archived: boolean;
   reportDate: ISODate | null;
 }

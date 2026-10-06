@@ -105,7 +105,7 @@ const groups: ExpenseExportGroup[] = [
   },
 ];
 
-describe('Excel линии расходов', () => {
+describe('Excel раздела «Расходы»', () => {
   it('шаблон: все задачи с пустой стоимостью, читается обратно', async () => {
     const buf = await buildExpensesWorkbook(groups, {
       forumName: 'Форум',
@@ -135,7 +135,7 @@ describe('Excel линии расходов', () => {
     ]);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buf);
-    const ws = wb.getWorksheet('Линия расходов')!;
+    const ws = wb.getWorksheet('Расходы')!;
     const total = ws.getRow(ws.rowCount);
     expect(total.getCell(1).value).toBe('Итого');
     expect((total.getCell(6).value as { result: number }).result).toBe(450000);
@@ -149,7 +149,7 @@ describe('Excel линии расходов', () => {
     });
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buf);
-    const ws = wb.getWorksheet('Линия расходов')!;
+    const ws = wb.getWorksheet('Расходы')!;
     const rowOf = (n: number) => {
       for (let r = 1; r <= ws.rowCount; r++) if (ws.getRow(r).getCell(2).value === n) return r;
       throw new Error(String(n));

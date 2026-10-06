@@ -302,6 +302,17 @@ export async function deleteForum(id: number): Promise<ActionResult> {
 }
 
 /** Смена цвета карточки форума (из меню карточки). */
+/** Предельно допустимые расходы форума (null — снять лимит). */
+export async function setExpenseLimit(id: number, limit: number | null): Promise<ActionResult> {
+  return run(async () => {
+    await requireEditor();
+    const v = z.number().int().min(0).max(2_000_000_000).nullable().parse(limit);
+    await prisma.forum.update({ where: { id }, data: { expenseLimit: v || null } });
+    revalidatePath(`/forums/${id}`, 'layout');
+    return null;
+  });
+}
+
 export async function setForumColor(id: number, color: string): Promise<ActionResult> {
   return run(async () => {
     await requireEditor();

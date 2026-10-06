@@ -17,6 +17,7 @@ export function toForumDTO(f: Forum): ForumDTO {
     location: f.location,
     website: f.website,
     color: f.color,
+    expenseLimit: f.expenseLimit,
     archived: f.archived,
     reportDate: dbToISO(f.reportDate),
   };

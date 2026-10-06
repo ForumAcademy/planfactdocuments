@@ -1,5 +1,5 @@
 /**
- * Excel «Линии расходов»: шаблон, выгрузка заполненных данных и разбор загруженного файла.
+ * Excel раздела «Расходы»: шаблон, выгрузка заполненных данных и разбор загруженного файла.
  * Строки задач связываются с форумом по № задачи; меняются только стоимость и направление.
  */
 import ExcelJS from 'exceljs';
@@ -7,7 +7,9 @@ import { EXPENSE_CATEGORIES, expenseCategoryByLabel, type ExpenseCategoryKey } f
 import { STATUS_LABEL, type TaskStatusCode } from '../status';
 import { normalizeSpaces, pluralRu } from '../utils';
 
-export const EXPENSES_SHEET_NAME = 'Линия расходов';
+export const EXPENSES_SHEET_NAME = 'Расходы';
+/** Прежнее имя листа — файлы, выгруженные до переименования, тоже читаются */
+const LEGACY_SHEET_NAMES = ['Линия расходов'];
 const LIST_SHEET_NAME = 'Направления';
 const HEADER_ROW = 4;
 
@@ -59,7 +61,7 @@ export async function buildExpensesWorkbook(
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Статус форумы';
   wb.created = new Date();
-  wb.title = `${meta.forumName} — линия расходов`;
+  wb.title = `${meta.forumName} — расходы`;
 
   const ws = wb.addWorksheet(EXPENSES_SHEET_NAME, {
     views: [{ state: 'frozen', ySplit: HEADER_ROW }],
@@ -70,13 +72,13 @@ export async function buildExpensesWorkbook(
 
   ws.mergeCells(1, 1, 1, lastCol);
   const title = ws.getCell(1, 1);
-  title.value = `Линия расходов — ${meta.forumName}`;
+  title.value = `Расходы — ${meta.forumName}`;
   title.font = { bold: true, size: 14, color: { argb: 'FF0A0A9F' } };
   ws.mergeCells(2, 1, 2, lastCol);
   const note = ws.getCell(2, 1);
   note.value = isTemplate
     ? 'Заполните «Стоимость, руб.» по задачам; направление можно сменить из списка. Не меняйте «№ задачи». Пустая стоимость — без изменений.'
-    : `Данные на ${meta.date}. Файл можно поправить и загрузить обратно в раздел «Линия расходов».`;
+    : `Данные на ${meta.date}. Файл можно поправить и загрузить обратно в раздел «Расходы».`;
   note.font = { italic: true, color: { argb: 'FF5B6475' } };
   note.alignment = { wrapText: true };
   ws.getRow(2).height = 30;
@@ -235,7 +237,10 @@ function cellNumber(v: ExcelJS.CellValue): { value: number | null; error: boolea
   return Number.isFinite(n) ? { value: n, error: false } : { value: null, error: true };
 }
 
-/** Читает заполненный шаблон «Линии расходов». */
+const isExpensesSheet = (name: string) =>
+  name === EXPENSES_SHEET_NAME || LEGACY_SHEET_NAMES.includes(name);
+
+/** Читает заполненный шаблон раздела «Расходы». */
 export async function parseExpensesWorkbook(
   data: ArrayBuffer | Uint8Array,
 ): Promise<ParsedExpenses> {
@@ -244,8 +249,8 @@ export async function parseExpensesWorkbook(
   const empty = (msg: string): ParsedExpenses => ({ rows: [], skipped: [], fileErrors: [msg] });
 
   const sheets = [
-    ...wb.worksheets.filter((w) => w.name === EXPENSES_SHEET_NAME),
-    ...wb.worksheets.filter((w) => w.name !== EXPENSES_SHEET_NAME),
+    ...wb.worksheets.filter((w) => isExpensesSheet(w.name)),
+    ...wb.worksheets.filter((w) => !isExpensesSheet(w.name)),
   ];
   let ws: ExcelJS.Worksheet | undefined;
   let headerRow = 0;
