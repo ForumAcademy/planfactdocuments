@@ -18,9 +18,15 @@ import { PlanExportButton } from './plan-export-dialog';
 
 const SECTIONS = [
   { key: 'gantt', label: 'Диаграмма Ганта', short: 'Гант' },
-  { key: 'tasks', label: 'Этапы и задачи', short: 'Задачи' },
+  { key: 'tasks', label: 'Линия задач', short: 'Задачи' },
+  { key: 'expenses', label: 'Линия расходов', short: 'Расходы' },
+  { key: 'income', label: 'Линия доходов', short: 'Доходы' },
+  { key: 'funnel', label: 'Воронка продаж', short: 'Воронка' },
   { key: 'report', label: 'Отчёт', short: 'Отчёт' },
 ] as const;
+
+/** Вкладки, где работают фильтры задач (счётчики статусов, query-параметры) */
+const TASK_SECTIONS = ['gantt', 'tasks'];
 
 export function ForumBreadcrumbs() {
   const { forum } = useForum();
@@ -57,7 +63,7 @@ export function ForumHeader({ forumOptions }: { forumOptions: { id: number; name
   const sp = useSearchParams();
   const [editOpen, setEditOpen] = React.useState(false);
   const c = countStatuses(tasks, today);
-  const onReport = pathname.endsWith('/report');
+  const onReport = !TASK_SECTIONS.some((k) => pathname.endsWith(`/${k}`));
 
   const toggleStatus = (s: TaskStatusCode) => {
     const on = filters.status.length === 1 && filters.status[0] === s;
@@ -69,7 +75,9 @@ export function ForumHeader({ forumOptions }: { forumOptions: { id: number; name
   // Переход между вкладками сохраняет фильтры
   const qs = sp.toString();
   const href = (key: string) =>
-    key !== 'report' && qs ? `/forums/${forum.id}/${key}?${qs}` : `/forums/${forum.id}/${key}`;
+    TASK_SECTIONS.includes(key) && qs
+      ? `/forums/${forum.id}/${key}?${qs}`
+      : `/forums/${forum.id}/${key}`;
 
   const counter = (
     label: string,
