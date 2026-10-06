@@ -404,7 +404,6 @@ export function ForumFormDialog({
                 </div>
               )}
               {errors.source && <p className="mt-1 text-xs text-status-red">{errors.source}</p>}
-              {errors.source && <p className="mt-1 text-xs text-status-red">{errors.source}</p>}
             </div>
           )}
 
