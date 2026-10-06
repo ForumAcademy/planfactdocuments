@@ -128,7 +128,10 @@ export function ForumCard({
         data-testid="forum-card"
       >
         {/* Шапка в цвете форума */}
-        <div className="px-4 pb-3 pt-4 text-white" style={{ background: col.hex }}>
+        <div
+          className={cn('px-4 pb-3 pt-4', col.light ? 'text-ink' : 'text-white')}
+          style={{ background: col.hex }}
+        >
           <h2 className="pr-8 text-lg font-semibold leading-tight">{forum.name}</h2>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm opacity-85">
             <span className="inline-flex items-center gap-1">
@@ -193,7 +196,12 @@ export function ForumCard({
         {/* modal={false}: окно редактирования, открытое из меню, не «замораживает» страницу */}
         <DropdownMenu modal={false} open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger
-            className="rounded p-1.5 text-white/85 outline-none hover:bg-white/15 hover:text-white focus-visible:ring-2 focus-visible:ring-white/70"
+            className={cn(
+              'rounded p-1.5 outline-none focus-visible:ring-2',
+              col.light
+                ? 'text-ink/70 hover:bg-black/5 hover:text-ink focus-visible:ring-ink/40'
+                : 'text-white/85 hover:bg-white/15 hover:text-white focus-visible:ring-white/70',
+            )}
             aria-label="Меню форума"
           >
             <MoreVertical className="size-4" />
@@ -210,7 +218,7 @@ export function ForumCard({
             </DropdownMenuItem>
             <div className="px-2 py-1.5">
               <div className="mb-1 text-xs text-ink/60">Цвет карточки</div>
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-5 gap-1.5">
                 {FORUM_COLOR_KEYS.map((k) => (
                   <button
                     key={k}
@@ -219,7 +227,7 @@ export function ForumCard({
                     aria-label={`Цвет: ${FORUM_COLORS[k].label}`}
                     onClick={() => void onColor(k)}
                     className={cn(
-                      'size-6 rounded-full ring-offset-2',
+                      'size-6 rounded-full border border-black/10 ring-offset-2',
                       colorKey === k ? 'ring-2 ring-ink/70' : 'hover:scale-110',
                     )}
                     style={{ background: FORUM_COLORS[k].hex }}
