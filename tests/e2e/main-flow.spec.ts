@@ -46,7 +46,7 @@ test('вход, создание форума, импорт плана, смен
   await expect(page.getByText(/План загружен: добавлено 149/)).toBeVisible({ timeout: 60_000 });
 
   // Список задач
-  await page.getByRole('tab', { name: 'Линия задач' }).click();
+  await page.getByRole('tab', { name: 'Этапы и задачи' }).click();
   await expect(page.getByText('Показано 149 из 149')).toBeVisible();
   const row = page.getByTestId('task-row').first();
   await row.getByTestId('status-cell').click();

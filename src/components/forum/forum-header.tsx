@@ -16,14 +16,34 @@ import { useForum } from './forum-context';
 import { PlanImportButton } from './plan-import-dialog';
 import { PlanExportButton } from './plan-export-dialog';
 
-const SECTIONS = [
+/** Подразделы вкладки «План» (страницы /tasks и /gantt) */
+const PLAN_SECTIONS = [
+  { key: 'tasks', label: 'Этапы и задачи', short: 'Задачи' },
   { key: 'gantt', label: 'Диаграмма Ганта', short: 'Гант' },
-  { key: 'tasks', label: 'Линия задач', short: 'Задачи' },
-  { key: 'expenses', label: 'Линия расходов', short: 'Расходы' },
-  { key: 'income', label: 'Доходы', short: 'Доходы' },
-  { key: 'funnel', label: 'Воронка продаж', short: 'Воронка' },
-  { key: 'report', label: 'Отчёт', short: 'Отчёт' },
 ] as const;
+
+type SubSection = { key: string; label: string; short: string };
+
+/** Вкладки форума; `href` — страница, на которую ведёт вкладка */
+const SECTIONS: {
+  key: string;
+  href: string;
+  label: string;
+  short: string;
+  sub?: readonly SubSection[];
+}[] = [
+  { key: 'plan', href: 'gantt', label: 'План', short: 'План', sub: PLAN_SECTIONS },
+  { key: 'expenses', href: 'expenses', label: 'Линия расходов', short: 'Расходы' },
+  { key: 'income', href: 'income', label: 'Доходы', short: 'Доходы' },
+  { key: 'funnel', href: 'funnel', label: 'Воронка продаж', short: 'Воронка' },
+  { key: 'report', href: 'report', label: 'Отчёт', short: 'Отчёт' },
+];
+
+function activeSection(pathname: string) {
+  return SECTIONS.find((s) =>
+    s.sub ? s.sub.some((x) => pathname.endsWith(`/${x.key}`)) : pathname.endsWith(`/${s.href}`),
+  );
+}
 
 /** Вкладки, где работают фильтры задач (счётчики статусов, query-параметры) */
 const TASK_SECTIONS = ['gantt', 'tasks'];
@@ -31,7 +51,8 @@ const TASK_SECTIONS = ['gantt', 'tasks'];
 export function ForumBreadcrumbs() {
   const { forum } = useForum();
   const pathname = usePathname();
-  const section = SECTIONS.find((s) => pathname.endsWith(`/${s.key}`));
+  const section = activeSection(pathname);
+  const sub = section?.sub?.find((x) => pathname.endsWith(`/${x.key}`));
   return (
     <nav aria-label="Хлебные крошки" className="border-b border-line bg-surface print:hidden">
       <ol className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-1 px-4 py-2 text-sm">
@@ -52,6 +73,12 @@ export function ForumBreadcrumbs() {
             <span>{section.label}</span>
           </li>
         )}
+        {sub && (
+          <li className="flex items-center gap-1">
+            <ChevronRight className="size-3.5 text-status-gray" />
+            <span>{sub.label}</span>
+          </li>
+        )}
       </ol>
     </nav>
   );
@@ -63,6 +90,7 @@ export function ForumHeader({ forumOptions }: { forumOptions: { id: number; name
   const sp = useSearchParams();
   const [editOpen, setEditOpen] = React.useState(false);
   const c = countStatuses(tasks, today);
+  const current = activeSection(pathname);
   const onReport = !TASK_SECTIONS.some((k) => pathname.endsWith(`/${k}`));
 
   const toggleStatus = (s: TaskStatusCode) => {
@@ -185,9 +213,9 @@ export function ForumHeader({ forumOptions }: { forumOptions: { id: number; name
           {SECTIONS.map((s) => (
             <TabLink
               key={s.key}
-              href={href(s.key)}
+              href={href(s.href)}
               role="tab"
-              active={pathname.endsWith(`/${s.key}`)}
+              active={current?.key === s.key}
               className="-mb-px inline-flex flex-1 items-center justify-center whitespace-nowrap border-b-2 px-2 py-2 text-sm sm:flex-none sm:px-4"
               activeClassName="border-brand font-medium text-brand"
               inactiveClassName="border-transparent text-ink/70 hover:text-ink"
@@ -197,6 +225,29 @@ export function ForumHeader({ forumOptions }: { forumOptions: { id: number; name
             </TabLink>
           ))}
         </TabGroup>
+        {current?.sub && (
+          <TabGroup
+            className="mb-3 mt-3 inline-flex rounded-lg border border-line bg-surface p-0.5"
+            role="tablist"
+            aria-label={current.label}
+            data-testid="plan-subtabs"
+          >
+            {current.sub.map((x) => (
+              <TabLink
+                key={x.key}
+                href={href(x.key)}
+                role="tab"
+                active={pathname.endsWith(`/${x.key}`)}
+                className="rounded-md px-4 py-1.5 text-sm"
+                activeClassName="bg-white font-medium text-brand shadow-sm"
+                inactiveClassName="text-ink/70 hover:text-ink"
+              >
+                <span className="sm:hidden">{x.short}</span>
+                <span className="hidden sm:inline">{x.label}</span>
+              </TabLink>
+            ))}
+          </TabGroup>
+        )}
       </div>
       <ForumFormDialog
         open={editOpen}
