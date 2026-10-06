@@ -37,6 +37,8 @@ export interface TaskDTO {
   employeeIds: number[];
   /** Стоимость, руб. */
   cost: number;
+  /** Направление расходов (см. lib/expenses); null — автоматически */
+  expenseCategory: string | null;
 }
 
 export interface StageDTO {

@@ -47,6 +47,8 @@ interface ForumContextValue {
   resetFilters: () => void;
   patchTask: (id: number, patch: TaskPatch, opts?: { silent?: boolean }) => Promise<TaskDTO | null>;
   bulkUpdate: (ids: number[], input: Parameters<typeof bulkUpdateTasks>[1]) => Promise<boolean>;
+  /** Принять задачи, изменённые на сервере (например, загрузкой шаблона расходов) */
+  mergeTasks: (list: TaskDTO[]) => void;
   addTask: (input: Parameters<typeof createTask>[1]) => Promise<TaskDTO | null>;
   removeTasks: (ids: number[]) => Promise<boolean>;
   duplicate: (id: number) => Promise<void>;
@@ -155,6 +157,8 @@ export function ForumProvider({
           if (patch.roleIds !== undefined) n.roleIds = patch.roleIds;
           if (patch.stageId !== undefined) n.stageId = patch.stageId;
           if (patch.blockId !== undefined) n.blockId = patch.blockId;
+          if (patch.cost !== undefined) n.cost = patch.cost;
+          if (patch.expenseCategory !== undefined) n.expenseCategory = patch.expenseCategory;
           return n;
         }),
       );
@@ -244,6 +248,7 @@ export function ForumProvider({
     resetFilters,
     patchTask,
     bulkUpdate,
+    mergeTasks: replaceTasks,
     addTask,
     removeTasks,
     duplicate,

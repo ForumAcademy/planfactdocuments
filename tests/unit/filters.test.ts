@@ -19,6 +19,7 @@ const base: TaskDTO = {
   completedAt: null,
   comment: null,
   cost: 0,
+  expenseCategory: null,
   order: 1,
   roleIds: [1],
   employeeIds: [],

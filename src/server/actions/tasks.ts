@@ -14,6 +14,7 @@ import { run, UserError, type ActionResult } from '@/server/action-utils';
 import { taskInclude, toTaskDTO } from '@/server/queries';
 import { importPlanRows, planRowSchema, type ImportResult } from '@/server/plan-service';
 import { syncAutoAssignments } from '@/server/auto-assign';
+import { expenseCategory, isExpenseCategory } from '@/lib/expenses';
 
 const id = z.number().int().positive();
 
@@ -31,6 +32,11 @@ const patchSchema = z
     completedAt: optionalIsoDate,
     comment: z.string().max(4000),
     cost: z.number().int().min(0).max(10_000_000_000),
+    /** Направление расходов; null — автоматически */
+    expenseCategory: z
+      .string()
+      .refine(isExpenseCategory, 'Неизвестное направление расходов')
+      .nullable(),
     roleIds: z.array(id).max(30),
     employeeIds: z.array(id).max(30),
     needsClarification: z.boolean(),
@@ -107,6 +113,17 @@ async function applyPatch(
       field: 'Стоимость',
       oldValue: formatRub(task.cost),
       newValue: formatRub(p.cost),
+    });
+  }
+
+  if (p.expenseCategory !== undefined && p.expenseCategory !== task.expenseCategory) {
+    data.expenseCategory = p.expenseCategory;
+    const label = (v: string | null) =>
+      isExpenseCategory(v) ? expenseCategory(v).label : 'Автоматически';
+    hist.push({
+      field: 'Направление расходов',
+      oldValue: label(task.expenseCategory),
+      newValue: label(p.expenseCategory),
     });
   }
 
@@ -302,6 +319,46 @@ export async function bulkUpdateTasks(
   });
 }
 
+const expenseItemSchema = z.object({
+  taskId: id,
+  cost: patchSchema.shape.cost,
+  expenseCategory: patchSchema.shape.expenseCategory,
+});
+
+/** Загрузка заполненного шаблона «Линии расходов»: стоимость и направления задач форума. */
+export async function updateExpenses(
+  forumId: number,
+  items: z.input<typeof expenseItemSchema>[],
+): Promise<ActionResult<TaskDTO[]>> {
+  return run(async () => {
+    const { userName } = await requireEditor();
+    const list = z.array(expenseItemSchema).min(1, 'Нет изменений').max(3000).parse(items);
+    const ids = list.map((x) => x.taskId);
+    const result = await prisma.$transaction(
+      async (tx) => {
+        const tasks = await tx.task.findMany({
+          where: { id: { in: ids }, forumId },
+          include: fullInclude,
+        });
+        if (tasks.length !== new Set(ids).size)
+          throw new UserError('Список задач устарел — обновите страницу');
+        const byId = new Map(tasks.map((t) => [t.id, t]));
+        for (const x of list) {
+          await applyPatch(
+            tx,
+            byId.get(x.taskId)!,
+            { cost: x.cost, expenseCategory: x.expenseCategory },
+            userName,
+          );
+        }
+        return tx.task.findMany({ where: { id: { in: ids } }, include: taskInclude });
+      },
+      { timeout: 60_000 },
+    );
+    return result.map(toTaskDTO);
+  });
+}
+
 const createSchema = z.object({
   stageId: id.nullable().optional(),
   blockId: id.nullable().optional(),
@@ -394,6 +451,7 @@ export async function duplicateTask(taskId: number): Promise<ActionResult<TaskDT
         datesManual: t.datesManual,
         employeesManual: t.employeesManual,
         comment: t.comment,
+        expenseCategory: t.expenseCategory,
         roles: { connect: t.roles.map((r) => ({ id: r.id })) },
         employees: { connect: t.employees.map((e) => ({ id: e.id })) },
         history: {

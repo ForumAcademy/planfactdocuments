@@ -162,6 +162,8 @@ model Task {
   updatedAt          DateTime      @updatedAt
   /// Стоимость выполнения задачи, руб.
   cost               Int           @default(0)
+  /// Направление расходов (ключ из src/lib/expenses.ts); null — определяется автоматически
+  expenseCategory    String?
 
   @@index([forumId, order])
 }
