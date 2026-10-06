@@ -236,3 +236,12 @@ model ReminderLog {
   @@index([dayKey])
   @@index([dayKey, taskId, employeeId])
 }
+
+/// Производственный календарь: исключения из обычной недели (сб, вс — выходные).
+/// holiday — праздничный / нерабочий день; workday — рабочий день (перенос на выходной);
+/// short — сокращённый рабочий день.
+model CalendarDay {
+  date DateTime @id @db.Date
+  kind String
+  note String?
+}

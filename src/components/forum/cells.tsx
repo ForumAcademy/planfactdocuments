@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Check, ChevronDown } from 'lucide-react';
+import { CalendarX2, Check, ChevronDown } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { DateInput } from '@/components/ui/date-input';
@@ -113,9 +113,11 @@ export function DateCell({
   field: 'startDate' | 'endDate';
   warn?: React.ReactNode;
 }) {
-  const { patchTask } = useForum();
+  const { patchTask, calendar } = useForum();
   const [editing, setEditing] = React.useState(false);
   const value = task[field];
+  // Дата на выходной или праздник — предупреждение
+  const offReason = calendar.offReason(value);
   if (editing) {
     return (
       <DateInput
@@ -135,10 +137,17 @@ export function DateCell({
     <button
       type="button"
       onClick={() => setEditing(true)}
-      className="inline-flex items-center gap-1 whitespace-nowrap rounded px-1 py-0.5 tabular-nums hover:bg-brand-light"
-      title="Изменить дату"
+      className={cn(
+        'inline-flex items-center gap-1 whitespace-nowrap rounded px-1 py-0.5 tabular-nums hover:bg-brand-light',
+        offReason && 'text-yellow-800',
+      )}
+      title={
+        offReason ? `Нерабочий день — ${offReason}. Нажмите, чтобы изменить дату` : 'Изменить дату'
+      }
+      data-off-day={offReason ? '1' : undefined}
     >
       {formatDate(value) || <span className="text-status-gray">—</span>}
+      {offReason && <CalendarX2 className="size-3.5 text-yellow-600" aria-label="Нерабочий день" />}
       {warn}
     </button>
   );

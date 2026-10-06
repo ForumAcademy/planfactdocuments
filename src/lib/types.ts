@@ -1,4 +1,5 @@
 import type { ISODate } from './dates';
+import type { CalendarDayDTO } from './work-calendar';
 import type { TaskStatusCode } from './status';
 
 export interface ForumDTO {
@@ -76,6 +77,8 @@ export interface DictsDTO {
   employees: EmployeeDTO[];
   /** Формулировки срока — подсказки в поле «Срок» */
   terms: TermPhraseDTO[];
+  /** Производственный календарь: праздники, переносы, сокращённые дни */
+  calendar: CalendarDayDTO[];
 }
 
 export interface HistoryDTO {

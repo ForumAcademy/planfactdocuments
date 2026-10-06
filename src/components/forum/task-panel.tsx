@@ -21,6 +21,7 @@ import type { HistoryDTO, TaskDTO } from '@/lib/types';
 import { getTaskHistory } from '@/server/actions/tasks';
 import { useForum } from './forum-context';
 import { TermCombobox } from '@/components/ui/term-combobox';
+import { OffDayNote } from '@/components/ui/off-day-note';
 
 /** Боковая панель редактирования задачи. */
 export function TaskPanel() {
@@ -42,7 +43,7 @@ export function TaskPanel() {
 }
 
 function PanelBody({ task, onClose }: { task: TaskDTO; onClose: () => void }) {
-  const { patchTask, dicts, today, duplicate, removeTasks, forum, lookups } = useForum();
+  const { patchTask, dicts, today, duplicate, removeTasks, forum, lookups, calendar } = useForum();
   const termOptions = React.useMemo(
     () => dicts.terms.filter((t) => !t.archived).map((t) => t.text),
     [dicts.terms],
@@ -217,6 +218,7 @@ function PanelBody({ task, onClose }: { task: TaskDTO; onClose: () => void }) {
         <div className="grid grid-cols-2 gap-3">
           <Field label="Дата начала">
             <DateInput value={task.startDate} onChange={(v) => save({ startDate: v })} />
+            <OffDayNote reason={calendar.offReason(task.startDate)} />
           </Field>
           <Field label="Дата окончания (срок)">
             <DateInput
@@ -224,6 +226,7 @@ function PanelBody({ task, onClose }: { task: TaskDTO; onClose: () => void }) {
               min={task.startDate}
               onChange={(v) => save({ endDate: v })}
             />
+            <OffDayNote reason={calendar.offReason(task.endDate)} />
           </Field>
         </div>
 

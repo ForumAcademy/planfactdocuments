@@ -8,6 +8,9 @@ import { colorSchema, employeeSchema, nameSchema, type EmployeeInput } from '@/l
 import { run, UserError, type ActionResult } from '@/server/action-utils';
 import { normalizeTgUsername } from '@/lib/telegram-format';
 import { syncAutoAssignments } from '@/server/auto-assign';
+import { getCalendarDays } from '@/server/queries';
+import { isoToDb } from '@/lib/dates';
+import type { CalendarDayDTO } from '@/lib/work-calendar';
 
 export type DictKind = 'stage' | 'block' | 'role' | 'employee' | 'template';
 
@@ -288,5 +291,45 @@ export async function setTermPhraseArchived(id: number, archived: boolean): Prom
     await prisma.termPhrase.update({ where: { id: idSchema.parse(id) }, data: { archived } });
     refresh();
     return null;
+  });
+}
+
+/* ---------- Производственный календарь ---------- */
+
+const calendarSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  kind: z.enum(['holiday', 'workday', 'short']).nullable(),
+  note: z
+    .string()
+    .trim()
+    .max(200)
+    .nullish()
+    .transform((v) => v || null),
+});
+
+/** Отметить день: праздник, рабочий (перенос), сокращённый; kind = null — обычный день. */
+export async function setCalendarDay(
+  input: z.input<typeof calendarSchema>,
+): Promise<ActionResult<CalendarDayDTO[]>> {
+  return run(async () => {
+    await requireEditor();
+    const d = calendarSchema.parse(input);
+    const date = isoToDb(d.date);
+    if (d.kind === null) await prisma.calendarDay.deleteMany({ where: { date } });
+    else
+      await prisma.calendarDay.upsert({
+        where: { date },
+        update: { kind: d.kind, note: d.note },
+        create: { date, kind: d.kind, note: d.note },
+      });
+    return getCalendarDays();
+  });
+}
+
+/** Календарь для окон, где нет данных страницы форума (например, «Новый форум»). */
+export async function getWorkCalendar(): Promise<ActionResult<CalendarDayDTO[]>> {
+  return run(async () => {
+    await requireEditor();
+    return getCalendarDays();
   });
 }

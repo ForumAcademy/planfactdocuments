@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import {
+  CalendarX2,
   AlertTriangle,
   ChevronDown,
   ChevronRight,
@@ -81,7 +82,8 @@ interface DragState {
 }
 
 export function GanttView() {
-  const { visible, tasks, forum, today, lookups, patchTask, setOpenTaskId, filters } = useForum();
+  const { visible, tasks, forum, today, lookups, patchTask, setOpenTaskId, filters, calendar } =
+    useForum();
   const [scale, setScale] = React.useState<Scale>('week');
   // Ширина столбца с названиями задач: меняется перетаскиванием границы, запоминается в браузере
   const [treeW, setTreeW] = React.useState<number | null>(null);
@@ -363,12 +365,12 @@ export function GanttView() {
       if (scale === 'day') {
         for (let i = 0; i < range.days; i++) {
           const day = addDays(range.from, i);
-          const wd = new Date(`${day}T00:00:00Z`).getUTCDay();
           bottom.push({
             label: String(Number(day.slice(8))),
             left: i * px,
             width: px,
-            weekend: wd === 0 || wd === 6,
+            // Выходные и праздники по производственному календарю
+            weekend: calendar.isOff(day),
           });
         }
       } else {
@@ -378,7 +380,7 @@ export function GanttView() {
       }
     }
     return { top, bottom };
-  }, [range, scale, x, px]);
+  }, [range, scale, x, px, calendar]);
 
   const markers = [
     {
@@ -821,7 +823,10 @@ function TaskBar({
   onHover: (e: React.MouseEvent) => void;
   onLeave: () => void;
 }) {
+  const { calendar } = useForum();
   const { start, end } = drag ? applyDrag(drag) : eff;
+  const offStart = calendar.offReason(start);
+  const offEnd = calendar.offReason(end);
   const tone = barTone(task, today);
   const color = TONE_COLOR[tone];
   const left = x(start);
@@ -896,6 +901,15 @@ function TaskBar({
       {drag && (
         <span className="pointer-events-none absolute -top-5 left-0 whitespace-nowrap rounded bg-ink px-1 text-[10px] text-white">
           {formatDate(start)} – {formatDate(end)}
+          {(offStart || offEnd) && ' · нерабочий день'}
+        </span>
+      )}
+      {!drag && (offStart || offEnd) && (
+        <span
+          className="pointer-events-none absolute -right-5 top-1/2 flex size-4 -translate-y-1/2 items-center justify-center rounded-full bg-yellow-100"
+          data-testid="gantt-offday"
+        >
+          <CalendarX2 className="size-3 text-yellow-700" />
         </span>
       )}
     </div>
@@ -903,8 +917,10 @@ function TaskBar({
 }
 
 function Tooltip({ task, x, y }: { task: TaskDTO; x: number; y: number }) {
-  const { today, lookups } = useForum();
+  const { today, lookups, calendar } = useForum();
   const lag = lagDays(task, today);
+  const offStart = calendar.offReason(task.startDate);
+  const offEnd = calendar.offReason(task.endDate);
   const left = Math.min(x + 14, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 340);
   const top = Math.min(y + 14, (typeof window !== 'undefined' ? window.innerHeight : 800) - 190);
   return (
@@ -933,6 +949,15 @@ function Tooltip({ task, x, y }: { task: TaskDTO; x: number; y: number }) {
           {lag > 0 ? `+${lag} дн.` : 'нет'}
         </span>
       </div>
+      {(offStart || offEnd) && (
+        <div className="mt-2 flex items-start gap-1 text-yellow-700">
+          <CalendarX2 className="mt-px size-3 shrink-0" />
+          <span>
+            {offStart && <>Начало — {offStart}. </>}
+            {offEnd && <>Окончание — {offEnd}.</>}
+          </span>
+        </div>
+      )}
       {task.needsClarification && (
         <div className="mt-2 flex items-center gap-1 text-yellow-700">
           <AlertTriangle className="size-3" /> Срок примерный: текст не распознан, даты — весь этап

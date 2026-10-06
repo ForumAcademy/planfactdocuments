@@ -2,6 +2,9 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { OffDayNote } from '@/components/ui/off-day-note';
+import { makeCalendar, type WorkCalendar } from '@/lib/work-calendar';
+import { getWorkCalendar } from '@/server/actions/dicts';
 import { FORUM_COLORS, FORUM_COLOR_KEYS, type ForumColor } from '@/lib/forum-colors';
 import { toast } from 'sonner';
 import { ArrowLeft, ArrowRight, FileSpreadsheet } from 'lucide-react';
@@ -49,6 +52,12 @@ export function ForumFormDialog({
   const [pending, setPending] = useState(false);
   // Создание — в 2 шага: 1) запланировать форум, 2) сформировать план подготовки
   const [step, setStep] = useState<1 | 2>(1);
+  // Производственный календарь — для предупреждения о датах на выходные и праздники
+  const [calendar, setCalendar] = useState<WorkCalendar | null>(null);
+  useEffect(() => {
+    if (!open || calendar) return;
+    void getWorkCalendar().then((r) => r.ok && setCalendar(makeCalendar(r.data)));
+  }, [open, calendar]);
 
   useEffect(() => {
     if (!open) return;
@@ -239,6 +248,7 @@ export function ForumFormDialog({
                     value={startDate || null}
                     onChange={(v) => onStartChange(v ?? '')}
                   />
+                  <OffDayNote reason={calendar?.offReason(startDate || null)} />
                 </Field>
                 <Field
                   label="Дата окончания"
@@ -252,6 +262,7 @@ export function ForumFormDialog({
                     min={startDate || null}
                     onChange={(v) => setEndDate(v ?? '')}
                   />
+                  <OffDayNote reason={calendar?.offReason(endDate || null)} />
                 </Field>
                 <Field
                   label="Старт продаж *"

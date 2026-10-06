@@ -48,6 +48,7 @@ const tasks = [
 ];
 const dicts: DictsDTO = {
   terms: [],
+  calendar: [],
   stages: [
     { id: 1, name: '1', order: 1, color: '#000', archived: false },
     { id: 2, name: '2', order: 2, color: '#000', archived: false },

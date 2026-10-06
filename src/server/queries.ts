@@ -1,3 +1,4 @@
+import type { CalendarDayDTO } from '@/lib/work-calendar';
 import 'server-only';
 import type { Employee, Forum, Role, Task } from '@prisma/client';
 import { prisma } from '@/lib/db';
@@ -77,12 +78,13 @@ function toEmployeeDTO(e: Employee & { roles: Role[] }) {
 }
 
 export async function getDicts(): Promise<DictsDTO> {
-  const [stages, blocks, roles, employees, terms] = await Promise.all([
+  const [stages, blocks, roles, employees, terms, calendar] = await Promise.all([
     prisma.stage.findMany({ orderBy: [{ order: 'asc' }, { name: 'asc' }] }),
     prisma.block.findMany({ orderBy: [{ order: 'asc' }, { name: 'asc' }] }),
     prisma.role.findMany({ orderBy: [{ order: 'asc' }, { name: 'asc' }] }),
     prisma.employee.findMany({ include: { roles: true }, orderBy: { fullName: 'asc' } }),
     prisma.termPhrase.findMany({ orderBy: [{ order: 'asc' }, { text: 'asc' }] }),
+    getCalendarDays(),
   ]);
   return {
     stages: stages.map(({ id, name, order, color, archived }) => ({
@@ -96,7 +98,18 @@ export async function getDicts(): Promise<DictsDTO> {
     roles: roles.map(({ id, name, order, archived }) => ({ id, name, order, archived })),
     employees: employees.map(toEmployeeDTO),
     terms: terms.map(({ id, text, order, archived }) => ({ id, text, order, archived })),
+    calendar,
   };
+}
+
+/** Производственный календарь (все отмеченные дни — их немного, десятки в год). */
+export async function getCalendarDays(): Promise<CalendarDayDTO[]> {
+  const rows = await prisma.calendarDay.findMany({ orderBy: { date: 'asc' } });
+  return rows.map((r) => ({
+    date: dbToISO(r.date)!,
+    kind: r.kind as CalendarDayDTO['kind'],
+    note: r.note,
+  }));
 }
 
 export interface ForumMoney {

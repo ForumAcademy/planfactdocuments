@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { markCacheStale } from '@/lib/stale-cache';
+import { makeCalendar, type WorkCalendar } from '@/lib/work-calendar';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import type { ISODate } from '@/lib/dates';
@@ -36,6 +37,8 @@ interface ForumContextValue {
   today: ISODate;
   dicts: DictsDTO;
   lookups: Lookups;
+  /** Производственный календарь: выходные и праздники */
+  calendar: WorkCalendar;
   tasks: TaskDTO[];
   /** Отфильтрованные и отсортированные задачи. */
   visible: TaskDTO[];
@@ -98,6 +101,7 @@ export function ForumProvider({
     setFilters({ ...EMPTY_FILTERS, sort: cur.sort, dir: cur.dir });
   }, [setFilters]);
 
+  const calendar = React.useMemo(() => makeCalendar(dicts.calendar), [dicts.calendar]);
   const lookups = React.useMemo<Lookups>(
     () => ({
       stage: new Map(dicts.stages.map((s) => [s.id, s])),
@@ -232,6 +236,7 @@ export function ForumProvider({
     today,
     dicts,
     lookups,
+    calendar,
     tasks,
     visible,
     filters,
