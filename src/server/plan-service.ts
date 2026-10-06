@@ -5,6 +5,7 @@ import { computeTaskDates, mergeNoteIntoComment, type ForumRefs } from '@/lib/pl
 import { STATUS_LABEL } from '@/lib/status';
 import { ensureDictionaries, key } from './dictionaries';
 import { syncAutoAssignments } from './auto-assign';
+import { insertTasks, type NewTask } from './bulk-tasks';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -67,6 +68,8 @@ export async function importPlanRows(
   let nextOrder = existing.reduce((m, t) => Math.max(m, t.order), 0);
   const today = todayMsk();
   const result: ImportResult = { added: 0, updated: 0 };
+  // Новые задачи копятся и создаются одной пачкой после цикла
+  const toCreate: NewTask[] = [];
 
   for (const row of rows) {
     const stage = row.stage ? maps.stages.get(key(row.stage)) : undefined;
@@ -137,22 +140,16 @@ export async function importPlanRows(
     } else {
       const number = row.number ?? ++nextNumber;
       nextNumber = Math.max(nextNumber, number);
-      await db.task.create({
-        data: {
-          ...data,
-          forumId: forum.id,
-          number,
-          order: ++nextOrder,
-          roles: { connect: roleIds.map((id) => ({ id })) },
-          employees: { connect: employeeIds.map((id) => ({ id })) },
-          history: {
-            create: { field: 'Создание', newValue: 'Импорт плана', changedBy: userName },
-          },
-        },
+      toCreate.push({
+        data: { ...data, forumId: forum.id, number, order: ++nextOrder },
+        roleIds,
+        employeeIds,
+        history: 'Импорт плана',
       });
       result.added++;
     }
   }
+  await insertTasks(db, toCreate, userName);
   await syncAutoAssignments(db, { forumId: forum.id });
   // Новые формулировки срока из файла — в справочник «Сроки»
   const terms = [

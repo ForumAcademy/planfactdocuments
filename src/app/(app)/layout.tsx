@@ -9,6 +9,8 @@ import { VersionWatcher } from '@/components/layout/version-watcher';
 import { StaleCacheRefresher } from '@/components/layout/stale-cache-refresher';
 
 export const dynamic = 'force-dynamic';
+// Запас времени для тяжёлых действий (создание форума с планом, импорт из Excel)
+export const maxDuration = 60;
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();

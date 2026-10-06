@@ -207,6 +207,11 @@ export function ForumFormDialog({
         onOpenChange(false);
         router.push(`/forums/${res.data.id}/gantt`);
       }
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        'Не удалось сохранить: сервер не ответил. Проверьте список форумов и попробуйте ещё раз.',
+      );
     } finally {
       setPending(false);
     }

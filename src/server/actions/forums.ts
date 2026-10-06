@@ -8,6 +8,10 @@ import { addDays, dbToISO, diffDays, isoToDb } from '@/lib/dates';
 import { computeTaskDates, mergeNoteIntoComment } from '@/lib/plan';
 import { forumColorSchema, forumSchema, type ForumInput } from '@/lib/validation';
 import { DEFAULT_REPORT } from '@/server/seed';
+import { insertTasks } from '@/server/bulk-tasks';
+import type { Prisma, PrismaClient } from '@prisma/client';
+
+type Db = PrismaClient | Prisma.TransactionClient;
 import { run, UserError, type ActionResult } from '@/server/action-utils';
 import { importPlanRows, planRowSchema, recalcForumDates } from '@/server/plan-service';
 import { syncAutoAssignments } from '@/server/auto-assign';
@@ -20,12 +24,15 @@ const sourceSchema = z.discriminatedUnion('kind', [
 ]);
 export type PlanSource = z.input<typeof sourceSchema>;
 
-async function createDefaultReport(forumId: number) {
-  for (const [i, c] of DEFAULT_REPORT.entries()) {
-    await prisma.reportChart.create({
-      data: { forumId, title: c.title, palette: c.palette, order: i + 1 },
-    });
-  }
+async function createDefaultReport(db: Db, forumId: number) {
+  await db.reportChart.createMany({
+    data: DEFAULT_REPORT.map((c, i) => ({
+      forumId,
+      title: c.title,
+      palette: c.palette,
+      order: i + 1,
+    })),
+  });
 }
 
 export async function createForum(
@@ -38,126 +45,134 @@ export async function createForum(
     const src = sourceSchema.parse(source);
     const refs = { startDate: f.startDate, endDate: f.endDate, salesStartDate: f.salesStartDate };
 
-    const forum = await prisma.forum.create({
-      data: {
-        name: f.name,
-        startDate: isoToDb(f.startDate),
-        endDate: isoToDb(f.endDate),
-        salesStartDate: isoToDb(f.salesStartDate),
-        location: f.location,
-        website: f.website,
-        color: f.color,
-      },
-    });
-    await createDefaultReport(forum.id);
-    let tasks = 0;
-
-    if (src.kind === 'template') {
-      const templates = await prisma.templateTask.findMany({
-        include: { roles: true, stage: true },
-        orderBy: [{ order: 'asc' }, { number: 'asc' }],
-      });
-      for (const [i, t] of templates.entries()) {
-        const d = computeTaskDates(t.termText, t.stage, refs);
-        await prisma.task.create({
+    // Всё создание — одной транзакцией: либо форум целиком с планом, либо ничего
+    const { forum, tasks } = await prisma.$transaction(
+      async (tx) => {
+        const forum = await tx.forum.create({
           data: {
-            forumId: forum.id,
-            number: t.number,
-            order: i + 1,
-            stageId: t.stageId,
-            blockId: t.blockId,
-            description: t.description,
-            termText: t.termText,
-            startDate: isoToDb(d.startDate),
-            endDate: isoToDb(d.endDate),
-            needsClarification: d.needsClarification,
-            comment: mergeNoteIntoComment(t.comment, d.note),
-            roles: { connect: t.roles.map((r) => ({ id: r.id })) },
-            history: {
-              create: {
-                field: 'Создание',
-                newValue: 'Из типового мастер-плана',
-                changedBy: userName,
-              },
-            },
+            name: f.name,
+            startDate: isoToDb(f.startDate),
+            endDate: isoToDb(f.endDate),
+            salesStartDate: isoToDb(f.salesStartDate),
+            location: f.location,
+            website: f.website,
+            color: f.color,
           },
         });
-      }
-      tasks = templates.length;
-      await syncAutoAssignments(prisma, { forumId: forum.id });
-    } else if (src.kind === 'forum') {
-      tasks = await copyTasks(src.forumId, forum.id, refs, userName, true);
-    } else if (src.kind === 'excel') {
-      const res = await prisma.$transaction(
-        (tx) => importPlanRows(tx, { id: forum.id, ...refs }, src.rows, 'replace', userName),
-        { timeout: 60_000, maxWait: 10_000 },
-      );
-      tasks = res.added;
-    }
-    revalidatePath('/');
+        await createDefaultReport(tx, forum.id);
+        let tasks = 0;
+
+        if (src.kind === 'template') {
+          const templates = await tx.templateTask.findMany({
+            include: { roles: true, stage: true },
+            orderBy: [{ order: 'asc' }, { number: 'asc' }],
+          });
+          await insertTasks(
+            tx,
+            templates.map((t, i) => {
+              const d = computeTaskDates(t.termText, t.stage, refs);
+              return {
+                data: {
+                  forumId: forum.id,
+                  number: t.number,
+                  order: i + 1,
+                  stageId: t.stageId,
+                  blockId: t.blockId,
+                  description: t.description,
+                  termText: t.termText,
+                  startDate: isoToDb(d.startDate),
+                  endDate: isoToDb(d.endDate),
+                  needsClarification: d.needsClarification,
+                  comment: mergeNoteIntoComment(t.comment, d.note),
+                },
+                roleIds: t.roles.map((r) => r.id),
+                employeeIds: [],
+                history: 'Из типового мастер-плана',
+              };
+            }),
+            userName,
+          );
+          tasks = templates.length;
+          await syncAutoAssignments(tx, { forumId: forum.id });
+        } else if (src.kind === 'forum') {
+          tasks = await copyTasks(tx, src.forumId, forum.id, refs, userName, true);
+        } else if (src.kind === 'excel') {
+          const res = await importPlanRows(
+            tx,
+            { id: forum.id, ...refs },
+            src.rows,
+            'replace',
+            userName,
+          );
+          tasks = res.added;
+        }
+        return { forum, tasks };
+      },
+      { timeout: 60_000, maxWait: 10_000 },
+    );
+    // Главную не пересобираем: после создания открывается страница нового форума
     return { id: forum.id, tasks };
   });
 }
 
 /** Копирует задачи: даты вычисляются заново, ручные даты сдвигаются на разницу дат форумов. */
 async function copyTasks(
+  db: Db,
   fromForumId: number,
   toForumId: number,
   refs: { startDate: string; endDate: string | null; salesStartDate: string },
   userName: string,
   resetStatus: boolean,
 ): Promise<number> {
-  const from = await prisma.forum.findUnique({ where: { id: fromForumId } });
+  const from = await db.forum.findUnique({ where: { id: fromForumId } });
   if (!from) throw new UserError('Форум-источник не найден');
   const delta = diffDays(dbToISO(from.startDate)!, refs.startDate);
-  const src = await prisma.task.findMany({
+  const src = await db.task.findMany({
     where: { forumId: fromForumId },
     include: { roles: true, employees: true, stage: true },
     orderBy: [{ order: 'asc' }, { id: 'asc' }],
   });
-  for (const t of src) {
-    let startDate = dbToISO(t.startDate);
-    let endDate = dbToISO(t.endDate);
-    let needsClarification = t.needsClarification;
-    if (t.datesManual) {
-      startDate = startDate ? addDays(startDate, delta) : null;
-      endDate = endDate ? addDays(endDate, delta) : null;
-    } else {
-      const d = computeTaskDates(t.termText, t.stage, refs);
-      startDate = d.startDate;
-      endDate = d.endDate;
-      needsClarification = d.needsClarification;
-    }
-    await prisma.task.create({
-      data: {
-        forumId: toForumId,
-        number: t.number,
-        order: t.order,
-        stageId: t.stageId,
-        blockId: t.blockId,
-        description: t.description,
-        termText: t.termText,
-        startDate: isoToDb(startDate),
-        endDate: isoToDb(endDate),
-        needsClarification,
-        datesManual: t.datesManual,
-        employeesManual: t.employeesManual,
-        status: resetStatus ? 'NOT_STARTED' : t.status,
-        completedAt: resetStatus ? null : t.completedAt,
-        comment: t.comment,
-        roles: { connect: t.roles.map((r) => ({ id: r.id })) },
-        employees: { connect: t.employees.map((e) => ({ id: e.id })) },
-        history: {
-          create: {
-            field: 'Создание',
-            newValue: `Копия из форума «${from.name}»`,
-            changedBy: userName,
-          },
+  await insertTasks(
+    db,
+    src.map((t) => {
+      let startDate = dbToISO(t.startDate);
+      let endDate = dbToISO(t.endDate);
+      let needsClarification = t.needsClarification;
+      if (t.datesManual) {
+        startDate = startDate ? addDays(startDate, delta) : null;
+        endDate = endDate ? addDays(endDate, delta) : null;
+      } else {
+        const d = computeTaskDates(t.termText, t.stage, refs);
+        startDate = d.startDate;
+        endDate = d.endDate;
+        needsClarification = d.needsClarification;
+      }
+      return {
+        data: {
+          forumId: toForumId,
+          number: t.number,
+          order: t.order,
+          stageId: t.stageId,
+          blockId: t.blockId,
+          description: t.description,
+          termText: t.termText,
+          startDate: isoToDb(startDate),
+          endDate: isoToDb(endDate),
+          needsClarification,
+          datesManual: t.datesManual,
+          employeesManual: t.employeesManual,
+          status: resetStatus ? 'NOT_STARTED' : t.status,
+          completedAt: resetStatus ? null : t.completedAt,
+          comment: t.comment,
         },
-      },
-    });
-  }
-  await syncAutoAssignments(prisma, { forumId: toForumId });
+        roleIds: t.roles.map((r) => r.id),
+        employeeIds: t.employees.map((e) => e.id),
+        history: `Копия из форума «${from.name}»`,
+      };
+    }),
+    userName,
+  );
+  await syncAutoAssignments(db, { forumId: toForumId });
   return src.length;
 }
 
@@ -249,6 +264,7 @@ export async function duplicateForum(id: number): Promise<ActionResult<{ id: num
       },
     });
     await copyTasks(
+      prisma,
       id,
       copy.id,
       {
