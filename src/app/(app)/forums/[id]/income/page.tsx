@@ -1,12 +1,8 @@
-import { TrendingUp } from 'lucide-react';
-import { SectionPlaceholder } from '@/components/forum/section-placeholder';
+import { IncomeView } from '@/components/forum/income-view';
+import { getIncomeItems } from '@/server/queries';
 
-export default function IncomePage() {
-  return (
-    <SectionPlaceholder
-      icon={TrendingUp}
-      title="Линия доходов"
-      description="Плановые и фактические поступления: продажи билетов, спонсорство и другие источники."
-    />
-  );
+export default async function IncomePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const items = await getIncomeItems(Number(id));
+  return <IncomeView initialItems={items} />;
 }

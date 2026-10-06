@@ -20,7 +20,7 @@ const SECTIONS = [
   { key: 'gantt', label: 'Диаграмма Ганта', short: 'Гант' },
   { key: 'tasks', label: 'Линия задач', short: 'Задачи' },
   { key: 'expenses', label: 'Линия расходов', short: 'Расходы' },
-  { key: 'income', label: 'Линия доходов', short: 'Доходы' },
+  { key: 'income', label: 'Доходы', short: 'Доходы' },
   { key: 'funnel', label: 'Воронка продаж', short: 'Воронка' },
   { key: 'report', label: 'Отчёт', short: 'Отчёт' },
 ] as const;

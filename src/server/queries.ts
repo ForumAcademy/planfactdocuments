@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db';
 import { dbToISO, isoToDb, todayMsk } from '@/lib/dates';
 import type { StatusCounts } from '@/lib/status';
 import type { DictsDTO, ForumDTO, TaskDTO } from '@/lib/types';
+import { incomeItems, type IncomeItemValue } from '@/lib/income';
 
 export function toForumDTO(f: Forum): ForumDTO {
   return {
@@ -301,4 +302,9 @@ export async function getDatabaseData(): Promise<DatabaseData> {
     })),
     forums: forums.map((f) => ({ ...toForumDTO(f), taskCount: f._count.tasks })),
   };
+}
+
+export async function getIncomeItems(forumId: number): Promise<IncomeItemValue[]> {
+  const rows = await prisma.incomeItem.findMany({ where: { forumId } });
+  return incomeItems(rows);
 }
