@@ -1,3 +1,5 @@
+import { diffDays, formatDate } from './dates';
+
 /**
  * Доходы форума: партнёрства и билеты. У каждой позиции — цена одной единицы,
  * индивидуальная скидка (%), плановое и фактически проданное количество.
@@ -474,6 +476,161 @@ export function planAdvice(items: IncomeItemValue[], target: number): string[] {
   if (ticket && partner && partner.prices[0] >= ticket.prices[0]) {
     const n = Math.round(partner.prices[0] / ticket.prices[0]);
     lines.push(`Одно партнёрство «${partner.label}» заменяет ${formatItemQty(ticket, n)}.`);
+  }
+  return lines;
+}
+
+const formatRubShort = (n: number) => `${formatNum(Math.round(n))} ₽`;
+const listJoin = (a: string[]) =>
+  a.length > 1 ? `${a.slice(0, -1).join(', ')} и ${a.at(-1)}` : (a[0] ?? '');
+
+/**
+ * Рекомендация на сегодня — от факта: сколько уже продано, сколько времени осталось
+ * до форума и до конца текущего этапа, что недобрали на закрытых этапах, идём ли по графику
+ * на текущем и что и в каком темпе нужно продать до форума, чтобы выйти на цель.
+ * Закрытые этапы билетов уже не продать — их недобор переносится на текущую цену.
+ */
+export function salesAdvice(
+  items: IncomeItemValue[],
+  target: number,
+  dates: [string, string, string],
+  forumStart: string,
+  today: string,
+): string[] {
+  if (target <= 0 || today < dates[0]) return [];
+  const fact = incomeSum(items, 'fact');
+  const gap = target - fact;
+  if (today >= forumStart) {
+    return [
+      gap > 0
+        ? `Продажи завершены: продано ${formatRubShort(fact)}, до цели не хватило ${formatRubShort(gap)}.`
+        : `Продажи завершены, цель достигнута: продано ${formatRubShort(fact)}.`,
+    ];
+  }
+  const stage = currentStage(dates, today);
+  const stageEnd = stage < 2 ? dates[stage + 1] : forumStart;
+  const daysLeft = diffDays(today, forumStart);
+  const stageDaysLeft = Math.max(1, diffDays(today, stageEnd));
+  const perWeek = (n: number, days: number) => Math.ceil((n * 7) / Math.max(7, days));
+  const lines: string[] = [];
+  const pct = Math.floor((fact / target) * 100);
+  lines.push(
+    `До форума ${formatNum(daysLeft)} ${plural(daysLeft, ['день', 'дня', 'дней'])}, идёт этап «${PRICE_STAGES[stage].label}» (до ${formatDate(stageEnd)}). ` +
+      (gap > 0
+        ? `Продано ${formatRubShort(fact)} — ${pct}% цели, осталось ${formatRubShort(gap)}.`
+        : `Цель уже достигнута: продано ${formatRubShort(fact)}, всё дальнейшее — сверх цели.`),
+  );
+  if (gap <= 0) return lines;
+
+  const tickets = items.filter(hasStages);
+  const partners = items.filter((i) => !hasStages(i));
+  const ticketsQty = (kind: 'plan' | 'fact', k: number) =>
+    tickets.reduce((s, i) => s + i[kind][k], 0);
+
+  // Закрытые этапы: недобор или перевыполнение
+  for (let k = 0; k < stage; k++) {
+    const plan = incomeSum(tickets, 'plan', k);
+    const sold = incomeSum(tickets, 'fact', k);
+    if (!plan && !sold) continue;
+    const q = `${formatNum(ticketsQty('fact', k))} из ${formatNum(ticketsQty('plan', k))} билетов`;
+    lines.push(
+      sold < plan
+        ? `Этап «${PRICE_STAGES[k].label}» закрыт с недобором ${formatRubShort(plan - sold)} (продано ${q}) — его нужно перекрыть на оставшихся этапах.`
+        : `Этап «${PRICE_STAGES[k].label}» закрыт с перевыполнением на ${formatRubShort(sold - plan)} (продано ${q}).`,
+    );
+  }
+
+  // Текущий этап: темп продаж относительно прошедшего времени
+  const stageLen = Math.max(1, diffDays(dates[stage], stageEnd));
+  const passed = Math.min(1, Math.max(0, diffDays(dates[stage], today) / stageLen));
+  const planNow = ticketsQty('plan', stage);
+  const soldNow = ticketsQty('fact', stage);
+  if (planNow > 0) {
+    const expected = Math.round(planNow * passed);
+    const head = `На этапе «${PRICE_STAGES[stage].label}» продано ${formatNum(soldNow)} из ${formatNum(planNow)} билетов`;
+    if (soldNow >= planNow) lines.push(`${head} — план этапа уже выполнен.`);
+    else if (soldNow + Math.max(1, Math.round(planNow * 0.05)) < expected)
+      lines.push(
+        `${head}; по графику к сегодняшнему дню должно быть около ${formatNum(expected)} — отстаём на ${formatNum(expected - soldNow)}.`,
+      );
+    else lines.push(`${head} — идём по графику.`);
+  }
+
+  // Что осталось продать по плану: партнёрства — весь период, билеты — текущий и следующие этапы
+  const restParts = partners
+    .map((i) => ({ i, n: Math.max(0, i.plan[0] - i.fact[0]) }))
+    .filter((x) => x.n > 0);
+  const restTickets = tickets
+    .map((i) => {
+      const byStage = [0, 1, 2].map((k) => (k < stage ? 0 : Math.max(0, i.plan[k] - i.fact[k])));
+      return {
+        i,
+        byStage,
+        n: sum3(byStage as Triple),
+        sum: byStage.reduce((s, n, k) => s + n * netPrice(i, k), 0),
+      };
+    })
+    .filter((x) => x.n > 0);
+  const restSum =
+    restParts.reduce((s, x) => s + x.n * netPrice(x.i, 0), 0) +
+    restTickets.reduce((s, x) => s + x.sum, 0);
+
+  // Плана не хватает до цели (недобор закрытых этапов или план ниже цели) — добор билетом
+  const main =
+    tickets
+      .filter((i) => netPrice(i, stage) > 0)
+      .reduce<IncomeItemValue | null>(
+        (a, b) => (!a || sum3(b.plan) > sum3(a.plan) ? b : a),
+        null,
+      ) ?? null;
+  const missing = gap - restSum;
+  let extra = 0;
+  if (missing > 0 && main) {
+    extra = Math.ceil(missing / netPrice(main, stage));
+    const partner = partners
+      .filter((i) => netPrice(i, 0) > 0)
+      .reduce<IncomeItemValue | null>(
+        (a, b) => (!a || netPrice(b, 0) < netPrice(a, 0) ? b : a),
+        null,
+      );
+    lines.push(
+      `Оставшегося плана не хватает до цели на ${formatRubShort(missing)}: сверх плана нужно продать ещё ${formatItemQty(main, extra)} по цене текущего этапа` +
+        (partner && missing / netPrice(partner, 0) <= 5
+          ? ` или ${formatItemQty(partner, Math.ceil(missing / netPrice(partner, 0)))}.`
+          : '.'),
+    );
+  }
+
+  const what = [
+    ...restParts.map((x) => formatItemQty(x.i, x.n)),
+    ...restTickets.map((x) => formatItemQty(x.i, x.n + (x.i === main ? extra : 0))),
+  ];
+  if (main && extra && !restTickets.some((x) => x.i === main))
+    what.push(formatItemQty(main, extra));
+  if (what.length) lines.push(`Чтобы выйти на цель, до форума осталось продать ${listJoin(what)}.`);
+
+  const ticketsLeft = restTickets.reduce((s, x) => s + x.n, 0) + extra;
+  const stageLeft =
+    restTickets.reduce((s, x) => s + x.byStage[stage], 0) + (stage === 2 ? 0 : extra);
+  if (ticketsLeft > 0) {
+    lines.push(
+      `Темп по билетам: около ${formatNum(perWeek(ticketsLeft, daysLeft))} в неделю до форума` +
+        (stageLeft > 0 && stage < 2
+          ? `; до конца этапа «${PRICE_STAGES[stage].label}» — ${formatNum(stageLeft)} шт., около ${formatNum(perWeek(stageLeft, stageDaysLeft))} в неделю, пока цена ниже.`
+          : '.'),
+    );
+  }
+  const partsLeft = restParts.reduce((s, x) => s + x.n, 0);
+  if (partsLeft > 0) {
+    const weeks = Math.max(1, Math.floor(daysLeft / 7));
+    lines.push(
+      `Партнёрства: осталось закрыть ${formatNum(partsLeft)} ${plural(partsLeft, ['пакет', 'пакета', 'пакетов'])} за ${formatNum(weeks)} ${plural(weeks, ['неделю', 'недели', 'недель'])}` +
+        (daysLeft < 45
+          ? ' — времени мало, крупные договоры стоит закрывать в первую очередь.'
+          : '.'),
+    );
+  } else if (partners.some((i) => i.plan[0] > 0)) {
+    lines.push('Партнёрства по плану закрыты.');
   }
   return lines;
 }

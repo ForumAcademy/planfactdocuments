@@ -7,6 +7,7 @@ import {
   incomeSum,
   incomeTarget,
   planAdvice,
+  salesAdvice,
   hasStages,
   itemSum,
   netPrice,
@@ -209,5 +210,56 @@ describe('этапы продаж билетов и скидки позиций'
     ).toEqual(['2026-01-01', '2026-05-01', '2026-09-01']);
     expect(currentStage(['2026-01-01', '2026-05-01', '2026-09-01'], '2026-06-10')).toBe(1);
     expect(currentStage(['2026-01-01', '2026-05-01', '2026-09-01'], '2026-09-01')).toBe(2);
+  });
+});
+
+describe('рекомендация на сегодня', () => {
+  const dates: [string, string, string] = ['2026-03-01', '2026-06-01', '2026-09-01'];
+  const items = () =>
+    incomeItems([
+      { key: 'general', price: 3_000_000, planQty: 1, factQty: 1, planManual: true },
+      { key: 'strategic', price: 1_500_000, planQty: 2, factQty: 0, planManual: true },
+      { key: 'partner', price: 500_000, planQty: 0, factQty: 0, planManual: true },
+      { key: 'vip', price: 150_000, planQty: 0, factQty: 0, planManual: true },
+      {
+        key: 'participant',
+        price: 100_000,
+        planQty: 10,
+        planMid: 20,
+        planFinal: 10,
+        factQty: 4,
+        factMid: 10,
+        planManual: true,
+      },
+    ]);
+
+  it('до старта продаж рекомендации нет', () => {
+    expect(salesAdvice(items(), 10_000_000, dates, '2026-11-01', '2026-02-01')).toEqual([]);
+  });
+
+  it('учитывает факт, недобор закрытого этапа, темп и время до форума', () => {
+    // план 10 млн; продано 3 млн + 4 и 10 билетов = 4,4 млн
+    const a = salesAdvice(items(), 10_000_000, dates, '2026-11-01', '2026-07-15');
+    expect(a[0]).toMatch(
+      /^До форума 109 дней, идёт этап «Середина» \(до 01\.09\.2026\)\. Продано 4 400 000 ₽ — 44% цели, осталось 5 600 000 ₽\./,
+    );
+    expect(a.join(' ')).toMatch(
+      /«Старт продаж» закрыт с недобором 600 000 ₽ \(продано 4 из 10 билетов\)/,
+    );
+    expect(a.join(' ')).toMatch(/продано 10 из 20 билетов — идём по графику/);
+    // осталось по плану: 2 стратегических (3 млн) + 10 + 10 билетов (2 млн) = 5 млн, не хватает 600 тыс.
+    expect(a.join(' ')).toMatch(
+      /не хватает до цели на 600 000 ₽: сверх плана нужно продать ещё 6 билетов участника/,
+    );
+    expect(a.join(' ')).toMatch(
+      /осталось продать 2 стратегических партнёра и 26 билетов участника/,
+    );
+    expect(a.join(' ')).toMatch(/Партнёрства: осталось закрыть 2 пакета/);
+  });
+
+  it('цель достигнута', () => {
+    const a = salesAdvice(items(), 4_000_000, dates, '2026-11-01', '2026-07-15');
+    expect(a).toHaveLength(1);
+    expect(a[0]).toMatch(/Цель уже достигнута/);
   });
 });

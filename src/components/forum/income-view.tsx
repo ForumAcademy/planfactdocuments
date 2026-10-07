@@ -4,13 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import {
-  Lightbulb,
-  Pencil,
-  Plus,
-  RotateCcw,
-  Trash2,
-} from 'lucide-react';
+import { Lightbulb, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { NumberCell } from '@/components/ui/number-cell';
 import { Spinner } from '@/components/ui/spinner';
@@ -29,6 +23,7 @@ import {
   itemSum,
   netPrice,
   planAdvice,
+  salesAdvice,
   stageDates,
   type IncomeConfig,
   type IncomeGroup,
@@ -139,6 +134,7 @@ export function IncomeView({
   const confirm = useConfirm();
   const removedDefaults = INCOME_ITEMS.filter((d) => !items.some((i) => i.key === d.key));
   const advice = planAdvice(planned, target);
+  const todayAdvice = salesAdvice(planned, target, dates, forum.startDate, today);
 
   const save = async (patches: ItemPatch[]) => {
     const prev = items;
@@ -256,6 +252,23 @@ export function IncomeView({
         </TabGroup>
         {saving && <Spinner className="text-xs" label="Сохраняем…" />}
       </div>
+
+      {todayAdvice.length > 0 && (
+        <section
+          className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm"
+          data-testid="income-today-advice"
+        >
+          <h3 className="flex items-center gap-2 font-semibold text-amber-900">
+            <Lightbulb className="size-4" />
+            Рекомендация на сегодня, {formatDate(today)}
+          </h3>
+          <ul className="mt-1.5 list-disc space-y-1 pl-6 text-ink/80">
+            {todayAdvice.map((a) => (
+              <li key={a}>{a}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Партнёрства: без этапов продаж */}
       <SectionTitle
@@ -402,7 +415,7 @@ export function IncomeView({
         >
           <h3 className="flex items-center gap-2 font-semibold text-brand">
             <Lightbulb className="size-4" />
-            Рекомендация по плану продаж
+            Как устроен план продаж
           </h3>
           <ul className="mt-1.5 list-disc space-y-1 pl-6 text-ink/80">
             {advice.map((a) => (
