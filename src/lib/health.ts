@@ -35,7 +35,11 @@ export interface HealthLine {
   mark: number | null;
   /** Подпись отметки */
   markLabel?: string;
-  /** Главные цифры */
+  /** Главная цифра коротко: «59 из 149», «10,9 из 18,5 млн ₽» */
+  value: string;
+  /** Коротко, почему такой цвет: «Просрочено 50», «По плану» */
+  badge: string;
+  /** Все цифры — для подсказки */
   summary: string;
   /** Почему такой цвет */
   reasons: string[];
@@ -61,6 +65,14 @@ const plural = (n: number, one: string, few: string, many: string) => {
   if (m10 > 1 && m10 < 5) return few;
   if (m10 === 1) return one;
   return many;
+};
+/** «10,9 из 18,5 млн ₽» — обе суммы в одних единицах */
+const rubOf = (part: number, total: number) => {
+  const m = Math.max(Math.abs(part), Math.abs(total));
+  const [div, unit] =
+    m >= 1_000_000 ? [1_000_000, 'млн '] : m >= 1_000 ? [1_000, 'тыс. '] : [1, ''];
+  const f = (v: number) => (Math.round((v / div) * 10) / 10).toLocaleString('ru-RU');
+  return `${f(part)} из ${f(total)} ${unit}₽`;
 };
 const tasksWord = (n: number) => `${n} ${plural(n, 'задача', 'задачи', 'задач')}`;
 
@@ -93,12 +105,21 @@ export function taskHealth(tasks: StatusInput[], today: ISODate): HealthLine {
   if (late) reasons.push(`пора начинать: ${tasksWord(late)}`);
   if (soon) reasons.push(`срок в ближайшие ${TASK_SOON_DAYS} дня, не начато: ${tasksWord(soon)}`);
   const health: Health = c.overdue ? 'red' : late || soon ? 'yellow' : 'green';
+  const badge = c.overdue
+    ? `Просрочено ${c.overdue}`
+    : late
+      ? `Пора начинать ${late}`
+      : soon
+        ? `Скоро срок ${soon}`
+        : 'По плану';
   if (health === 'green') reasons.push(c.total ? 'просроченных задач нет' : 'задач пока нет');
   return {
     health,
     fill: share(c.done, c.total),
     mark: c.total ? share(due, c.total) : null,
     markLabel: 'Должно быть выполнено к сегодняшнему дню',
+    value: `${c.done} из ${c.total} выполнено`,
+    badge,
     summary: `Выполнено ${c.done} из ${c.total} (${percent(share(c.done, c.total))}) · в работе ${c.inProgress} · не начато ${c.notStarted} · просрочено ${c.overdue}`,
     reasons,
   };
@@ -122,29 +143,42 @@ export function expenseHealth(tasks: ExpenseTaskInput[], limit: number | null): 
   const cap = limit ?? plan;
   const reasons: string[] = [];
   let health: Health = 'green';
-  const red = (s: string) => {
+  let badge = 'По плану';
+  const red = (s: string, b: string) => {
+    if (health !== 'red') badge = b;
     health = 'red';
     reasons.push(s);
   };
-  const warn = (s: string) => {
-    if (health === 'green') health = 'yellow';
+  const warn = (s: string, b: string) => {
+    if (health === 'green') {
+      health = 'yellow';
+      badge = b;
+    }
     reasons.push(s);
   };
-  if (cap > 0 && fact > cap) red(`факт больше предельных на ${rub(fact - cap)}`);
-  if (limit != null && plan > limit) red(`план больше предельных на ${rub(plan - limit)}`);
-  if (!plan && !fact) warn('не заполнена стоимость задач');
-  else if (limit == null) warn('не заданы предельно допустимые расходы');
+  if (cap > 0 && fact > cap)
+    red(`факт больше предельных на ${rub(fact - cap)}`, `Сверх лимита ${rub(fact - cap)}`);
+  if (limit != null && plan > limit)
+    red(`план больше предельных на ${rub(plan - limit)}`, 'План выше лимита');
+  if (!plan && !fact) warn('не заполнена стоимость задач', 'Нет стоимости задач');
+  else if (limit == null) warn('не заданы предельно допустимые расходы', 'Лимит не задан');
   if (plan > 0 && fact > plan && !(cap > 0 && fact > cap))
-    warn(`факт больше плана на ${rub(fact - plan)}`);
-  if (over) warn(`факт больше плана в ${over} ${plural(over, 'задаче', 'задачах', 'задачах')}`);
+    warn(`факт больше плана на ${rub(fact - plan)}`, 'Факт выше плана');
+  if (over)
+    warn(
+      `факт больше плана в ${over} ${plural(over, 'задаче', 'задачах', 'задачах')}`,
+      'Факт выше плана',
+    );
   if (health === 'green' && cap > 0 && fact >= cap * EXPENSE_WARN_SHARE)
-    warn(`израсходовано ${percent(share(fact, cap))} предельных`);
+    warn(`израсходовано ${percent(share(fact, cap))} предельных`, 'Близко к лимиту');
   if (health === 'green') reasons.push('расходы в пределах плана');
   return {
     health,
     fill: clamp01(share(fact, cap)),
     mark: cap > 0 && plan > 0 ? clamp01(share(plan, cap)) : null,
     markLabel: 'План (стоимость задач)',
+    value: cap > 0 ? rubOf(fact, cap) : rub(fact),
+    badge,
     summary:
       `Факт ${rub(fact)} · план ${rub(plan)} · предельно ${limit != null ? rub(limit) : 'не заданы'}` +
       (cap > 0 ? ` · ${percent(share(fact, cap))} предельных` : ''),
@@ -213,22 +247,32 @@ export function incomeHealth(input: {
   const advice = salesAdvice(planned, target, dates, forumStart, today);
   const reasons: string[] = [];
   let health: Health = 'green';
+  let badge = 'По плану';
   const ended = today >= forumStart;
   if (ended && target > 0 && fact < target) {
     health = 'red';
     reasons.push(`продажи завершены, до цели не хватило ${rub(target - fact)}`);
+    badge = 'Цель не достигнута';
   } else if (expected > 0 && fact < expected * INCOME_RED_SHARE) {
     health = 'red';
     reasons.push(`к сегодня ожидалось ${rub(expected)}, отставание ${rub(expected - fact)}`);
+    badge = `Отставание ${rub(expected - fact)}`;
   } else if (expected > 0 && fact < expected) {
     health = 'yellow';
     reasons.push(`к сегодня ожидалось ${rub(expected)}, не хватает ${rub(expected - fact)}`);
+    badge = `Не хватает ${rub(expected - fact)}`;
   }
   if (!target) {
-    if (health === 'green') health = 'yellow';
+    if (health === 'green') {
+      health = 'yellow';
+      badge = 'Нет цели';
+    }
     reasons.push('нет цели — заполните стоимость задач в «Расходах»');
   } else if (plan < target) {
-    if (health === 'green') health = 'yellow';
+    if (health === 'green') {
+      health = 'yellow';
+      badge = 'План ниже цели';
+    }
     reasons.push(`план меньше цели на ${rub(target - plan)}`);
   }
   if (health === 'green')
@@ -242,6 +286,8 @@ export function incomeHealth(input: {
     fill: clamp01(share(fact, plan)),
     mark: plan > 0 && today >= salesStart ? clamp01(share(expected, plan)) : null,
     markLabel: `Ожидалось к сегодняшнему дню: ${rub(expected)}`,
+    value: plan > 0 ? rubOf(fact, plan) : rub(fact),
+    badge,
     summary: `Факт ${rub(fact)} · план ${rub(plan)} (${percent(share(fact, plan))}) · цель ${rub(target)}`,
     reasons,
     advice,

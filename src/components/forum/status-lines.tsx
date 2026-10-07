@@ -15,22 +15,16 @@ import type { IncomeConfig, IncomeItemValue } from '@/lib/income';
 import { cn } from '@/lib/utils';
 import { useForum } from './forum-context';
 
-const COLOR: Record<Health, string> = {
-  green: '#1E9E5A',
-  yellow: '#EAB308',
-  red: '#D93838',
+/** Цвет — только сигнал: точка и короткая метка, без заливки строки */
+const DOT: Record<Health, string> = {
+  green: 'bg-status-green',
+  yellow: 'bg-status-yellow',
+  red: 'bg-status-red',
 };
-/** Фон строки: тот же цвет, едва заметный */
-const TINT: Record<Health, string> = {
-  green: 'rgba(30, 158, 90, 0.06)',
-  yellow: 'rgba(234, 179, 8, 0.10)',
-  red: 'rgba(217, 56, 56, 0.07)',
-};
-/** Текст статуса: жёлтый на белом слишком светлый — берём тёмный оттенок */
-const TEXT: Record<Health, string> = {
-  green: 'text-status-green',
-  yellow: 'text-amber-700',
-  red: 'text-status-red',
+const BADGE: Record<Health, string> = {
+  green: 'bg-emerald-50 text-emerald-700',
+  yellow: 'bg-amber-50 text-amber-700',
+  red: 'bg-red-50 text-red-700',
 };
 
 /**
@@ -61,12 +55,15 @@ export function StatusLines({
   );
   const base = `/forums/${forum.id}`;
   return (
-    <div className="mt-3 flex flex-col gap-1.5 print:hidden" data-testid="status-lines">
-      <Line id="tasks" title="Линия задач" href={`${base}/gantt`} line={tasksLine} />
-      <Line id="expenses" title="Линия расходов" href={`${base}/expenses`} line={expensesLine} />
+    <div
+      className="mt-3 divide-y divide-line/70 rounded-lg border border-line bg-white print:hidden"
+      data-testid="status-lines"
+    >
+      <Line id="tasks" title="Задачи" href={`${base}/gantt`} line={tasksLine} />
+      <Line id="expenses" title="Расходы" href={`${base}/expenses`} line={expensesLine} />
       <Line
         id="income"
-        title="Линия доходов"
+        title="Доходы"
         href={`${base}/income`}
         line={incomeLine}
         note={
@@ -90,47 +87,47 @@ function Line({
   line: HealthLine;
   note?: string;
 }) {
-  const color = COLOR[line.health];
+  // Подробности — во всплывающей подсказке, на линии только главное
+  const hint = [`${HEALTH_LABEL[line.health]}: ${line.reasons.join('; ')}`, line.summary, note]
+    .filter(Boolean)
+    .join('\n');
   return (
     <Link
       href={href}
-      className="group grid grid-cols-1 gap-x-4 gap-y-1 rounded-md border border-line px-3 py-2 transition-colors hover:border-ink/20 sm:grid-cols-[210px_minmax(0,1fr)]"
-      style={{ background: TINT[line.health], borderLeft: `4px solid ${color}` }}
+      title={hint}
+      className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 px-3 py-2 transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-surface/60 sm:grid-cols-[120px_minmax(0,1fr)_170px_190px]"
       data-testid={`status-line-${id}`}
       data-health={line.health}
     >
-      <div className="flex items-center gap-2 sm:flex-col sm:items-start sm:gap-0">
-        <span className="text-sm font-semibold group-hover:text-brand">{title}</span>
-        <span className={cn('text-xs font-medium', TEXT[line.health])}>
-          {HEALTH_LABEL[line.health]}
-        </span>
-      </div>
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-xs text-ink/70">
-          <span className="tabular-nums">{line.summary}</span>
-          <span className={cn('first-letter:uppercase', TEXT[line.health])}>
-            {line.reasons.join('; ')}
-          </span>
-        </div>
-        <div className="relative mt-1 h-2 w-full rounded-full bg-white ring-1 ring-inset ring-line">
-          <div
-            className="h-full rounded-full"
-            style={{ width: `${line.fill * 100}%`, background: color }}
+      <span className="flex items-center gap-2 text-sm font-medium group-hover:text-brand">
+        <span className={cn('size-2 shrink-0 rounded-full', DOT[line.health])} />
+        {title}
+      </span>
+      <span className="col-span-2 row-start-2 flex items-center gap-3 sm:contents">
+        <span className="relative h-1.5 min-w-0 flex-1 rounded-full bg-surface sm:col-start-2 sm:row-start-1">
+          <span
+            className="block h-full rounded-full bg-brand/50"
+            style={{ width: `${line.fill * 100}%` }}
           />
           {line.mark !== null && (
-            <div
-              className="absolute -top-0.5 h-3 w-0.5 rounded bg-ink/60"
-              style={{ left: `calc(${line.mark * 100}% - 1px)` }}
-              title={line.markLabel}
+            <span
+              className="absolute -top-[3px] h-3 w-px bg-ink/40"
+              style={{ left: `${line.mark * 100}%` }}
             />
           )}
-        </div>
-        {note && (
-          <div className="mt-1 truncate text-xs text-ink/60" title={note}>
-            {note}
-          </div>
+        </span>
+        <span className="shrink-0 text-xs tabular-nums text-ink/70 sm:col-start-3 sm:row-start-1 sm:text-right">
+          {line.value}
+        </span>
+      </span>
+      <span
+        className={cn(
+          'justify-self-end truncate rounded-full px-2.5 py-0.5 text-xs font-medium sm:col-start-4 sm:row-start-1',
+          BADGE[line.health],
         )}
-      </div>
+      >
+        {line.badge}
+      </span>
     </Link>
   );
 }
