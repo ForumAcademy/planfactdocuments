@@ -1,0 +1,1 @@
+ALTER TABLE "IncomeItem" ADD COLUMN "factOnly" BOOLEAN NOT NULL DEFAULT false;

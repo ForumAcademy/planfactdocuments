@@ -173,6 +173,8 @@ model IncomeItem {
   group         String?
   /// Позиция по умолчанию убрана из списка
   removed       Boolean @default(false)
+  /// Статья только для факта: в плане её нет
+  factOnly      Boolean @default(false)
 
   @@unique([forumId, key])
 }

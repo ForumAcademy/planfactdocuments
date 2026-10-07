@@ -130,6 +130,8 @@ export interface IncomeItemValue {
   fact: Triple;
   /** План задан вручную; иначе количество подбирается под цель автоматически */
   planManual: boolean;
+  /** Статья только для факта (например, продажа с индивидуальной скидкой); в плане её нет */
+  factOnly: boolean;
 }
 
 export interface SavedIncomeItem {
@@ -148,6 +150,7 @@ export interface SavedIncomeItem {
   factMid?: number;
   factFinal?: number;
   planManual?: boolean;
+  factOnly?: boolean;
   label?: string | null;
   group?: string | null;
   removed?: boolean;
@@ -180,6 +183,7 @@ export function incomeItems(saved: SavedIncomeItem[]): IncomeItemValue[] {
     plan: [s?.planQty ?? 0, s?.planMid ?? 0, s?.planFinal ?? 0],
     fact: [s?.factQty ?? 0, s?.factMid ?? 0, s?.factFinal ?? 0],
     planManual: s?.planManual ?? false,
+    factOnly: s?.factOnly ?? false,
   });
   const defaults = INCOME_ITEMS.filter((d) => !byKey.get(d.key)?.removed).map((d) => {
     const s = byKey.get(d.key);
@@ -339,7 +343,7 @@ export function autoPlan(
     hasStages(i) ? w.reduce((s, x, k) => s + x * netPrice(i, k), 0) : netPrice(i, 0);
   const unit = new Map(items.map((i) => [i.key, unitOf(i)]));
   const price = (i: IncomeItemValue) => unit.get(i.key)!;
-  const auto = items.filter((i) => !i.planManual && price(i) > 0);
+  const auto = items.filter((i) => !i.planManual && !i.factOnly && price(i) > 0);
   const qty = new Map<string, number>(auto.map((i) => [i.key, 0]));
   const manualSum = incomeSum(
     items.filter((i) => i.planManual),
@@ -373,7 +377,7 @@ export function autoPlan(
     }
   }
   const out = items.map((i) => {
-    if (i.planManual) return i;
+    if (i.planManual || i.factOnly) return i;
     const q = qty.get(i.key) ?? 0;
     return { ...i, plan: hasStages(i) ? splitByShares(q, w) : ([q, 0, 0] as Triple) };
   });
@@ -462,7 +466,7 @@ export function planAdvice(items: IncomeItemValue[], target: number): string[] {
   }
   const cheapestOf = (g: IncomeGroupKey) =>
     items
-      .filter((i) => i.group === g && i.prices[0] > 0)
+      .filter((i) => i.group === g && !i.factOnly && i.prices[0] > 0)
       .reduce<IncomeItemValue | null>((a, b) => (!a || b.prices[0] < a.prices[0] ? b : a), null);
   // Сравниваем с самым массовым билетом плана (обычно «Участник»)
   const ticket =
@@ -578,7 +582,7 @@ export function salesAdvice(
   // Плана не хватает до цели (недобор закрытых этапов или план ниже цели) — добор билетом
   const main =
     tickets
-      .filter((i) => netPrice(i, stage) > 0)
+      .filter((i) => !i.factOnly && netPrice(i, stage) > 0)
       .reduce<IncomeItemValue | null>(
         (a, b) => (!a || sum3(b.plan) > sum3(a.plan) ? b : a),
         null,
@@ -588,7 +592,7 @@ export function salesAdvice(
   if (missing > 0 && main) {
     extra = Math.ceil(missing / netPrice(main, stage));
     const partner = partners
-      .filter((i) => netPrice(i, 0) > 0)
+      .filter((i) => !i.factOnly && netPrice(i, 0) > 0)
       .reduce<IncomeItemValue | null>(
         (a, b) => (!a || netPrice(b, 0) < netPrice(a, 0) ? b : a),
         null,

@@ -213,6 +213,31 @@ describe('этапы продаж билетов и скидки позиций'
   });
 });
 
+describe('статьи только для факта', () => {
+  it('не попадают в план и автоподбор, но входят в факт', () => {
+    const items = incomeItems([
+      {
+        id: 1,
+        key: 'c_1',
+        group: 'tickets',
+        label: 'Компания X',
+        price: 100_000,
+        discount: 35,
+        planQty: 0,
+        factQty: 0,
+        factMid: 2,
+        factOnly: true,
+      },
+    ]);
+    const plan = autoPlan(items, 13_000_000);
+    const x = plan.find((i) => i.key === 'c_1')!;
+    expect(x.factOnly).toBe(true);
+    expect(x.plan).toEqual([0, 0, 0]);
+    expect(incomeSum(plan, 'fact')).toBe(130_000);
+    expect(planAdvice(plan, 13_000_000).join(' ')).not.toMatch(/Компания X/);
+  });
+});
+
 describe('рекомендация на сегодня', () => {
   const dates: [string, string, string] = ['2026-03-01', '2026-06-01', '2026-09-01'];
   const items = () =>

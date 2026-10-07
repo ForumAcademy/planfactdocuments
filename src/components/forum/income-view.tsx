@@ -127,8 +127,10 @@ export function IncomeView({
   const target = incomeTarget(expenses);
   // План с автоподбором под цель: ручные позиции как есть, остальные добирают до цели
   const planned = React.useMemo(() => autoPlan(items, target, cfg), [items, target, cfg]);
-  const partners = planned.filter((i) => !hasStages(i));
-  const tickets = planned.filter(hasStages);
+  // В плане — только плановые статьи; в факте — ещё и статьи только для факта
+  const shown = view === 'plan' ? planned.filter((i) => !i.factOnly) : planned;
+  const partners = shown.filter((i) => !hasStages(i));
+  const tickets = shown.filter(hasStages);
   const planSum = incomeSum(planned, 'plan');
   const factSum = incomeSum(planned, 'fact');
   const confirm = useConfirm();
@@ -179,7 +181,9 @@ export function IncomeView({
   const remove = async (it: IncomeItemValue) => {
     const ok = await confirm({
       title: `Убрать позицию «${it.label}»?`,
-      description: 'Позиция исчезнет из плана и факта вместе с её количеством.',
+      description: it.factOnly
+        ? 'Статья исчезнет из факта вместе с её продажами.'
+        : 'Позиция исчезнет из плана и факта вместе с её количеством.',
       confirmText: 'Убрать',
       danger: true,
     });
@@ -202,15 +206,31 @@ export function IncomeView({
   const ticketsPlan = incomeSum(tickets, 'plan');
   const ticketsFact = incomeSum(tickets, 'fact');
   const partnersFact = incomeSum(partners, 'fact');
-  const addRow = (g: IncomeGroup, colSpan: number) => (
-    <AddItemRow
-      group={g}
-      colSpan={colSpan}
-      restore={removedDefaults.filter((x) => x.group === g.key)}
-      onRestore={(key) => save([{ key, removed: false }])}
-      onAdd={(label, price) => apply(() => addIncomeItem(forum.id, { group: g.key, label, price }))}
-    />
-  );
+  const addRow = (g: IncomeGroup, colSpan: number) =>
+    view === 'plan' ? (
+      <AddItemRow
+        group={g}
+        colSpan={colSpan}
+        restore={removedDefaults.filter((x) => x.group === g.key)}
+        onRestore={(key) => save([{ key, removed: false }])}
+        onAdd={(label, price) =>
+          apply(() => addIncomeItem(forum.id, { group: g.key, label, price }))
+        }
+      />
+    ) : (
+      <AddItemRow
+        group={g}
+        colSpan={colSpan}
+        factOnly
+        restore={[]}
+        onRestore={() => undefined}
+        onAdd={(label, price, discount) =>
+          apply(() =>
+            addIncomeItem(forum.id, { group: g.key, label, price, discount, factOnly: true }),
+          )
+        }
+      />
+    );
   const [gPartners, gTickets] = INCOME_GROUPS;
 
   return (
@@ -294,10 +314,16 @@ export function IncomeView({
                   onRemove={() => void remove(it)}
                 />
               ) : (
-                <FactRow key={it.key} item={it} stage={0} onSave={save} />
+                <FactRow
+                  key={it.key}
+                  item={it}
+                  stage={0}
+                  onSave={save}
+                  onRemove={() => void remove(it)}
+                />
               ),
             )}
-            {view === 'plan' && addRow(gPartners, 7)}
+            {addRow(gPartners, view === 'plan' ? 7 : 9)}
           </tbody>
         </table>
       </div>
@@ -355,10 +381,16 @@ export function IncomeView({
                   onRemove={() => void remove(it)}
                 />
               ) : (
-                <FactRow key={it.key} item={it} stage={stage} onSave={save} />
+                <FactRow
+                  key={it.key}
+                  item={it}
+                  stage={stage}
+                  onSave={save}
+                  onRemove={() => void remove(it)}
+                />
               ),
             )}
-            {view === 'plan' && addRow(gTickets, 7)}
+            {addRow(gTickets, view === 'plan' || stage === null ? 7 : 9)}
           </tbody>
         </table>
       </div>
@@ -528,7 +560,9 @@ function FactHead({ stage }: { stage?: number }) {
             <span className="ml-1 font-normal text-ink/50">· {PRICE_STAGES[stage].label}</span>
           )}
         </th>
-        <th className={cn(th, 'w-36')}>Цена со скидкой</th>
+        <th className={cn(th, 'w-32')}>Цена 1 ед.</th>
+        <th className={cn(th, 'w-20')}>Скидка</th>
+        <th className={cn(th, 'w-32')}>Цена со скидкой</th>
         <th className={cn(th, 'w-32')}>Продано, шт.</th>
         <th className={cn(th, 'w-40')}>Выручка</th>
         <th className={cn(th, 'w-32')}>План, шт.</th>
@@ -642,26 +676,71 @@ function PlanRow({
   );
 }
 
-/** Строка факта на этапе: продано, выручка со скидкой и выполнение плана этапа */
+/**
+ * Строка факта на этапе: продано, выручка со скидкой и выполнение плана этапа. Название можно
+ * поменять; у статьи только для факта правятся цена и скидка, её можно убрать.
+ */
 function FactRow({
   item: it,
   stage: k,
   onSave,
+  onRemove,
 }: {
   item: IncomeItemValue;
   stage: number;
   onSave: (p: ItemPatch[]) => void;
+  onRemove: () => void;
 }) {
   const fact = itemSum(it, 'fact', k);
   const plan = itemSum(it, 'plan', k);
   return (
     <tr className="border-t border-line/60" data-testid="income-row">
-      <td className="py-1.5 pl-6 pr-3">{it.label}</td>
+      <td className="py-1 pl-4 pr-3">
+        <LabelCell
+          item={it}
+          onRename={(label) => onSave([{ key: it.key, label }])}
+          onRemove={it.factOnly ? onRemove : undefined}
+        />
+      </td>
+      {it.factOnly ? (
+        <>
+          <td className="px-1 py-1">
+            <InheritCell
+              value={it.prices[k]}
+              inherited={k > 0 && !it.priceSet[k]}
+              canReset={k > 0 && it.priceSet[k]}
+              format={formatRub}
+              label={`Цена 1 ед.: ${it.label}`}
+              testId={`income-price-${k}-${it.key}`}
+              onCommit={(v) => onSave([{ key: it.key, [PRICE_FIELD[k]]: v }])}
+              onReset={() => onSave([{ key: it.key, [PRICE_FIELD[k]]: null }])}
+            />
+          </td>
+          <td className="px-1 py-1">
+            <InheritCell
+              value={it.discounts[k]}
+              inherited={k > 0 && !it.discountSet[k]}
+              canReset={k > 0 && it.discountSet[k]}
+              format={(v) => (v ? formatPct(v) : '—')}
+              label={`Скидка, %: ${it.label}`}
+              testId={`income-discount-${k}-${it.key}`}
+              onCommit={(v) => onSave([{ key: it.key, [DISCOUNT_FIELD[k]]: Math.min(100, v) }])}
+              onReset={() => onSave([{ key: it.key, [DISCOUNT_FIELD[k]]: null }])}
+            />
+          </td>
+        </>
+      ) : (
+        <>
+          <td className="px-2 py-1.5 text-right tabular-nums text-ink/70">
+            {formatRub(it.prices[k])}
+          </td>
+          <td className="px-2 py-1.5 text-right tabular-nums text-ink/70">
+            {it.discounts[k] ? formatPct(it.discounts[k]) : '—'}
+          </td>
+        </>
+      )}
       <td className="px-2 py-1.5 text-right tabular-nums text-ink/70">
         {formatRub(Math.round(netPrice(it, k)))}
-        {it.discounts[k] > 0 && (
-          <span className="ml-1 text-xs text-ink/50">−{formatPct(it.discounts[k])}</span>
-        )}
       </td>
       <td className="px-1 py-1">
         <NumberCell
@@ -673,11 +752,21 @@ function FactRow({
         />
       </td>
       <td className="px-2 py-1.5 text-right tabular-nums">{formatRub(fact)}</td>
-      <td className="px-2 py-1.5 text-right tabular-nums text-ink/70">{formatQty(it.plan[k])}</td>
-      <td className="px-2 py-1.5 text-right tabular-nums text-ink/70">{formatRub(plan)}</td>
-      <td className="px-3 py-1.5">
-        <Progress part={fact} total={plan} />
-      </td>
+      {it.factOnly ? (
+        <td colSpan={3} className="px-3 py-1.5 text-right text-xs text-ink/50">
+          нет в плане
+        </td>
+      ) : (
+        <>
+          <td className="px-2 py-1.5 text-right tabular-nums text-ink/70">
+            {formatQty(it.plan[k])}
+          </td>
+          <td className="px-2 py-1.5 text-right tabular-nums text-ink/70">{formatRub(plan)}</td>
+          <td className="px-3 py-1.5">
+            <Progress part={fact} total={plan} />
+          </td>
+        </>
+      )}
     </tr>
   );
 }
@@ -702,11 +791,11 @@ function AllStagesRow({
   return (
     <tr className="border-t border-line/60" data-testid="income-row">
       <td className="py-1 pl-4 pr-3">
-        {view === 'plan' ? (
-          <LabelCell item={it} onRename={onRename} onRemove={onRemove} />
-        ) : (
-          <span className="pl-2">{it.label}</span>
-        )}
+        <LabelCell
+          item={it}
+          onRename={onRename}
+          onRemove={view === 'plan' || it.factOnly ? onRemove : undefined}
+        />
       </td>
       {q.map((n, k) => (
         <td key={k} className="px-2 py-1.5 text-right tabular-nums text-ink/70">
@@ -720,7 +809,14 @@ function AllStagesRow({
         </div>
       </td>
       <td className="px-2 py-1.5 text-right tabular-nums">{formatRub(sum)}</td>
-      <td className="px-3 py-1.5">{view === 'fact' && <Progress part={sum} total={plan} />}</td>
+      <td className="px-3 py-1.5">
+        {view === 'fact' &&
+          (it.factOnly ? (
+            <span className="block text-right text-xs text-ink/50">нет в плане</span>
+          ) : (
+            <Progress part={sum} total={plan} />
+          ))}
+      </td>
     </tr>
   );
 }
@@ -1042,7 +1138,8 @@ function LabelCell({
 }: {
   item: IncomeItemValue;
   onRename: (label: string) => void;
-  onRemove: () => void;
+  /** Без него позицию убрать нельзя (плановая статья во вкладке «Факт») */
+  onRemove?: () => void;
 }) {
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(item.label);
@@ -1079,6 +1176,14 @@ function LabelCell({
       <span className="px-2 py-0.5" onDoubleClick={start} data-testid={`income-label-${item.key}`}>
         {item.label}
       </span>
+      {item.factOnly && (
+        <span
+          className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-900"
+          title="Статья только для факта: в плане её нет"
+        >
+          факт
+        </span>
+      )}
       <button
         type="button"
         className="rounded p-1 text-ink/40 opacity-0 hover:bg-surface hover:text-brand focus-visible:opacity-100 group-hover:opacity-100"
@@ -1088,16 +1193,18 @@ function LabelCell({
       >
         <Pencil className="size-3.5" />
       </button>
-      <button
-        type="button"
-        className="rounded p-1 text-ink/40 opacity-0 hover:bg-surface hover:text-status-red focus-visible:opacity-100 group-hover:opacity-100"
-        title="Убрать позицию"
-        aria-label={`Убрать позицию: ${item.label}`}
-        onClick={onRemove}
-        data-testid={`income-remove-${item.key}`}
-      >
-        <Trash2 className="size-3.5" />
-      </button>
+      {onRemove && (
+        <button
+          type="button"
+          className="rounded p-1 text-ink/40 opacity-0 hover:bg-surface hover:text-status-red focus-visible:opacity-100 group-hover:opacity-100"
+          title="Убрать позицию"
+          aria-label={`Убрать позицию: ${item.label}`}
+          onClick={onRemove}
+          data-testid={`income-remove-${item.key}`}
+        >
+          <Trash2 className="size-3.5" />
+        </button>
+      )}
     </div>
   );
 }
@@ -1109,24 +1216,30 @@ function AddItemRow({
   restore,
   onRestore,
   onAdd,
+  factOnly,
 }: {
   group: IncomeGroup;
   colSpan: number;
   restore: { key: string; label: string }[];
   onRestore: (key: string) => void;
-  onAdd: (label: string, price: number) => Promise<boolean>;
+  onAdd: (label: string, price: number, discount: number) => Promise<boolean>;
+  /** Статья только для факта: со скидкой, без плана */
+  factOnly?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   const [label, setLabel] = React.useState('');
   const [price, setPrice] = React.useState('');
+  const [discount, setDiscount] = React.useState('');
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = label.trim();
     const n = Math.round(Number(price.replace(/[\s  ₽]/g, '').replace(',', '.')) || 0);
     if (!name) return;
-    if (await onAdd(name, Math.max(0, n))) {
+    const d = Number(discount.replace(/[\s%]/g, '').replace(',', '.')) || 0;
+    if (await onAdd(name, Math.max(0, n), Math.min(100, Math.max(0, d)))) {
       setLabel('');
       setPrice('');
+      setDiscount('');
       setOpen(false);
     }
   };
@@ -1154,6 +1267,17 @@ function AddItemRow({
               aria-label="Стоимость одной единицы"
               data-testid={`income-add-price-${group.key}`}
             />
+            {factOnly && (
+              <input
+                value={discount}
+                onChange={(e) => setDiscount(e.target.value)}
+                inputMode="decimal"
+                placeholder="Скидка, %"
+                className="h-8 w-28 rounded border border-line px-2 text-right text-sm tabular-nums focus:border-brand focus:outline-none"
+                aria-label="Скидка, %"
+                data-testid={`income-add-discount-${group.key}`}
+              />
+            )}
             <button
               type="submit"
               className="h-8 rounded bg-brand px-3 text-sm font-medium text-white hover:bg-brand/90"
@@ -1178,8 +1302,13 @@ function AddItemRow({
               data-testid={`income-add-${group.key}`}
             >
               <Plus className="size-4" />
-              Добавить позицию
+              {factOnly ? 'Добавить статью факта' : 'Добавить позицию'}
             </button>
+            {factOnly && (
+              <span className="text-xs text-ink/50">
+                например, продажа с индивидуальной скидкой — в плане её не будет
+              </span>
+            )}
             {restore.map((r) => (
               <button
                 key={r.key}

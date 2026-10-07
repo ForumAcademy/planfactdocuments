@@ -117,10 +117,10 @@ export async function saveIncomeItems(
   });
 }
 
-/** Новая позиция доходов в группе «Партнёрства» или «Билеты». */
+/** Новая позиция доходов в группе «Партнёрства» или «Билеты»; factOnly — статья только для факта. */
 export async function addIncomeItem(
   forumId: number,
-  input: { group: string; label: string; price: number },
+  input: { group: string; label: string; price: number; discount?: number; factOnly?: boolean },
 ): Promise<ActionResult<IncomeItemValue[]>> {
   return run(async () => {
     await requireEditor();
@@ -129,6 +129,8 @@ export async function addIncomeItem(
         group: z.string().refine(isIncomeGroup, 'Неизвестная группа'),
         label,
         price: amount,
+        discount: z.number().min(0).max(100).optional(),
+        factOnly: z.boolean().optional(),
       })
       .parse(input);
     await requireForum(forumId);
@@ -139,6 +141,8 @@ export async function addIncomeItem(
         group: data.group,
         label: data.label,
         price: data.price,
+        discount: data.discount ?? 0,
+        factOnly: data.factOnly ?? false,
       },
     });
     return getIncomeItems(forumId);
