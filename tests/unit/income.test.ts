@@ -9,7 +9,6 @@ import {
   salesAdvice,
   withDeals,
   dealItem,
-  factDiscountPct,
   qtyOf,
   hasStages,
   withValues,
@@ -323,16 +322,21 @@ describe('оплаченные сделки воронки в факте', () =>
     expect(dealItem(items, deal({ paidDate: '2026-07-01' }), dates, '2026-07-01')!.key).toBe(
       'c_mid',
     );
-    // финальной статьи нет — остаётся направление
-    expect(dealItem(items, deal({ paidDate: '2026-10-01' }), dates, '2026-10-01')!.key).toBe(
-      'participant',
-    );
+    // финальной статьи нет — сделка всё равно в финальной стадии, в строке только для сделок
+    const fin = dealItem(items, deal({ paidDate: '2026-10-01' }), dates, '2026-10-01')!;
+    expect(fin).toMatchObject({
+      key: 'deals:participant:2',
+      label: 'Участник',
+      stage: 2,
+      fromDeals: true,
+      factOnly: true,
+    });
     expect(dealItem(items, deal({ incomeKey: null }), dates, '2026-07-01')!.key).toBe(
       'participant',
     );
   });
 
-  it('факт: ручное + сделки по своим суммам; индивидуальные скидки дают среднюю', () => {
+  it('факт: ручное + сделки по своим суммам', () => {
     const items = withDeals(
       base(),
       [
@@ -349,9 +353,24 @@ describe('оплаченные сделки воронки в факте', () =>
     expect(p.deals).toEqual({ count: 2, qty: 3, sum: 250_000 });
     expect(qtyOf(p, 'fact', null)).toBe(5);
     expect(itemSum(p, 'fact', null)).toBe(450_000);
-    // 500 000 по цене, продано на 450 000 — средняя скидка 10%
-    expect(factDiscountPct(p)).toBe(10);
     expect(incomeSum(items, 'fact')).toBe(450_000);
+  });
+
+  it('сделки по стадиям по дате оплаты: итог равен сумме сделок', () => {
+    const items = withDeals(
+      base(),
+      [
+        deal({ paidDate: '2026-04-01', amount: 80_000 }),
+        deal({ paidDate: '2026-07-01', amount: 111_000 }),
+        deal({ paidDate: '2026-10-01', qty: 2, amount: 237_000 }),
+      ],
+      dates,
+      '2026-10-07',
+    );
+    const at = (k: number) => incomeSum(items, 'fact', k);
+    expect([at(0), at(1), at(2)]).toEqual([280_000, 111_000, 237_000]);
+    expect(items.find((i) => i.key === 'deals:participant:2')!.deals.qty).toBe(2);
+    expect(incomeSum(items, 'fact')).toBe(200_000 + 80_000 + 111_000 + 237_000);
   });
 
   it('завершённая стадия: автоплан равен проданному вместе со сделками', () => {

@@ -126,6 +126,11 @@ export interface IncomeItemValue {
   factOnly: boolean;
   /** Оплаченные сделки воронки в этой статье (на её стадии): шт. и выручка по ценам сделок */
   deals: { count: number; qty: number; sum: number };
+  /**
+   * Строка только для сделок воронки: на стадии оплаты нет своей статьи (например, «Участник»
+   * на финальной стадии) — в факте показывается такая строка, в базе её нет
+   */
+  fromDeals?: boolean;
 }
 
 const NO_DEALS = { count: 0, qty: 0, sum: 0 };
@@ -275,14 +280,6 @@ export function itemDiscount(
   );
 }
 
-/** Средняя скидка в факте, %: ручные продажи по скидке статьи и сделки по своим ценам */
-export function factDiscountPct(i: IncomeItemValue): number {
-  const qty = qtyOf(i, 'fact', null);
-  const gross = qty * i.prices[i.stage];
-  if (!gross) return i.discounts[i.stage];
-  return Math.round((itemDiscount(i, 'fact', null) / gross) * 1000) / 10;
-}
-
 /** Оплаченная сделка воронки — то, что нужно для факта доходов */
 export interface PaidDealInput {
   status: string;
@@ -300,7 +297,8 @@ export const dealCountsInFact = (d: PaidDealInput) =>
 
 /**
  * Статья доходов для оплаченной сделки: направление сделки (иначе «Участник»), а у билетов —
- * статья с тем же названием на стадии цен по дате оплаты, если такая есть.
+ * статья с тем же названием на стадии цен по дате оплаты. Если такой статьи на этой стадии нет,
+ * сделка всё равно идёт в свою стадию — в строку «только для сделок» с ценой направления.
  */
 export function dealItem(
   items: IncomeItemValue[],
@@ -316,12 +314,27 @@ export function dealItem(
     pool[0];
   if (!dir || !hasStages(dir)) return dir;
   const stage = currentStage(dates, d.paidDate ?? today);
-  return (
-    pool.find((i) => i.group === dir.group && i.label === dir.label && i.stage === stage) ?? dir
+  const same = pool.find(
+    (i) => i.group === dir.group && i.label === dir.label && i.stage === stage,
   );
+  if (same) return same;
+  const price = dir.prices[dir.stage];
+  return {
+    ...dir,
+    key: `deals:${dir.key}:${stage}`,
+    stage,
+    prices: [price, price, price],
+    discounts: [0, 0, 0],
+    plan: [0, 0, 0],
+    fact: [0, 0, 0],
+    planManual: false,
+    factOnly: true,
+    deals: NO_DEALS,
+    fromDeals: true,
+  };
 }
 
-/** Статьи с оплаченными сделками воронки: факт складывается из них сам */
+/** Статьи с оплаченными сделками воронки: каждая сделка — в стадии по дате оплаты, по своей сумме */
 export function withDeals(
   items: IncomeItemValue[],
   deals: PaidDealInput[],
@@ -329,14 +342,16 @@ export function withDeals(
   today: string,
 ): IncomeItemValue[] {
   const acc = new Map<string, { count: number; qty: number; sum: number }>();
+  const extra = new Map<string, IncomeItemValue>();
   for (const d of deals) {
     if (!dealCountsInFact(d)) continue;
     const it = dealItem(items, d, dates, today);
     if (!it) continue;
+    if (it.fromDeals) extra.set(it.key, it);
     const a = acc.get(it.key) ?? { count: 0, qty: 0, sum: 0 };
     acc.set(it.key, { count: a.count + 1, qty: a.qty + Math.max(1, d.qty), sum: a.sum + d.amount });
   }
-  return items.map((i) => ({ ...i, deals: acc.get(i.key) ?? NO_DEALS }));
+  return [...items, ...extra.values()].map((i) => ({ ...i, deals: acc.get(i.key) ?? NO_DEALS }));
 }
 
 /** Итог плана или факта с учётом скидок: на этапе или накопительно (по умолчанию) */

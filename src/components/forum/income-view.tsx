@@ -23,7 +23,6 @@ import {
   incomeTarget,
   itemSum,
   netPrice,
-  factDiscountPct,
   salesAdvice,
   stageDates,
   type IncomeConfig,
@@ -544,13 +543,14 @@ function ItemRow({
   onRemove: () => void;
 }) {
   const k = it.stage;
-  const editTerms = view === 'plan' || it.factOnly;
+  // Строка только для сделок воронки не редактируется: её нет в базе
+  const editTerms = view === 'plan' || (it.factOnly && !it.fromDeals);
   const plan = itemSum(it, 'plan', null);
   const fact = itemSum(it, 'fact', null);
   const sold = qtyOf(it.fact) + it.deals.qty;
-  // В факте при сделках воронки — средняя скидка и цена по фактическим суммам клиентов
-  const avg = view === 'fact' && it.deals.count > 0;
-  const discount = avg ? factDiscountPct(it) : it.discounts[k];
+  // В факте сделки воронки идут по своим суммам: скидки у клиентов разные, общей нет
+  const byDeals = view === 'fact' && it.deals.count > 0;
+  const discount = it.discounts[k];
   const muted = 'px-2 py-1.5 text-right tabular-nums text-ink/70';
   return (
     <tr className="border-t border-line/60" data-testid="income-row">
@@ -558,7 +558,7 @@ function ItemRow({
         <LabelCell
           item={it}
           onRename={(label) => onSave([{ key: it.key, label }])}
-          onRemove={view === 'plan' || it.factOnly ? onRemove : undefined}
+          onRemove={editTerms ? onRemove : undefined}
         />
       </td>
       {withStage && (
@@ -604,19 +604,26 @@ function ItemRow({
             onCommit={(v) => onSave([{ key: it.key, discount: Math.min(100, v) }])}
             testId={`income-discount-${it.key}`}
           />
-        ) : discount ? (
-          <span title={avg ? 'Средняя скидка по проданным' : undefined}>
-            {avg && 'ср. '}
-            {formatPct(discount)}
+        ) : byDeals ? (
+          <span
+            className="text-xs"
+            title="Выручка — сумма оплаченных сделок, у каждого клиента своя скидка"
+          >
+            по сделкам
           </span>
+        ) : discount ? (
+          formatPct(discount)
         ) : (
           '—'
         )}
       </td>
       <td
-        className={cn('px-2 py-1.5 text-right tabular-nums', discount ? 'text-ink' : 'text-ink/50')}
+        className={cn(
+          'px-2 py-1.5 text-right tabular-nums',
+          discount && !byDeals ? 'text-ink' : 'text-ink/50',
+        )}
       >
-        {formatRub(Math.round(avg && sold ? fact / sold : netPrice(it, k)))}
+        {byDeals ? '—' : formatRub(netPrice(it, k))}
       </td>
       {view === 'plan' ? (
         <>
@@ -641,13 +648,17 @@ function ItemRow({
       ) : (
         <>
           <td className="px-1 py-1">
-            <NumberCell
-              value={sold}
-              format={formatQty}
-              label={`Продано, шт.: ${it.label}`}
-              onCommit={(v) => onSave([{ key: it.key, factQty: Math.max(0, v - it.deals.qty) }])}
-              testId={`income-fact-${it.key}`}
-            />
+            {it.fromDeals ? (
+              <div className="px-2 py-1.5 text-right tabular-nums">{formatQty(sold)}</div>
+            ) : (
+              <NumberCell
+                value={sold}
+                format={formatQty}
+                label={`Продано, шт.: ${it.label}`}
+                onCommit={(v) => onSave([{ key: it.key, factQty: Math.max(0, v - it.deals.qty) }])}
+                testId={`income-fact-${it.key}`}
+              />
+            )}
             {it.deals.count > 0 && (
               <div
                 className="pr-2 text-right text-[10px] text-ink/50"
@@ -660,7 +671,7 @@ function ItemRow({
           <td className="px-2 py-1.5 text-right tabular-nums">{formatRub(fact)}</td>
           {it.factOnly ? (
             <td colSpan={3} className="px-3 py-1.5 text-right text-xs text-ink/50">
-              нет в плане
+              {it.fromDeals ? 'нет статьи на этой стадии' : 'нет в плане'}
             </td>
           ) : (
             <>
@@ -879,6 +890,13 @@ function LabelCell({
         aria-label="Название позиции"
         data-testid={`income-label-${item.key}-input`}
       />
+    );
+  }
+  if (item.fromDeals) {
+    return (
+      <span className="px-2 py-0.5" data-testid={`income-label-${item.key}`}>
+        {item.label}
+      </span>
     );
   }
   const start = () => {
