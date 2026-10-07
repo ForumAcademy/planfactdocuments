@@ -1,8 +1,9 @@
 'use client';
 
 import * as React from 'react';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { Download, Plus, Search, Trash2, Upload } from 'lucide-react';
+import { Download, Plus, Search, Trash2, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
@@ -15,7 +16,11 @@ import {
   DEAL_STAGES,
   DEAL_STATUSES,
   daysInStage,
+  isDealStage,
+  isDealStatus,
   isStale,
+  reachedIndex,
+  stageIndex,
   statusLabel,
   sumAmount,
   type DealStageKey,
@@ -67,10 +72,25 @@ export function DealsTable({
 }) {
   const { forum, today } = useForum();
   const confirm = useConfirm();
+  // Из воронки приходят этап и фильтры: ?status=…&lost=…&source=…&manager=…
+  const sp = useSearchParams();
+  const param = (k: string) => (sp.get(k) === 'Не указано' ? '' : (sp.get(k) ?? ''));
   const [query, setQuery] = React.useState('');
-  const [status, setStatus] = React.useState<DealStatus | ''>('');
-  const [source, setSource] = React.useState('');
-  const [manager, setManager] = React.useState('');
+  const [status, setStatusRaw] = React.useState<DealStatus | ''>(() => {
+    const v = sp.get('status');
+    return isDealStatus(v) ? v : '';
+  });
+  // Отказы, дошедшие только до этого этапа
+  const [lostAt, setLostAt] = React.useState<DealStageKey | ''>(() => {
+    const v = sp.get('lost');
+    return isDealStage(v) && sp.get('status') === 'refused' ? v : '';
+  });
+  const setStatus = (v: DealStatus | '') => {
+    setStatusRaw(v);
+    setLostAt('');
+  };
+  const [source, setSource] = React.useState(() => param('source'));
+  const [manager, setManager] = React.useState(() => param('manager'));
   const [saving, setSaving] = React.useState(false);
   const [adding, setAdding] = React.useState(false);
   const [newCompany, setNewCompany] = React.useState('');
@@ -98,6 +118,7 @@ export function DealsTable({
   const shown = deals.filter(
     (d) =>
       (!status || d.status === status) &&
+      (!lostAt || (d.status === 'refused' && reachedIndex(d) === stageIndex(lostAt))) &&
       (!source || d.source === source) &&
       (!manager || d.manager === manager) &&
       (!q ||
@@ -321,6 +342,17 @@ export function DealsTable({
             {s.label} · {counts.get(s.key) ?? 0}
           </StatusChip>
         ))}
+        {lostAt && (
+          <button
+            type="button"
+            onClick={() => setLostAt('')}
+            className="inline-flex items-center gap-1 rounded-full border border-status-red/40 bg-status-red/10 px-3 py-1 text-sm text-status-red"
+            data-testid="deals-lost-filter"
+          >
+            отказ на этапе «{statusLabel(lostAt)}»
+            <X className="size-3.5" />
+          </button>
+        )}
         <span className="ml-auto self-center text-sm text-ink/60">
           Показано {shown.length} · {formatRub(sumAmount(shown))}
         </span>

@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  ChevronRight,
   Clock,
   Lightbulb,
   TrendingDown,
@@ -14,12 +15,10 @@ import {
 } from 'lucide-react';
 import { TabGroup, TabLink } from '@/components/ui/tab-links';
 import { Select } from '@/components/ui/input';
-import { formatDate } from '@/lib/dates';
 import {
   DEAL_STAGES,
   REFUSED,
   breakdown,
-  daysInStage,
   funnelAdvice,
   funnelStats,
   isStale,
@@ -214,6 +213,14 @@ export function FunnelView({
           planSum={source || manager ? 0 : planSum}
           directionLabel={directionLabel}
           incomeHref={`/forums/${forum.id}/income?view=fact`}
+          tableHref={(status, lostAt) => {
+            // В таблицу — с этапом и теми же фильтрами, что выбраны над воронкой
+            const q = new URLSearchParams({ view: 'table', status });
+            if (lostAt) q.set('lost', lostAt);
+            if (source) q.set('source', source);
+            if (manager) q.set('manager', manager);
+            return `${base}?${q}`;
+          }}
         />
       )}
     </div>
@@ -227,6 +234,7 @@ function FunnelBoard({
   planSum,
   directionLabel,
   incomeHref,
+  tableHref,
 }: {
   deals: DealValue[];
   today: string;
@@ -234,6 +242,7 @@ function FunnelBoard({
   planSum: number;
   directionLabel: (key: string | null) => string;
   incomeHref: string;
+  tableHref: (status: Selected, lostAt?: DealStageKey) => string;
 }) {
   const stats = React.useMemo(() => funnelStats(deals, today), [deals, today]);
   const advice = React.useMemo(
@@ -241,9 +250,24 @@ function FunnelBoard({
     [deals, today, forumStart, planSum],
   );
   const firstProblem = advice.find((a) => a.stage && a.level === 'problem')?.stage;
-  const [selected, setSelected] = React.useState<Selected>(
+  const [selected, setSelectedRaw] = React.useState<Selected>(
     (firstProblem as Selected | undefined) ?? 'qualification',
   );
+  // Раскрытые этапы в списке справа (сначала все свёрнуты); клик по воронке или рекомендации
+  // раскрывает этап
+  const [open, setOpen] = React.useState<Set<Selected>>(() => new Set());
+  const setSelected = (s: Selected) => {
+    setSelectedRaw(s);
+    setOpen((o) => new Set(o).add(s));
+  };
+  const toggle = (s: Selected) => {
+    setSelectedRaw(s);
+    setOpen((o) => {
+      const next = new Set(o);
+      if (!next.delete(s)) next.add(s);
+      return next;
+    });
+  };
 
   const paid = deals.filter((d) => d.status === 'paid');
   const refused = deals.filter((d) => d.status === 'refused');
@@ -319,13 +343,15 @@ function FunnelBoard({
             <ArrowRight className="ml-auto size-4 text-ink/40" />
           </button>
         </section>
-        <StageDetail
-          selected={selected}
+        <StageList
           deals={deals}
-          stat={selected === 'refused' ? null : stats[stageIndex(selected)]}
+          stats={stats}
+          open={open}
+          onToggle={toggle}
           today={today}
           directionLabel={directionLabel}
           incomeHref={incomeHref}
+          tableHref={tableHref}
         />
       </div>
     </>
@@ -554,197 +580,222 @@ function FunnelChart({
   );
 }
 
-function StageDetail({
-  selected,
+function StageList({
   deals,
-  stat,
+  stats,
+  open,
+  onToggle,
   today,
   directionLabel,
   incomeHref,
+  tableHref,
 }: {
-  selected: Selected;
   deals: DealValue[];
-  stat: StageStat | null;
+  stats: StageStat[];
+  open: Set<Selected>;
+  onToggle: (s: Selected) => void;
   today: string;
   directionLabel: (key: string | null) => string;
   incomeHref: string;
+  tableHref: (status: Selected, lostAt?: DealStageKey) => string;
 }) {
-  const current = deals.filter((d) => d.status === selected);
-  const lostHere =
-    selected === 'refused'
-      ? []
-      : deals.filter((d) => d.status === 'refused' && reachedIndex(d) === stageIndex(selected));
-  const [mode, setMode] = React.useState<'current' | 'lost'>('current');
-  // Новый этап: показываем, кто на нём сейчас, а если никого — кто на нём отказался
-  React.useEffect(
-    () => setMode(current.length || !lostHere.length ? 'current' : 'lost'),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selected],
-  );
-  const showLost = mode === 'lost' && lostHere.length > 0;
-  const list = (showLost ? lostHere : current).sort(
-    (a, b) => (daysInStage(b, today) ?? -1) - (daysInStage(a, today) ?? -1),
-  );
-  const dateCol =
-    selected === 'paid' ? 'paid' : selected === 'refused' || showLost ? 'decision' : 'days';
-  const meta = selected === 'refused' ? REFUSED : DEAL_STAGES[stageIndex(selected)];
-  const staleList = list.filter((d) => isStale(d, today));
-  const dirs = breakdown(list, (d) => directionLabel(d.incomeKey));
-  const sources = breakdown(list, (d) => d.source);
-  const managers = breakdown(list, (d) => d.manager);
-  const lostAt =
-    selected === 'refused'
-      ? breakdown(list, (d) => (d.lostStage ? statusLabel(d.lostStage) : 'Квалификация'))
-      : [];
-  const waiting = current.filter((d) => d.status === 'paid' && d.incomeStatus === null).length;
-
+  const keys: Selected[] = [...DEAL_STAGES.map((s) => s.key), 'refused'];
   return (
     <section
-      className="min-w-0 rounded-lg border border-line bg-white p-4"
+      className="min-w-0 self-start rounded-lg border border-line bg-white p-4"
       data-testid="funnel-detail"
     >
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
-          <span className="h-4 w-1.5 rounded-sm" style={{ background: meta.color }} />
+      <h2 className="font-semibold">Этапы</h2>
+      <p className="text-xs text-ink/50">
+        Раскройте этап, чтобы увидеть направления, источники и менеджеров
+      </p>
+      <ul className="mt-3 divide-y divide-line rounded-md border border-line">
+        {keys.map((key) => (
+          <StageItem
+            key={key}
+            stage={key}
+            deals={deals}
+            stat={key === 'refused' ? null : stats[stageIndex(key)]}
+            open={open.has(key)}
+            onToggle={() => onToggle(key)}
+            today={today}
+            directionLabel={directionLabel}
+            incomeHref={incomeHref}
+            tableHref={tableHref}
+          />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function StageItem({
+  stage,
+  deals,
+  stat,
+  open,
+  onToggle,
+  today,
+  directionLabel,
+  incomeHref,
+  tableHref,
+}: {
+  stage: Selected;
+  deals: DealValue[];
+  stat: StageStat | null;
+  open: boolean;
+  onToggle: () => void;
+  today: string;
+  directionLabel: (key: string | null) => string;
+  incomeHref: string;
+  tableHref: (status: Selected, lostAt?: DealStageKey) => string;
+}) {
+  const current = deals.filter((d) => d.status === stage);
+  const lostHere =
+    stage === 'refused'
+      ? []
+      : deals.filter((d) => d.status === 'refused' && reachedIndex(d) === stageIndex(stage));
+  const [mode, setMode] = React.useState<'current' | 'lost'>(
+    current.length || !lostHere.length ? 'current' : 'lost',
+  );
+  const showLost = mode === 'lost' && lostHere.length > 0;
+  const list = showLost ? lostHere : current;
+  const meta = stage === 'refused' ? REFUSED : DEAL_STAGES[stageIndex(stage)];
+  const staleList = stage === 'refused' ? [] : current.filter((d) => isStale(d, today));
+  const waiting = current.filter((d) => d.status === 'paid' && d.incomeStatus === null).length;
+  const lostAt =
+    stage === 'refused'
+      ? breakdown(current, (d) => (d.lostStage ? statusLabel(d.lostStage) : 'Квалификация'))
+      : [];
+  const ref = React.useRef<HTMLLIElement>(null);
+  React.useEffect(() => {
+    if (open) ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [open]);
+
+  return (
+    <li ref={ref} data-testid={`funnel-item-${stage}`}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className={cn(
+          'flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 text-left transition hover:bg-surface/60',
+          open && 'bg-surface/60',
+        )}
+      >
+        <ChevronRight
+          className={cn('size-4 shrink-0 text-ink/40 transition-transform', open && 'rotate-90')}
+        />
+        <span className="h-4 w-1.5 shrink-0 rounded-sm" style={{ background: meta.color }} />
+        <span className="font-semibold" style={{ color: meta.color }}>
           {meta.label}
-        </h2>
+        </span>
         <span className="text-sm text-ink/70">
-          сейчас {current.length} {dealsWord(current.length)}
-          {sumAmount(current) > 0 && ` · ${formatRub(sumAmount(current))}`}
+          {current.length ? `${current.length} ${dealsWord(current.length)}` : 'сделок нет'}
+          {sumAmount(current) > 0 && ` · ${formatRubShort(sumAmount(current))}`}
           {sumQty(current) > 0 && ` · ${sumQty(current)} шт.`}
         </span>
-        {stat && (
-          <span className="text-sm text-ink/60">
-            дошли до этапа {stat.reached}
-            {stat.conversion !== null && ` (${pct(stat.conversion)} от прошлого этапа)`}
-          </span>
-        )}
-      </div>
-      {lostHere.length > 0 && (
-        <div className="mt-2 inline-flex rounded-md border border-line bg-surface p-0.5 text-sm">
-          <button
-            type="button"
-            onClick={() => setMode('current')}
-            className={cn(
-              'rounded px-3 py-1',
-              !showLost ? 'bg-white font-medium text-brand shadow-sm' : 'text-ink/70',
-            )}
-          >
-            Сейчас на этапе · {current.length}
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('lost')}
-            className={cn(
-              'rounded px-3 py-1',
-              showLost ? 'bg-white font-medium text-status-red shadow-sm' : 'text-ink/70',
-            )}
-            data-testid="funnel-detail-lost"
-          >
-            Отказались на этапе · {lostHere.length}
-          </button>
+        <span className="ml-auto flex flex-wrap items-center gap-x-3 text-xs">
+          {staleList.length > 0 && (
+            <span className="text-amber-700">зависли {staleList.length}</span>
+          )}
+          {lostHere.length > 0 && <span className="text-status-red">отказ {lostHere.length}</span>}
+          {stat && (
+            <span className="text-ink/60">
+              дошли {stat.reached}
+              {stat.conversion !== null && ` · ${pct(stat.conversion)}`}
+            </span>
+          )}
+        </span>
+      </button>
+      {open && (
+        <div
+          className="border-t border-line px-3 pb-3 pt-2.5"
+          data-testid={`funnel-item-body-${stage}`}
+        >
+          {lostHere.length > 0 && (
+            <div className="mb-2 inline-flex rounded-md border border-line bg-surface p-0.5 text-sm">
+              <button
+                type="button"
+                onClick={() => setMode('current')}
+                className={cn(
+                  'rounded px-3 py-1',
+                  !showLost ? 'bg-white font-medium text-brand shadow-sm' : 'text-ink/70',
+                )}
+              >
+                Сейчас на этапе · {current.length}
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('lost')}
+                className={cn(
+                  'rounded px-3 py-1',
+                  showLost ? 'bg-white font-medium text-status-red shadow-sm' : 'text-ink/70',
+                )}
+                data-testid="funnel-detail-lost"
+              >
+                Отказались на этапе · {lostHere.length}
+              </button>
+            </div>
+          )}
+          {stat && (
+            <p className="text-sm text-ink/60">
+              Дошли до этапа {stat.reached}
+              {stat.conversion !== null && ` — ${pct(stat.conversion)} от прошлого этапа`}
+              {!showLost &&
+                sumAmount(current) > 0 &&
+                ` · сейчас на этапе ${formatRub(sumAmount(current))}`}
+            </p>
+          )}
+          {lostAt.length > 0 && (
+            <p className="text-sm text-ink/60">
+              На каком этапе отказались:{' '}
+              {lostAt.map((b) => `${b.name.toLowerCase()} — ${b.count}`).join(' · ')}
+            </p>
+          )}
+          {!showLost && staleList.length > 0 && (
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-amber-700">
+              <Clock className="size-4" />
+              {staleList.length} {dealsWord(staleList.length)} дольше{' '}
+              {DEAL_STAGES[stageIndex(stage as DealStageKey)].staleDays} дней на этапе
+            </p>
+          )}
+          {stage === 'paid' && waiting > 0 && (
+            <Link
+              href={incomeHref}
+              className="mt-1 inline-flex items-center gap-1 text-sm text-status-green hover:underline"
+            >
+              {waiting} {pluralRu(waiting, 'оплата ждёт', 'оплаты ждут', 'оплат ждут')} решения в
+              факте доходов
+              <ArrowRight className="size-3.5" />
+            </Link>
+          )}
+          {list.length === 0 ? (
+            <p className="mt-2 text-sm text-ink/60">Сейчас на этом этапе сделок нет.</p>
+          ) : (
+            <>
+              <div className="mt-3 grid gap-5 sm:grid-cols-3">
+                <Bars
+                  title="Направления доходов"
+                  rows={breakdown(list, (d) => directionLabel(d.incomeKey))}
+                  showAmount
+                />
+                <Bars title="Кто привёл (откуда пришли)" rows={breakdown(list, (d) => d.source)} />
+                <Bars title="Кто ведёт" rows={breakdown(list, (d) => d.manager)} />
+              </div>
+              <Link
+                href={showLost ? tableHref('refused', stage as DealStageKey) : tableHref(stage)}
+                className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-brand hover:underline"
+                data-testid={`funnel-to-table-${stage}`}
+              >
+                Перейти к списку компаний
+                <ArrowRight className="size-3.5" />
+              </Link>
+            </>
+          )}
         </div>
       )}
-      {!showLost && staleList.length > 0 && (
-        <p className="mt-1 flex items-center gap-1.5 text-sm text-amber-700">
-          <Clock className="size-4" />
-          {staleList.length} {dealsWord(staleList.length)} дольше{' '}
-          {DEAL_STAGES[stageIndex(selected as DealStageKey)].staleDays} дней на этапе
-        </p>
-      )}
-      {selected === 'paid' && waiting > 0 && (
-        <Link
-          href={incomeHref}
-          className="mt-1 inline-flex items-center gap-1 text-sm text-status-green hover:underline"
-        >
-          {waiting} {pluralRu(waiting, 'оплата ждёт', 'оплаты ждут', 'оплат ждут')} решения в факте
-          доходов
-          <ArrowRight className="size-3.5" />
-        </Link>
-      )}
-
-      {list.length === 0 ? (
-        <p className="mt-4 text-sm text-ink/60">Сейчас на этом этапе сделок нет.</p>
-      ) : (
-        <>
-          <div className="mt-4 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-            {selected === 'refused' && <Bars title="На каком этапе отказались" rows={lostAt} />}
-            <Bars title="Направления доходов" rows={dirs} showAmount />
-            <Bars title="Кто привёл (откуда пришли)" rows={sources} />
-            <Bars title="Кто ведёт" rows={managers} />
-          </div>
-          <div className="thin-scroll mt-4 max-h-[420px] overflow-auto rounded-md border border-line">
-            <table className="w-full min-w-[640px] text-sm" data-testid="funnel-detail-deals">
-              <thead className="sticky top-0 bg-surface text-xs text-ink/60">
-                <tr>
-                  <th className="px-2 py-1.5 text-left font-medium">Компания</th>
-                  <th className="px-2 py-1.5 text-left font-medium">Откуда</th>
-                  <th className="px-2 py-1.5 text-left font-medium">Кто ведёт</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Шт.</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Сумма</th>
-                  <th className="px-2 py-1.5 text-right font-medium">
-                    {dateCol === 'paid'
-                      ? 'Оплата'
-                      : dateCol === 'decision'
-                        ? 'Решение'
-                        : 'Дней на этапе'}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((d) => {
-                  const days = daysInStage(d, today);
-                  const st = isStale(d, today);
-                  return (
-                    <tr key={d.id} className="border-t border-line">
-                      <td className="max-w-[280px] truncate px-2 py-1.5" title={d.company}>
-                        {d.company}
-                        {d.status === 'paid' && (
-                          <span
-                            className={cn(
-                              'ml-2 rounded px-1.5 py-0.5 text-[11px]',
-                              d.incomeStatus === 'added'
-                                ? 'bg-status-green/10 text-status-green'
-                                : d.incomeStatus === 'rejected'
-                                  ? 'bg-surface text-ink/50'
-                                  : 'bg-amber-100 text-amber-800',
-                            )}
-                          >
-                            {d.incomeStatus === 'added'
-                              ? 'в факте'
-                              : d.incomeStatus === 'rejected'
-                                ? 'отклонено'
-                                : 'ждёт решения'}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-2 py-1.5 text-ink/70">{d.source}</td>
-                      <td className="px-2 py-1.5 text-ink/70">{d.manager}</td>
-                      <td className="px-2 py-1.5 text-right tabular-nums">{d.qty || ''}</td>
-                      <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
-                        {d.amount ? formatRub(d.amount) : ''}
-                      </td>
-                      <td
-                        className={cn(
-                          'whitespace-nowrap px-2 py-1.5 text-right tabular-nums',
-                          st && dateCol === 'days' && 'font-medium text-amber-700',
-                        )}
-                      >
-                        {dateCol === 'paid'
-                          ? formatDate(d.paidDate)
-                          : dateCol === 'decision'
-                            ? formatDate(d.decisionDate) || '—'
-                            : (days ?? '—')}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-    </section>
+    </li>
   );
 }
 
