@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   ChevronDown,
@@ -22,6 +23,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { NumberCell } from '@/components/ui/number-cell';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { TabGroup, TabLink } from '@/components/ui/tab-links';
 import { todayMsk } from '@/lib/dates';
 import { downloadBlob, safeFileName } from '@/lib/download';
 import {
@@ -34,7 +36,7 @@ import {
   type ExpenseGroup,
 } from '@/lib/expenses';
 import type { TaskDTO } from '@/lib/types';
-import { cn, formatRub, pluralRu } from '@/lib/utils';
+import { cn, formatRub, formatRubShort, pluralRu } from '@/lib/utils';
 import { setExpenseLimit } from '@/server/actions/forums';
 import { CostCell } from './cells';
 import { ExpensesImportDialog } from './expenses-import-dialog';
@@ -45,6 +47,8 @@ const pct = (part: number, total: number) =>
 
 export function ExpensesView() {
   const { forum, tasks, lookups } = useForum();
+  const sp = useSearchParams();
+  const view = sp.get('view') === 'fact' ? 'fact' : 'plan';
   const [showEmpty, setShowEmpty] = React.useState(false);
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
   const [importOpen, setImportOpen] = React.useState(false);
@@ -54,7 +58,7 @@ export function ExpensesView() {
     (t: TaskDTO) => (t.blockId ? (lookups.block.get(t.blockId) ?? null) : null),
     [lookups],
   );
-  const { groups, total } = React.useMemo(() => {
+  const { groups, total, fact } = React.useMemo(() => {
     const ordered = [...tasks].sort((a, b) => b.cost - a.cost || a.order - b.order);
     return groupExpenses(ordered, blockOf);
   }, [tasks, blockOf]);
@@ -82,6 +86,7 @@ export function ExpensesView() {
       return n;
     });
   const allOpen = groups.every((g) => expanded.has(g.category.key));
+  const base = `/forums/${forum.id}/expenses`;
 
   const exportFile = async (mode: 'template' | 'data') => {
     setBusy(true);
@@ -101,6 +106,7 @@ export function ExpensesView() {
               stage: t.stageId ? (lookups.stage.get(t.stageId)?.name ?? '') : '',
               status: t.status,
               cost: t.cost,
+              costFact: t.costFact,
             })),
         })),
         { forumName: forum.name, mode, date },
@@ -123,7 +129,7 @@ export function ExpensesView() {
     <div className="mx-auto max-w-[1600px] px-4 py-4" data-testid="expenses-view">
       <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
         <div>
-          <div className="text-xs text-ink/60">Расходы форума по задачам</div>
+          <div className="text-xs text-ink/60">Расходы форума по задачам (план)</div>
           <div
             className={cn('text-2xl font-semibold tabular-nums', overLimit && 'text-status-red')}
             data-testid="expenses-total"
@@ -193,7 +199,38 @@ export function ExpensesView() {
         </div>
       </div>
 
-      {total > 0 && (
+      <ExpensesSummary plan={total} fact={fact} limit={limit} />
+
+      <div className="mt-5">
+        <TabGroup
+          className="inline-flex rounded-lg border border-line bg-surface p-0.5"
+          role="tablist"
+        >
+          {(
+            [
+              ['plan', 'План', base],
+              ['fact', 'Факт', `${base}?view=fact`],
+            ] as const
+          ).map(([key, label, href]) => (
+            <TabLink
+              key={key}
+              href={href}
+              role="tab"
+              replace
+              scroll={false}
+              active={view === key}
+              className="inline-flex items-center rounded-md px-5 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+              activeClassName="bg-white font-medium text-brand shadow-sm"
+              inactiveClassName="text-ink/70 hover:text-ink"
+              data-testid={`expenses-tab-${key}`}
+            >
+              {label}
+            </TabLink>
+          ))}
+        </TabGroup>
+      </div>
+
+      {view === 'plan' && total > 0 && (
         <div className="mt-4">
           <div className="flex h-3 w-full overflow-hidden rounded-full bg-surface">
             {groups
@@ -242,47 +279,58 @@ export function ExpensesView() {
         </label>
       </div>
 
-      <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
-        <table className="w-full min-w-[760px] text-sm">
-          <thead className="bg-surface text-left text-xs text-ink/70">
-            <tr>
-              <th className="px-3 py-2 font-medium">Направление / статья расходов</th>
-              <th className="w-14 px-2 py-2 font-medium">№</th>
-              <th className="w-48 px-2 py-2 font-medium">Этап</th>
-              <th className="w-32 px-2 py-2 font-medium">Статус</th>
-              <th className="w-36 px-2 py-2 text-right font-medium">Стоимость</th>
-              <th className="w-20 px-3 py-2 text-right font-medium">Доля</th>
-            </tr>
-          </thead>
-          {groups.map((g) => (
-            <GroupRows
-              key={g.category.key}
-              group={g}
-              total={total}
-              open={expanded.has(g.category.key)}
-              onToggle={() => toggle(g.category.key)}
-              showEmpty={showEmpty}
-            />
-          ))}
-          <tfoot>
-            <tr className="border-t-2 border-brand/40 font-semibold">
-              <td className="px-3 py-2.5" colSpan={4}>
-                Итого
-              </td>
-              <td
-                className={cn(
-                  'px-2 py-2.5 text-right tabular-nums',
-                  overLimit && 'text-status-red',
-                )}
-              >
-                {formatRub(total)}
-              </td>
-              <td className="px-3 py-2.5 text-right tabular-nums">{total ? '100%' : '—'}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-      {total === 0 && (
+      {view === 'fact' ? (
+        <FactTable
+          groups={groups}
+          total={total}
+          fact={fact}
+          expanded={expanded}
+          onToggle={toggle}
+          showEmpty={showEmpty}
+        />
+      ) : (
+        <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead className="bg-surface text-left text-xs text-ink/70">
+              <tr>
+                <th className="px-3 py-2 font-medium">Направление / статья расходов</th>
+                <th className="w-14 px-2 py-2 font-medium">№</th>
+                <th className="w-48 px-2 py-2 font-medium">Этап</th>
+                <th className="w-32 px-2 py-2 font-medium">Статус</th>
+                <th className="w-36 px-2 py-2 text-right font-medium">Стоимость</th>
+                <th className="w-20 px-3 py-2 text-right font-medium">Доля</th>
+              </tr>
+            </thead>
+            {groups.map((g) => (
+              <GroupRows
+                key={g.category.key}
+                group={g}
+                total={total}
+                open={expanded.has(g.category.key)}
+                onToggle={() => toggle(g.category.key)}
+                showEmpty={showEmpty}
+              />
+            ))}
+            <tfoot>
+              <tr className="border-t-2 border-brand/40 font-semibold">
+                <td className="px-3 py-2.5" colSpan={4}>
+                  Итого
+                </td>
+                <td
+                  className={cn(
+                    'px-2 py-2.5 text-right tabular-nums',
+                    overLimit && 'text-status-red',
+                  )}
+                >
+                  {formatRub(total)}
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums">{total ? '100%' : '—'}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+      {view === 'plan' && total === 0 && (
         <p className="mt-3 text-sm text-ink/60">
           Стоимость задач пока не заполнена. Укажите её во вкладке «План» → «Этапы и задачи»
           (столбец «Стоимость») или скачайте шаблон, заполните и загрузите его здесь.
@@ -446,5 +494,282 @@ function CategoryMenu({ task: t }: { task: TaskDTO }) {
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/**
+ * Сводка над вкладками «План» / «Факт»: две полосы на одной шкале с отметкой лимита —
+ * сразу видно, сколько уже потрачено из плана и укладывается ли план в лимит.
+ */
+function ExpensesSummary({
+  plan,
+  fact,
+  limit,
+}: {
+  plan: number;
+  fact: number;
+  limit: number | null;
+}) {
+  const max = Math.max(plan, fact, limit ?? 0) * 1.05 || 1;
+  const at = (v: number) => `${Math.min(100, (v / max) * 100)}%`;
+  const rows = [
+    {
+      key: 'plan',
+      label: 'План',
+      value: plan,
+      bad: limit != null && plan > limit,
+      note: limit ? `${pct(plan, limit)} лимита` : null,
+    },
+    {
+      key: 'fact',
+      label: 'Факт',
+      value: fact,
+      bad: fact > plan || (limit != null && fact > limit),
+      note: plan
+        ? fact > plan
+          ? `Больше плана на ${formatRub(fact - plan)}`
+          : `${pct(fact, plan)} от плана · остаток ${formatRub(plan - fact)}`
+        : null,
+    },
+  ];
+  return (
+    <section
+      className="mt-4 rounded-lg border border-line bg-white px-4 py-3"
+      data-testid="expenses-summary"
+    >
+      <div className="grid grid-cols-[3rem_1fr] gap-x-3 gap-y-2 sm:grid-cols-[3rem_1fr_15rem]">
+        {rows.map((r) => (
+          <React.Fragment key={r.key}>
+            <div className="self-center text-sm font-medium">{r.label}</div>
+            <div className="relative self-center">
+              <div className="h-3 w-full overflow-hidden rounded-full bg-surface">
+                <div
+                  className={cn(
+                    'h-full',
+                    r.bad ? 'bg-status-red' : r.key === 'plan' ? 'bg-brand' : 'bg-status-green',
+                  )}
+                  style={{ width: at(r.value) }}
+                  title={`${r.label}: ${formatRub(r.value)}`}
+                />
+              </div>
+              {limit ? (
+                <div
+                  className="absolute -inset-y-1 w-0 border-l border-ink/70"
+                  style={{ left: at(limit) }}
+                />
+              ) : null}
+            </div>
+            <div className="col-start-2 sm:col-start-auto">
+              <div
+                className={cn('font-semibold tabular-nums', r.bad && 'text-status-red')}
+                data-testid={`expenses-${r.key}-total`}
+              >
+                {formatRub(r.value)}
+              </div>
+              {r.note && (
+                <div className={cn('text-xs', r.bad ? 'text-status-red' : 'text-ink/60')}>
+                  {r.note}
+                </div>
+              )}
+            </div>
+          </React.Fragment>
+        ))}
+        {limit ? (
+          <div className="relative col-start-2 h-4 text-[11px] text-ink/60">
+            <span
+              className="absolute -translate-x-1/2 whitespace-nowrap font-medium text-ink"
+              style={{ left: at(limit) }}
+            >
+              Лимит<span className="hidden sm:inline"> · {formatRubShort(limit)}</span>
+            </span>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+/** Вкладка «Факт»: план и фактические расходы по задачам, остаток и исполнение плана. */
+function FactTable({
+  groups,
+  total,
+  fact,
+  expanded,
+  onToggle,
+  showEmpty,
+}: {
+  groups: ExpenseGroup<TaskDTO>[];
+  total: number;
+  fact: number;
+  expanded: Set<string>;
+  onToggle: (key: string) => void;
+  showEmpty: boolean;
+}) {
+  const { patchTask, setOpenTaskId } = useForum();
+  return (
+    <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
+      <table className="w-full min-w-[860px] text-sm">
+        <thead className="bg-surface text-left text-xs text-ink/70">
+          <tr>
+            <th className="px-3 py-2 font-medium">Направление / статья расходов</th>
+            <th className="w-14 px-2 py-2 font-medium">№</th>
+            <th className="w-36 px-2 py-2 text-right font-medium">План</th>
+            <th className="w-36 px-2 py-2 text-right font-medium">Факт</th>
+            <th className="w-36 px-2 py-2 text-right font-medium">Остаток</th>
+            <th className="w-44 px-3 py-2 text-right font-medium" title="Доля факта от плана">
+              Исполнение плана
+            </th>
+          </tr>
+        </thead>
+        {groups.map((g) => {
+          const open = expanded.has(g.category.key);
+          const rows = showEmpty ? g.tasks : g.tasks.filter((t) => t.cost > 0 || t.costFact > 0);
+          return (
+            <tbody key={g.category.key} data-testid={`expense-fact-group-${g.category.key}`}>
+              <tr
+                className="cursor-pointer border-t border-line hover:bg-surface/60"
+                onClick={() => onToggle(g.category.key)}
+                aria-expanded={open}
+              >
+                <td className="px-3 py-2.5" colSpan={2}>
+                  <div className="flex items-center gap-2">
+                    {open ? (
+                      <ChevronDown className="size-4 shrink-0" />
+                    ) : (
+                      <ChevronRight className="size-4 shrink-0" />
+                    )}
+                    <span
+                      className="h-4 w-1.5 shrink-0 rounded-sm"
+                      style={{ background: g.category.color }}
+                    />
+                    <span className="font-semibold">{g.category.label}</span>
+                  </div>
+                </td>
+                <td
+                  className={cn(
+                    'px-2 py-2.5 text-right font-semibold tabular-nums',
+                    !g.total && 'text-status-gray',
+                  )}
+                >
+                  {formatRub(g.total)}
+                </td>
+                <td
+                  className={cn(
+                    'px-2 py-2.5 text-right font-semibold tabular-nums',
+                    !g.fact && 'text-status-gray',
+                  )}
+                >
+                  {formatRub(g.fact)}
+                </td>
+                <Rest plan={g.total} fact={g.fact} className="font-semibold" />
+                <td className="px-3 py-2.5">
+                  <Execution part={g.fact} total={g.total} />
+                </td>
+              </tr>
+              {open && rows.length === 0 && (
+                <tr className="border-t border-line/60">
+                  <td colSpan={6} className="py-2 pl-12 pr-3 text-xs text-status-gray">
+                    {g.tasks.length
+                      ? 'Нет задач с расходами — включите «Показывать задачи без стоимости»'
+                      : 'Нет задач в этом направлении'}
+                  </td>
+                </tr>
+              )}
+              {open &&
+                rows.map((t) => (
+                  <tr
+                    key={t.id}
+                    className="border-t border-line/60 align-top"
+                    data-testid="expense-fact-row"
+                  >
+                    <td className="py-1.5 pl-12 pr-3">
+                      <button
+                        type="button"
+                        onClick={() => setOpenTaskId(t.id)}
+                        className="text-left hover:text-brand hover:underline"
+                        title="Открыть задачу"
+                      >
+                        {t.description}
+                      </button>
+                    </td>
+                    <td className="px-2 py-1.5 tabular-nums text-ink/60">{t.number}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-ink/70">
+                      {formatRub(t.cost)}
+                    </td>
+                    <td className="px-1 py-1">
+                      <NumberCell
+                        value={t.costFact}
+                        format={formatRub}
+                        label={`Факт, руб.: ${t.description}`}
+                        onCommit={(costFact) => void patchTask(t.id, { costFact })}
+                        testId={`expense-fact-${t.number}`}
+                      />
+                    </td>
+                    <Rest plan={t.cost} fact={t.costFact} />
+                    <td className="px-3 py-1.5">
+                      <Execution part={t.costFact} total={t.cost} />
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          );
+        })}
+        <tfoot>
+          <tr className="border-t-2 border-brand/40 font-semibold">
+            <td className="px-3 py-2.5" colSpan={2}>
+              Итого
+            </td>
+            <td className="px-2 py-2.5 text-right tabular-nums">{formatRub(total)}</td>
+            <td className="px-2 py-2.5 text-right tabular-nums" data-testid="expenses-fact-sum">
+              {formatRub(fact)}
+            </td>
+            <Rest plan={total} fact={fact} />
+            <td className="px-3 py-2.5">
+              <Execution part={fact} total={total} />
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+/** Остаток плана; перерасход — красным со знаком минус */
+function Rest({ plan, fact, className }: { plan: number; fact: number; className?: string }) {
+  const rest = plan - fact;
+  return (
+    <td
+      className={cn(
+        'px-2 py-1.5 text-right tabular-nums',
+        rest < 0 ? 'text-status-red' : rest === 0 ? 'text-status-gray' : 'text-ink/70',
+        className,
+      )}
+    >
+      {rest < 0 ? `−${formatRub(-rest)}` : formatRub(rest)}
+    </td>
+  );
+}
+
+/** Исполнение плана расходов: перерасход (больше 100%) — красным */
+function Execution({ part, total }: { part: number; total: number }) {
+  if (!total)
+    return (
+      <div className={cn('text-right text-xs', part ? 'text-status-red' : 'text-status-gray')}>
+        {part ? 'вне плана' : '—'}
+      </div>
+    );
+  const p = (part / total) * 100;
+  return (
+    <div className="flex items-center gap-2">
+      <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface">
+        <div
+          className={cn('h-full', p > 100 ? 'bg-status-red' : 'bg-status-green')}
+          style={{ width: `${Math.min(100, p)}%` }}
+        />
+      </div>
+      <span className={cn('w-11 text-right text-xs tabular-nums', p > 100 && 'text-status-red')}>
+        {Math.round(p)}%
+      </span>
+    </div>
   );
 }

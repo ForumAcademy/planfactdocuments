@@ -1,6 +1,6 @@
 /**
  * Excel раздела «Расходы»: шаблон, выгрузка заполненных данных и разбор загруженного файла.
- * Строки задач связываются с форумом по № задачи; меняются только стоимость и направление.
+ * Строки задач связываются с форумом по № задачи; меняются только план, факт и направление.
  */
 import ExcelJS from 'exceljs';
 import { EXPENSE_CATEGORIES, expenseCategoryByLabel, type ExpenseCategoryKey } from '../expenses';
@@ -20,6 +20,7 @@ const COLUMNS = [
   { key: 'stage', header: 'Этап', width: 26 },
   { key: 'status', header: 'Статус', width: 13 },
   { key: 'cost', header: 'Стоимость, руб.', width: 16 },
+  { key: 'fact', header: 'Факт, руб.', width: 16 },
   { key: 'share', header: 'Доля', width: 9 },
 ] as const;
 
@@ -29,6 +30,7 @@ export interface ExpenseExportRow {
   stage: string;
   status: TaskStatusCode;
   cost: number;
+  costFact: number;
 }
 
 export interface ExpenseExportGroup {
@@ -77,7 +79,7 @@ export async function buildExpensesWorkbook(
   ws.mergeCells(2, 1, 2, lastCol);
   const note = ws.getCell(2, 1);
   note.value = isTemplate
-    ? 'Заполните «Стоимость, руб.» по задачам; направление можно сменить из списка. Не меняйте «№ задачи». Пустая стоимость — без изменений.'
+    ? 'Заполните «Стоимость, руб.» (план) и «Факт, руб.» по задачам; направление можно сменить из списка. Не меняйте «№ задачи». Пустая ячейка — без изменений.'
     : `Данные на ${meta.date}. Файл можно поправить и загрузить обратно в раздел «Расходы».`;
   note.font = { italic: true, color: { argb: 'FF5B6475' } };
   note.alignment = { wrapText: true };
@@ -94,12 +96,15 @@ export async function buildExpensesWorkbook(
 
   const costCol = cols.findIndex((c) => c.key === 'cost') + 1;
   const costLetter = ws.getColumn(costCol).letter;
+  const factLetter = ws.getColumn(cols.findIndex((c) => c.key === 'fact') + 1).letter;
   const grandTotal = groups.reduce((s, g) => s + g.rows.reduce((a, r) => a + r.cost, 0), 0);
+  const grandFact = groups.reduce((s, g) => s + g.rows.reduce((a, r) => a + r.costFact, 0), 0);
   const groupRows: number[] = [];
 
   for (const g of groups) {
-    const rows = isTemplate ? g.rows : g.rows.filter((r) => r.cost > 0);
+    const rows = isTemplate ? g.rows : g.rows.filter((r) => r.cost > 0 || r.costFact > 0);
     const total = g.rows.reduce((s, r) => s + r.cost, 0);
+    const fact = g.rows.reduce((s, r) => s + r.costFact, 0);
     const gr = ws.addRow({});
     groupRows.push(gr.number);
     gr.getCell('category').value = g.label;
@@ -111,6 +116,12 @@ export async function buildExpensesWorkbook(
       ? {
           formula: `SUM(${costLetter}${first}:${costLetter}${last})`,
           result: isTemplate ? 0 : total,
+        }
+      : 0;
+    gr.getCell('fact').value = rows.length
+      ? {
+          formula: `SUM(${factLetter}${first}:${factLetter}${last})`,
+          result: isTemplate ? 0 : fact,
         }
       : 0;
     if (!isTemplate) gr.getCell('share').value = grandTotal ? total / grandTotal : 0;
@@ -130,6 +141,7 @@ export async function buildExpensesWorkbook(
         stage: r.stage,
         status: STATUS_LABEL[r.status],
         cost: isTemplate ? null : r.cost,
+        fact: isTemplate ? null : r.costFact,
       });
       row.alignment = { vertical: 'top', wrapText: true };
       row.getCell('category').font = { color: { argb: 'FF8A94A6' } };
@@ -141,10 +153,12 @@ export async function buildExpensesWorkbook(
         errorTitle: 'Направление',
         error: 'Выберите направление из списка',
       };
-      const cost = row.getCell('cost');
-      cost.numFmt = '#,##0 ₽';
-      if (isTemplate) {
-        cost.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF8E1' } };
+      for (const key of ['cost', 'fact']) {
+        const cell = row.getCell(key);
+        cell.numFmt = '#,##0 ₽';
+        if (isTemplate) {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF8E1' } };
+        }
       }
       row.eachCell({ includeEmpty: true }, (cell, col) => {
         if (col > lastCol) return;
@@ -160,6 +174,12 @@ export async function buildExpensesWorkbook(
         result: isTemplate ? 0 : grandTotal,
       }
     : 0;
+  tr.getCell('fact').value = groupRows.length
+    ? {
+        formula: groupRows.map((n) => `${factLetter}${n}`).join('+'),
+        result: isTemplate ? 0 : grandFact,
+      }
+    : 0;
   if (!isTemplate) tr.getCell('share').value = grandTotal ? 1 : 0;
   tr.eachCell({ includeEmpty: true }, (cell, col) => {
     if (col > lastCol) return;
@@ -168,6 +188,7 @@ export async function buildExpensesWorkbook(
   });
   for (const n of [...groupRows, tr.number]) {
     ws.getRow(n).getCell('cost').numFmt = '#,##0 ₽';
+    ws.getRow(n).getCell('fact').numFmt = '#,##0 ₽';
     if (!isTemplate) ws.getRow(n).getCell('share').numFmt = '0.0%';
   }
 
@@ -190,6 +211,8 @@ export interface ParsedExpenseRow {
   category: ExpenseCategoryKey | null;
   /** Стоимость; null — ячейка пустая (без изменений) */
   cost: number | null;
+  /** Факт; null — ячейка пустая или столбца нет (без изменений) */
+  costFact: number | null;
   errors: string[];
 }
 
@@ -200,13 +223,14 @@ export interface ParsedExpenses {
   fileErrors: string[];
 }
 
-type ColKey = 'category' | 'number' | 'description' | 'cost';
+type ColKey = 'category' | 'number' | 'description' | 'cost' | 'fact';
 
 function matchHeader(raw: string): ColKey | null {
   const h = normalizeSpaces(raw.toLowerCase().replace(/ё/g, 'е'));
   if (!h) return null;
   if (h.startsWith('№') || h.startsWith('номер')) return 'number';
   if (h.startsWith('направление')) return 'category';
+  if (h.startsWith('факт')) return 'fact';
   if (h.startsWith('стоимость') || h.startsWith('сумма') || h.startsWith('бюджет')) return 'cost';
   if (h.startsWith('статья') || h.startsWith('задача') || h.startsWith('описание'))
     return 'description';
@@ -324,7 +348,14 @@ export async function parseExpensesWorkbook(
       if (c.value < 0) errors.push('Стоимость не может быть отрицательной');
       else cost = Math.round(c.value);
     }
-    rows.push({ rowNumber: r, number, category, cost, errors });
+    const f = cellNumber(get(row, 'fact'));
+    let costFact: number | null = null;
+    if (f.error) errors.push(`Не распознан факт «${cellText(get(row, 'fact')).trim()}»`);
+    else if (f.value !== null) {
+      if (f.value < 0) errors.push('Факт не может быть отрицательным');
+      else costFact = Math.round(f.value);
+    }
+    rows.push({ rowNumber: r, number, category, cost, costFact, errors });
   }
   return { rows, skipped, fileErrors };
 }

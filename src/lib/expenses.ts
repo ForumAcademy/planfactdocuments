@@ -1,6 +1,6 @@
 /**
  * Расходы: направления (крупные статьи) и отнесение задач к ним.
- * Источник сумм — стоимость задач из «Линии задач».
+ * Источник сумм — стоимость задач из «Линии задач» (план) и фактические расходы по задачам.
  */
 
 export const EXPENSE_CATEGORIES = [
@@ -114,6 +114,8 @@ export function autoExpenseCategory(description: string, block: string | null): 
 export interface ExpenseTaskInput {
   description: string;
   cost: number;
+  /** Фактические расходы на сегодня */
+  costFact?: number;
   expenseCategory: string | null;
 }
 
@@ -131,19 +133,31 @@ export interface ExpenseGroup<T> {
   category: ExpenseCategory;
   /** Задачи направления (все, включая без стоимости) */
   tasks: T[];
+  /** План */
   total: number;
+  /** Факт */
+  fact: number;
 }
 
 /** Раскладывает задачи по направлениям в порядке EXPENSE_CATEGORIES. */
 export function groupExpenses<T extends ExpenseTaskInput>(
   tasks: T[],
   blockOf: (t: T) => string | null,
-): { groups: ExpenseGroup<T>[]; total: number } {
+): { groups: ExpenseGroup<T>[]; total: number; fact: number } {
   const map = new Map<ExpenseCategoryKey, T[]>(EXPENSE_CATEGORIES.map((c) => [c.key, []]));
   for (const t of tasks) map.get(taskExpenseCategory(t, blockOf(t)))!.push(t);
   const groups = EXPENSE_CATEGORIES.map((category) => {
     const list = map.get(category.key)!;
-    return { category, tasks: list, total: list.reduce((s, t) => s + t.cost, 0) };
+    return {
+      category,
+      tasks: list,
+      total: list.reduce((s, t) => s + t.cost, 0),
+      fact: list.reduce((s, t) => s + (t.costFact ?? 0), 0),
+    };
   });
-  return { groups, total: groups.reduce((s, g) => s + g.total, 0) };
+  return {
+    groups,
+    total: groups.reduce((s, g) => s + g.total, 0),
+    fact: groups.reduce((s, g) => s + g.fact, 0),
+  };
 }

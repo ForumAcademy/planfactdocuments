@@ -22,6 +22,7 @@ interface Change {
   task: TaskDTO;
   rowNumber: number;
   cost?: number;
+  costFact?: number;
   /** Новое направление: ключ, null — автоматическое */
   category?: ExpenseCategoryKey | null;
   fromCategory: ExpenseCategoryKey;
@@ -79,12 +80,14 @@ export function ExpensesImportDialog({
       const from = taskExpenseCategory(task, block);
       const c: Change = { task, rowNumber: r.rowNumber, fromCategory: from, toCategory: from };
       if (r.cost !== null && r.cost !== task.cost) c.cost = r.cost;
+      if (r.costFact !== null && r.costFact !== task.costFact) c.costFact = r.costFact;
       if (r.category && r.category !== from) {
         c.category =
           r.category === autoExpenseCategory(task.description, block) ? null : r.category;
         c.toCategory = r.category;
       }
-      if (c.cost !== undefined || c.category !== undefined) changes.push(c);
+      if (c.cost !== undefined || c.costFact !== undefined || c.category !== undefined)
+        changes.push(c);
     }
     problems.sort((a, b) => a.rowNumber - b.rowNumber);
     const delta = changes.reduce((s, c) => s + (c.cost ?? c.task.cost) - c.task.cost, 0);
@@ -99,6 +102,7 @@ export function ExpensesImportDialog({
       analysis.changes.map((c) => ({
         taskId: c.task.id,
         ...(c.cost !== undefined ? { cost: c.cost } : {}),
+        ...(c.costFact !== undefined ? { costFact: c.costFact } : {}),
         ...(c.category !== undefined ? { expenseCategory: c.category } : {}),
       })),
     );
@@ -110,6 +114,7 @@ export function ExpensesImportDialog({
   };
 
   const costChanges = analysis?.changes.filter((c) => c.cost !== undefined).length ?? 0;
+  const factChanges = analysis?.changes.filter((c) => c.costFact !== undefined).length ?? 0;
   const catChanges = analysis?.changes.filter((c) => c.category !== undefined).length ?? 0;
 
   return (
@@ -124,7 +129,7 @@ export function ExpensesImportDialog({
           <div className="text-sm">
             <div className="font-medium">{fileName || 'Выберите файл .xlsx'}</div>
             <div className="text-ink/60">
-              Меняются только стоимость и направление задач. Пустая стоимость — без изменений.
+              Меняются только план, факт и направление задач. Пустая ячейка — без изменений.
             </div>
           </div>
           <input
@@ -147,12 +152,13 @@ export function ExpensesImportDialog({
 
         {analysis && parsed && parsed.rows.length > 0 && (
           <div className="mt-4 space-y-4">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" data-testid="expenses-summary">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5" data-testid="expenses-summary">
               <Stat label="Строк задач в файле" value={String(parsed.rows.length)} />
-              <Stat label="Изменится стоимость" value={String(costChanges)} tone="text-brand" />
+              <Stat label="Изменится план" value={String(costChanges)} tone="text-brand" />
+              <Stat label="Изменится факт" value={String(factChanges)} tone="text-brand" />
               <Stat label="Сменится направление" value={String(catChanges)} tone="text-brand" />
               <Stat
-                label="Итог расходов изменится на"
+                label="Итог плана изменится на"
                 value={`${analysis.delta > 0 ? '+' : ''}${formatRub(analysis.delta)}`}
                 tone={analysis.delta ? 'text-ink' : 'text-status-gray'}
               />
@@ -184,8 +190,8 @@ export function ExpensesImportDialog({
                       <th className="px-2 py-1.5">№</th>
                       <th className="px-2 py-1.5">Задача</th>
                       <th className="px-2 py-1.5">Направление</th>
-                      <th className="px-2 py-1.5 text-right">Было</th>
-                      <th className="px-2 py-1.5 text-right">Станет</th>
+                      <th className="px-2 py-1.5 text-right">План</th>
+                      <th className="px-2 py-1.5 text-right">Факт</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -207,17 +213,8 @@ export function ExpensesImportDialog({
                             </span>
                           )}
                         </td>
-                        <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums text-ink/60">
-                          {formatRub(c.task.cost)}
-                        </td>
-                        <td
-                          className={cn(
-                            'whitespace-nowrap px-2 py-1 text-right tabular-nums',
-                            c.cost !== undefined && 'font-semibold',
-                          )}
-                        >
-                          {formatRub(c.cost ?? c.task.cost)}
-                        </td>
+                        <ChangeCell from={c.task.cost} to={c.cost} />
+                        <ChangeCell from={c.task.costFact} to={c.costFact} />
                       </tr>
                     ))}
                   </tbody>
@@ -250,5 +247,21 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: str
       <div className={cn('text-xl font-semibold tabular-nums', tone)}>{value}</div>
       <div className="text-xs text-ink/60">{label}</div>
     </div>
+  );
+}
+
+/** Сумма до и после загрузки: «было → станет» или текущее значение серым */
+function ChangeCell({ from, to }: { from: number; to?: number }) {
+  return (
+    <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">
+      {to === undefined ? (
+        <span className="text-ink/60">{formatRub(from)}</span>
+      ) : (
+        <>
+          <span className="text-ink/50 line-through">{formatRub(from)}</span>{' '}
+          <span className="font-semibold">{formatRub(to)}</span>
+        </>
+      )}
+    </td>
   );
 }

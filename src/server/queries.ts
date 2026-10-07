@@ -42,6 +42,7 @@ export function toTaskDTO(
     completedAt: dbToISO(t.completedAt),
     comment: t.comment,
     cost: t.cost,
+    costFact: t.costFact,
     expenseCategory: t.expenseCategory,
     order: t.order,
     roleIds: t.roles.map((r) => r.id),

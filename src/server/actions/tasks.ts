@@ -32,6 +32,8 @@ const patchSchema = z
     completedAt: optionalIsoDate,
     comment: z.string().max(4000),
     cost: z.number().int().min(0).max(10_000_000_000),
+    /** Фактические расходы на сегодня */
+    costFact: z.number().int().min(0).max(10_000_000_000),
     /** Направление расходов; null — автоматически */
     expenseCategory: z
       .string()
@@ -113,6 +115,15 @@ async function applyPatch(
       field: 'Стоимость',
       oldValue: formatRub(task.cost),
       newValue: formatRub(p.cost),
+    });
+  }
+
+  if (p.costFact !== undefined && p.costFact !== task.costFact) {
+    data.costFact = p.costFact;
+    hist.push({
+      field: 'Факт расходов',
+      oldValue: formatRub(task.costFact),
+      newValue: formatRub(p.costFact),
     });
   }
 
@@ -321,11 +332,12 @@ export async function bulkUpdateTasks(
 
 const expenseItemSchema = z.object({
   taskId: id,
-  cost: patchSchema.shape.cost,
-  expenseCategory: patchSchema.shape.expenseCategory,
+  cost: patchSchema.shape.cost.optional(),
+  costFact: patchSchema.shape.costFact.optional(),
+  expenseCategory: patchSchema.shape.expenseCategory.optional(),
 });
 
-/** Загрузка заполненного шаблона раздела «Расходы»: стоимость и направления задач форума. */
+/** Загрузка заполненного шаблона раздела «Расходы»: план, факт и направления задач форума. */
 export async function updateExpenses(
   forumId: number,
   items: z.input<typeof expenseItemSchema>[],
@@ -347,7 +359,7 @@ export async function updateExpenses(
           await applyPatch(
             tx,
             byId.get(x.taskId)!,
-            { cost: x.cost, expenseCategory: x.expenseCategory },
+            { cost: x.cost, costFact: x.costFact, expenseCategory: x.expenseCategory },
             userName,
           );
         }

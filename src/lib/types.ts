@@ -39,6 +39,8 @@ export interface TaskDTO {
   employeeIds: number[];
   /** Стоимость, руб. */
   cost: number;
+  /** Фактические расходы на сегодня, руб. */
+  costFact: number;
   /** Направление расходов (см. lib/expenses); null — автоматически */
   expenseCategory: string | null;
 }

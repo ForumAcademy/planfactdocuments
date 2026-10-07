@@ -158,6 +158,7 @@ export function ForumProvider({
           if (patch.stageId !== undefined) n.stageId = patch.stageId;
           if (patch.blockId !== undefined) n.blockId = patch.blockId;
           if (patch.cost !== undefined) n.cost = patch.cost;
+          if (patch.costFact !== undefined) n.costFact = patch.costFact;
           if (patch.expenseCategory !== undefined) n.expenseCategory = patch.expenseCategory;
           return n;
         }),
