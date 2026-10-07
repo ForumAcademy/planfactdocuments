@@ -632,8 +632,14 @@ function StageItem({
         <span className="font-semibold" style={{ color: meta.color }}>
           {meta.label}
         </span>
-        <span className="text-sm text-ink/70">
-          {current.length ? `${current.length} ${dealsWord(current.length)}` : 'сделок нет'}
+        {/* Главное число — как в слое воронки: сколько сделок дошло до этапа */}
+        <span className="text-lg font-semibold tabular-nums" style={{ color: meta.color }}>
+          {stat ? stat.reached : current.length}
+        </span>
+        <span className="text-sm text-ink/60">
+          {stat
+            ? `${pluralRu(stat.reached, 'дошла', 'дошли', 'дошли')} · сейчас на этапе ${current.length || 'нет'}`
+            : dealsWord(current.length)}
           {sumAmount(current) > 0 && ` · ${formatRubShort(sumAmount(current))}`}
           {sumQty(current) > 0 && ` · ${sumQty(current)} шт.`}
         </span>
