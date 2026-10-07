@@ -49,8 +49,8 @@ import { useForum } from './forum-context';
 type Selected = DealStageKey | 'refused';
 
 const pct = (v: number | null) => (v === null ? '—' : `${Math.round(v * 100)}%`);
-const convTone = (v: number) =>
-  v < 0.4 ? 'text-status-red' : v < 0.7 ? 'text-amber-700' : 'text-status-green';
+const convFill = (v: number) =>
+  v < 0.4 ? 'fill-status-red' : v < 0.7 ? 'fill-amber-700' : 'fill-status-green';
 const dealsWord = (n: number) => pluralRu(n, 'сделка', 'сделки', 'сделок');
 
 export function FunnelView({
@@ -313,12 +313,10 @@ function FunnelBoard({
         />
       </div>
 
-      {advice.length > 0 && <AdvicePanel advice={advice} onSelect={setSelected} />}
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)]">
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,460px)_minmax(0,1fr)]">
         <section className="flex flex-col rounded-lg border border-line bg-white p-4">
           <h2 className="font-semibold">Воронка продаж</h2>
-          <p className="text-xs text-ink/50">Сколько сделок дошло до этапа. Нажмите на слой</p>
+          <p className="text-xs text-ink/50">Дошли до этапа и конверсия. Нажмите на слой</p>
           <FunnelChart stats={stats} selected={selected} onSelect={setSelected} />
         </section>
         <StageList
@@ -332,6 +330,8 @@ function FunnelBoard({
           tableHref={tableHref}
         />
       </div>
+
+      {advice.length > 0 && <AdvicePanel advice={advice} onSelect={setSelected} />}
     </>
   );
 }
@@ -443,8 +443,8 @@ function FunnelChart({
   selected: Selected;
   onSelect: (s: Selected) => void;
 }) {
-  const W = 320;
-  const cx = 160;
+  const W = 430;
+  const cx = 165;
   const maxW = 300;
   const minW = 70;
   const h = 64;
@@ -459,7 +459,7 @@ function FunnelChart({
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
-      className="m-auto w-full max-w-[360px] py-2"
+      className="m-auto w-full max-w-[460px] py-2"
       role="img"
       aria-label="Воронка продаж по этапам"
       data-testid="funnel-chart"
@@ -503,6 +503,20 @@ function FunnelChart({
             >
               {s.reached}
             </text>
+            {/* Конверсия из прошлого этапа — справа от слоя */}
+            {s.conversion !== null && (
+              <text
+                x={cx + Math.max(wt, wb) / 2 + 12}
+                y={y + h / 2 + 6}
+                className={cn('font-semibold', convFill(s.conversion))}
+                style={{ fontSize: 15 }}
+              >
+                {pct(s.conversion)}
+                <tspan className="fill-ink/50 font-normal" style={{ fontSize: 12 }}>
+                  {' от прошлого'}
+                </tspan>
+              </text>
+            )}
           </g>
         );
       })}
@@ -651,11 +665,6 @@ function StageItem({
           {lostAt.length > 0 && (
             <span className="text-ink/60">
               {lostAt.map((b) => `${b.name.toLowerCase()} — ${b.count}`).join(' · ')}
-            </span>
-          )}
-          {stat && stat.conversion !== null && (
-            <span className={cn('font-semibold', convTone(stat.conversion))}>
-              {pct(stat.conversion)} от прошлого этапа
             </span>
           )}
         </span>
