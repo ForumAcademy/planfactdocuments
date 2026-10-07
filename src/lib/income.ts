@@ -349,10 +349,7 @@ export function withDeals(
     if (!it) continue;
     if (it.fromDeals) extra.set(it.key, it);
     const a = acc.get(it.key) ?? { count: 0, qty: 0, sum: 0 };
-    const qty = Math.max(1, d.qty);
-    // Сумма в сделке не указана — считаем по цене статьи
-    const sum = d.amount > 0 ? d.amount : Math.round(qty * netPrice(it, it.stage));
-    acc.set(it.key, { count: a.count + 1, qty: a.qty + qty, sum: a.sum + sum });
+    acc.set(it.key, { count: a.count + 1, qty: a.qty + Math.max(1, d.qty), sum: a.sum + d.amount });
   }
   return [...items, ...extra.values()].map((i) => ({ ...i, deals: acc.get(i.key) ?? NO_DEALS }));
 }
