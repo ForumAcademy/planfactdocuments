@@ -11,7 +11,6 @@ import {
   Clock,
   Lightbulb,
   TrendingDown,
-  XCircle,
 } from 'lucide-react';
 import { TabGroup, TabLink } from '@/components/ui/tab-links';
 import { Select } from '@/components/ui/input';
@@ -50,6 +49,8 @@ import { useForum } from './forum-context';
 type Selected = DealStageKey | 'refused';
 
 const pct = (v: number | null) => (v === null ? '—' : `${Math.round(v * 100)}%`);
+const convTone = (v: number) =>
+  v < 0.4 ? 'text-status-red' : v < 0.7 ? 'text-amber-700' : 'text-status-green';
 const dealsWord = (n: number) => pluralRu(n, 'сделка', 'сделки', 'сделок');
 
 export function FunnelView({
@@ -314,34 +315,11 @@ function FunnelBoard({
 
       {advice.length > 0 && <AdvicePanel advice={advice} onSelect={setSelected} />}
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,620px)_minmax(0,1fr)]">
-        <section className="rounded-lg border border-line bg-white p-4">
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)]">
+        <section className="flex flex-col rounded-lg border border-line bg-white p-4">
           <h2 className="font-semibold">Воронка продаж</h2>
-          <p className="text-xs text-ink/50">
-            Нажмите на этап, чтобы посмотреть сделки, направления и источники
-          </p>
+          <p className="text-xs text-ink/50">Сколько сделок дошло до этапа. Нажмите на слой</p>
           <FunnelChart stats={stats} selected={selected} onSelect={setSelected} />
-          <button
-            type="button"
-            onClick={() => setSelected('refused')}
-            className={cn(
-              'mt-2 flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition',
-              selected === 'refused'
-                ? 'border-status-red bg-status-red/10'
-                : 'border-status-red/30 bg-status-red/5 hover:bg-status-red/10',
-            )}
-            data-testid="funnel-refused"
-          >
-            <XCircle className="size-5 shrink-0 text-status-red" />
-            <span className="font-semibold text-status-red">Отказы: {refused.length}</span>
-            <span className="text-ink/60">
-              {stats
-                .filter((s) => s.lost)
-                .map((s) => `${s.label.toLowerCase()} — ${s.lost}`)
-                .join(' · ')}
-            </span>
-            <ArrowRight className="ml-auto size-4 text-ink/40" />
-          </button>
         </section>
         <StageList
           deals={deals}
@@ -454,7 +432,7 @@ function shade(hex: string, k: number): string {
 
 /**
  * Воронка из объёмных слоёв: ширина слоя — сколько сделок дошло до этапа (корень, чтобы
- * нижние этапы оставались различимы), справа — подписи с количеством, суммой и конверсией.
+ * нижние этапы оставались различимы). Подписи этапов — в списке «Этапы» рядом.
  */
 function FunnelChart({
   stats,
@@ -465,7 +443,7 @@ function FunnelChart({
   selected: Selected;
   onSelect: (s: Selected) => void;
 }) {
-  const W = 600;
+  const W = 320;
   const cx = 160;
   const maxW = 300;
   const minW = 70;
@@ -481,7 +459,7 @@ function FunnelChart({
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
-      className="mt-2 w-full"
+      className="m-auto w-full max-w-[360px] py-2"
       role="img"
       aria-label="Воронка продаж по этапам"
       data-testid="funnel-chart"
@@ -493,8 +471,6 @@ function FunnelChart({
         const active = selected === s.key;
         const dim = selected !== s.key;
         const body = `M ${cx - wt / 2} ${y} L ${cx - wb / 2} ${y + h} A ${wb / 2} ${ry * (wb / wt)} 0 0 0 ${cx + wb / 2} ${y + h} L ${cx + wt / 2} ${y} Z`;
-        const labelY = y + h / 2;
-        const lx = cx + Math.max(wt, wb) / 2;
         return (
           <g
             key={s.key}
@@ -526,42 +502,6 @@ function FunnelChart({
               style={{ fontSize: 22 }}
             >
               {s.reached}
-            </text>
-            {/* Выноска */}
-            <polyline
-              points={`${lx - 6},${labelY} ${lx + 18},${labelY} ${330},${y + 12}`}
-              fill="none"
-              stroke={s.color}
-              strokeWidth={1.5}
-            />
-            <circle cx={334} cy={y + 12} r={4} fill={s.color} />
-            <text
-              x={346}
-              y={y + 17}
-              className="font-semibold"
-              style={{ fontSize: 15 }}
-              fill={s.color}
-            >
-              {s.label}
-            </text>
-            <text x={346} y={y + 36} style={{ fontSize: 12 }} fill="#111" fillOpacity={0.75}>
-              {s.current
-                ? `сейчас ${s.current} ${dealsWord(s.current)}${s.currentAmount ? ` · ${formatRubShort(s.currentAmount)}` : ''}`
-                : 'сейчас сделок нет'}
-            </text>
-            <text x={346} y={y + 53} style={{ fontSize: 12 }}>
-              {s.conversion !== null && (
-                <tspan
-                  fill={s.conversion < 0.4 ? '#D93838' : s.conversion < 0.7 ? '#B45309' : '#1E9E5A'}
-                  fontWeight={600}
-                >
-                  {`${pct(s.conversion)} от прошлого этапа`}
-                </tspan>
-              )}
-              {s.lost > 0 && (
-                <tspan fill="#D93838">{`${s.conversion !== null ? ' · ' : ''}отказ ${s.lost}`}</tspan>
-              )}
-              {s.stale > 0 && <tspan fill="#B45309">{` · зависли ${s.stale}`}</tspan>}
             </text>
           </g>
         );
@@ -602,14 +542,15 @@ function StageList({
   const keys: Selected[] = [...DEAL_STAGES.map((s) => s.key), 'refused'];
   return (
     <section
-      className="min-w-0 self-start rounded-lg border border-line bg-white p-4"
+      className="flex min-w-0 flex-col rounded-lg border border-line bg-white p-4"
       data-testid="funnel-detail"
     >
       <h2 className="font-semibold">Этапы</h2>
       <p className="text-xs text-ink/50">
         Раскройте этап, чтобы увидеть направления, источники и менеджеров
       </p>
-      <ul className="mt-3 divide-y divide-line rounded-md border border-line">
+      {/* Свёрнутые строки растягиваются на высоту воронки слева */}
+      <ul className="mt-3 flex flex-1 flex-col divide-y divide-line rounded-md border border-line">
         {keys.map((key) => (
           <StageItem
             key={key}
@@ -673,13 +614,14 @@ function StageItem({
   }, [open]);
 
   return (
-    <li ref={ref} data-testid={`funnel-item-${stage}`}>
+    <li ref={ref} className="flex flex-1 flex-col" data-testid={`funnel-item-${stage}`}>
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
         className={cn(
-          'flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 text-left transition hover:bg-surface/60',
+          'flex w-full flex-1 flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 text-left transition hover:bg-surface/60',
+          open && 'flex-none',
           open && 'bg-surface/60',
         )}
       >
@@ -700,10 +642,14 @@ function StageItem({
             <span className="text-amber-700">зависли {staleList.length}</span>
           )}
           {lostHere.length > 0 && <span className="text-status-red">отказ {lostHere.length}</span>}
-          {stat && (
+          {lostAt.length > 0 && (
             <span className="text-ink/60">
-              дошли {stat.reached}
-              {stat.conversion !== null && ` · ${pct(stat.conversion)}`}
+              {lostAt.map((b) => `${b.name.toLowerCase()} — ${b.count}`).join(' · ')}
+            </span>
+          )}
+          {stat && stat.conversion !== null && (
+            <span className={cn('font-semibold', convTone(stat.conversion))}>
+              {pct(stat.conversion)} от прошлого этапа
             </span>
           )}
         </span>
@@ -738,20 +684,8 @@ function StageItem({
               </button>
             </div>
           )}
-          {stat && (
-            <p className="text-sm text-ink/60">
-              Дошли до этапа {stat.reached}
-              {stat.conversion !== null && ` — ${pct(stat.conversion)} от прошлого этапа`}
-              {!showLost &&
-                sumAmount(current) > 0 &&
-                ` · сейчас на этапе ${formatRub(sumAmount(current))}`}
-            </p>
-          )}
-          {lostAt.length > 0 && (
-            <p className="text-sm text-ink/60">
-              На каком этапе отказались:{' '}
-              {lostAt.map((b) => `${b.name.toLowerCase()} — ${b.count}`).join(' · ')}
-            </p>
+          {!showLost && sumAmount(current) > 0 && (
+            <p className="text-sm text-ink/60">Сумма на этапе: {formatRub(sumAmount(current))}</p>
           )}
           {!showLost && staleList.length > 0 && (
             <p className="mt-1 flex items-center gap-1.5 text-sm text-amber-700">
