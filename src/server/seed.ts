@@ -161,27 +161,34 @@ export async function runSeed(prisma: PrismaClient, masterPlan: Uint8Array): Pro
       t.cost,
     ]),
   );
-  await prisma.templateTask.deleteMany();
-  for (const [i, r] of parsed.rows.entries()) {
-    await prisma.templateTask.create({
-      data: {
-        number: r.number ?? i + 1,
-        stageId: stageId.get(key(r.stage)) ?? null,
-        blockId: blockId.get(key(r.block)) ?? null,
-        description: r.description,
-        termText: r.termText,
-        comment: r.comment || null,
-        cost: r.cost ?? prevCost.get(r.number ?? i + 1) ?? 0,
-        order: i + 1,
-        roles: {
-          connect: r.roles
-            .map((x) => roleId.get(key(x)))
-            .filter((x): x is number => !!x)
-            .map((id) => ({ id })),
-        },
-      },
-    });
-  }
+  // Одной транзакцией: если загрузка оборвётся, старый мастер-план останется целым,
+  // а не обрежется на середине (похоже, так в базе остались 73 задачи из 149)
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.templateTask.deleteMany();
+      for (const [i, r] of parsed.rows.entries()) {
+        await tx.templateTask.create({
+          data: {
+            number: r.number ?? i + 1,
+            stageId: stageId.get(key(r.stage)) ?? null,
+            blockId: blockId.get(key(r.block)) ?? null,
+            description: r.description,
+            termText: r.termText,
+            comment: r.comment || null,
+            cost: r.cost ?? prevCost.get(r.number ?? i + 1) ?? 0,
+            order: i + 1,
+            roles: {
+              connect: r.roles
+                .map((x) => roleId.get(key(x)))
+                .filter((x): x is number => !!x)
+                .map((id) => ({ id })),
+            },
+          },
+        });
+      }
+    },
+    { timeout: 120_000, maxWait: 10_000 },
+  );
 
   // Сотрудники (тестовые)
   for (const e of DEMO_EMPLOYEES) {
