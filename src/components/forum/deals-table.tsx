@@ -82,7 +82,17 @@ export function DealsTable({
     [...new Set(deals.map(f).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
   const sources = uniq((d) => d.source);
   const managers = uniq((d) => d.manager);
-  const directions = items.filter((i) => !i.factOnly);
+  // Направления — без стадий: «Участник» один, стадия цены определится по дате оплаты
+  const directions = items.filter(
+    (i, n, all) =>
+      !i.factOnly &&
+      all.findIndex((x) => !x.factOnly && x.group === i.group && x.label === i.label) === n,
+  );
+
+  const directionKey = (key: string | null) => {
+    const it = items.find((i) => i.key === key);
+    return (it && directions.find((x) => x.group === it.group && x.label === it.label)?.key) ?? '';
+  };
 
   const q = query.trim().toLowerCase();
   const shown = deals.filter(
@@ -395,7 +405,7 @@ export function DealsTable({
                   </td>
                   <td className="px-1 py-1">
                     <select
-                      value={d.incomeKey ?? ''}
+                      value={directionKey(d.incomeKey)}
                       onChange={(e) => save(d, { incomeKey: e.target.value || null })}
                       className="h-7 w-[150px] rounded border border-transparent bg-transparent px-1 text-sm hover:border-line focus:border-brand focus:outline-none"
                       aria-label="Направление дохода"

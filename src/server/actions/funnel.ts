@@ -1,15 +1,12 @@
 'use server';
 
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireEditor } from '@/lib/auth';
-import { dbToISO, isoToDb, todayMsk } from '@/lib/dates';
+import { isoToDb, todayMsk } from '@/lib/dates';
 import { DEAL_STAGES, isDealStage, type DealStageKey, type DealValue } from '@/lib/funnel';
-import { currentStage, netPrice, stageDates, type IncomeItemValue } from '@/lib/income';
-import { formatRub } from '@/lib/utils';
 import { run, UserError, type ActionResult } from '@/server/action-utils';
-import { getDeals, getIncomeConfig, getIncomeItems, toDealValue } from '@/server/queries';
+import { getDeals, toDealValue } from '@/server/queries';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Неверная дата');
 const text = (max: number) => z.string().trim().max(max);
@@ -166,118 +163,25 @@ export async function importDeals(
   });
 }
 
-/** Позиция доходов, к которой относится сделка: её направление, иначе «Участник» */
-function directionOf(items: IncomeItemValue[], key: string | null): IncomeItemValue | undefined {
-  return (
-    items.find((i) => i.key === key) ??
-    items.find((i) => i.key === 'participant') ??
-    items.find((i) => i.group === 'tickets') ??
-    items[0]
-  );
-}
-
 /**
- * Решение по оплаченной сделке: добавить в факт доходов (в статью направления или под своим
- * названием, если условия особые), отклонить или вернуть предложение.
- * Продажа ложится в этап продаж билетов по дате оплаты. Если цена за единицу совпадает
- * с ценой статьи на этом этапе — растёт её факт; иначе появляется статья только для факта
- * с ценой сделки.
+ * Оплаченная сделка попадает в факт доходов сама. Исключить её из факта (например, дубль)
+ * или вернуть обратно.
  */
-export async function decideDealIncome(
+export async function setDealExcluded(
   forumId: number,
   dealId: number,
-  decision: { action: 'add'; label?: string } | { action: 'reject' } | { action: 'reset' },
-): Promise<ActionResult<{ items: IncomeItemValue[]; deal: DealValue }>> {
+  excluded: boolean,
+): Promise<ActionResult<DealValue>> {
   return run(async () => {
     await requireEditor();
     const deal = await prisma.deal.findFirst({ where: { id: dealId, forumId } });
     if (!deal) throw new UserError('Сделка не найдена — обновите страницу');
-    if (decision.action !== 'add') {
-      const d = await prisma.deal.update({
-        where: { id: dealId },
-        data: { incomeStatus: decision.action === 'reject' ? 'rejected' : null },
-      });
-      return { items: await getIncomeItems(forumId), deal: toDealValue(d) };
-    }
-    if (deal.status !== 'paid') throw new UserError('Сделка ещё не оплачена');
-    if (deal.incomeStatus === 'added') throw new UserError('Сделка уже добавлена в факт');
-    const label = z.string().trim().max(120).optional().parse(decision.label);
-
-    const forum = await prisma.forum.findUniqueOrThrow({ where: { id: forumId } });
-    const [items, cfg] = await Promise.all([getIncomeItems(forumId), getIncomeConfig(forumId)]);
-    const dir = directionOf(items, deal.incomeKey);
-    if (!dir) throw new UserError('В «Доходах» нет статей — добавьте статью');
-    const group = dir.group;
-    const name = label || dir.label;
-    const paidOn = dbToISO(deal.paidDate) ?? todayMsk();
-    const stage =
-      group === 'tickets'
-        ? currentStage(
-            stageDates(cfg, dbToISO(forum.salesStartDate)!, dbToISO(forum.startDate)!),
-            paidOn,
-          )
-        : 0;
-    const qty = Math.max(1, deal.qty);
-    const unit = Math.round(deal.amount / qty);
-
-    const bump = async (it: IncomeItemValue) => {
-      await prisma.incomeItem.upsert({
-        where: { forumId_key: { forumId, key: it.key } },
-        update: { factQty: { increment: qty } },
-        create: { forumId, key: it.key, price: it.prices[0], stage: it.stage, factQty: qty },
-      });
-      return it.key;
-    };
-    const fits = (i: IncomeItemValue, lbl: string) =>
-      i.group === group &&
-      i.label === lbl &&
-      i.stage === stage &&
-      Math.round(netPrice(i, stage)) === unit;
-
-    let key: string;
-    const same = items.find((i) => fits(i, name));
-    if (same) key = await bump(same);
-    else {
-      // Цена ниже цены направления — это скидка от неё, если она считается без копеек
-      let price = unit;
-      let discount = 0;
-      const base = dir.prices[0];
-      if (unit > 0 && base > unit) {
-        const disc = Math.round((1 - unit / base) * 10_000) / 100;
-        if (Math.abs(Math.round(base * (1 - disc / 100)) - unit) <= 1) {
-          price = base;
-          discount = disc;
-        }
-      }
-      const taken = items.some((i) => i.group === group && i.label === name);
-      const lbl = !taken
-        ? name
-        : discount
-          ? `${name} — скидка ${discount.toLocaleString('ru-RU')}%`
-          : `${name} — ${formatRub(unit)}`;
-      const again = items.find((i) => i.factOnly && fits(i, lbl));
-      if (again) key = await bump(again);
-      else {
-        key = `c_${randomUUID().slice(0, 8)}`;
-        await prisma.incomeItem.create({
-          data: {
-            forumId,
-            key,
-            group,
-            label: lbl,
-            price,
-            discount,
-            stage,
-            factOnly: true,
-            factQty: qty,
-          },
-        });
-      }
-    }
+    if (deal.incomeStatus === 'added')
+      throw new UserError('Эта оплата уже внесена в «Продано» вручную');
     const d = await prisma.deal.update({
       where: { id: dealId },
-      data: { incomeStatus: 'added', incomeItemKey: key },
+      data: { incomeStatus: excluded ? 'rejected' : null },
     });
-    return { items: await getIncomeItems(forumId), deal: toDealValue(d) };
+    return toDealValue(d);
   });
 }

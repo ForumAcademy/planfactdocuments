@@ -23,13 +23,14 @@ import {
   incomeTarget,
   itemSum,
   netPrice,
-  planAdvice,
+  factDiscountPct,
   salesAdvice,
   stageDates,
   type IncomeConfig,
   type IncomeGroup,
   type IncomeItemValue,
   type Triple,
+  withDeals,
   withValues,
 } from '@/lib/income';
 import { cn, formatRub } from '@/lib/utils';
@@ -40,7 +41,7 @@ import {
   saveIncomeItems,
 } from '@/server/actions/income';
 import type { ActionResult } from '@/server/action-utils';
-import { DealProposals } from './deal-proposals';
+import { DealsInFact } from './deals-in-fact';
 import { useForum } from './forum-context';
 
 type ItemPatch = {
@@ -78,7 +79,7 @@ export function IncomeView({
 }: {
   initialItems: IncomeItemValue[];
   initialConfig: IncomeConfig;
-  /** Оплаченные сделки воронки — предложения в факт */
+  /** Оплаченные сделки воронки — сами входят в факт */
   initialDeals: DealValue[];
 }) {
   const { forum, tasks, today } = useForum();
@@ -88,13 +89,19 @@ export function IncomeView({
   const [cfg, setCfg] = React.useState(initialConfig);
   const [deals, setDeals] = React.useState(initialDeals);
   const [saving, setSaving] = React.useState(false);
-  const dates = stageDates(cfg, forum.salesStartDate, forum.startDate);
+  const dates = React.useMemo(
+    () => stageDates(cfg, forum.salesStartDate, forum.startDate),
+    [cfg, forum.salesStartDate, forum.startDate],
+  );
   const stageNow = currentStage(dates, today);
 
   const expenses = tasks.reduce((s, t) => s + t.cost, 0);
   const target = incomeTarget(expenses);
-  // План с автоподбором под цель: ручные позиции и завершённые стадии как есть, остальные добирают до цели
-  const planned = React.useMemo(() => autoPlan(items, target, stageNow), [items, target, stageNow]);
+  // Факт = введённое вручную + оплаченные сделки воронки; план с автоподбором под цель
+  const planned = React.useMemo(
+    () => autoPlan(withDeals(items, deals, dates, today), target, stageNow),
+    [items, deals, dates, today, target, stageNow],
+  );
   // В плане — только плановые статьи; в факте — ещё и статьи только для факта
   const shown = view === 'plan' ? planned.filter((i) => !i.factOnly) : planned;
   const partners = shown.filter((i) => !hasStages(i));
@@ -103,7 +110,6 @@ export function IncomeView({
   const factSum = incomeSum(planned, 'fact');
   const confirm = useConfirm();
   const removedDefaults = INCOME_ITEMS.filter((d) => !items.some((i) => i.key === d.key));
-  const advice = planAdvice(planned, target);
   const todayAdvice = salesAdvice(planned, target, dates, forum.startDate, today);
 
   const save = async (patches: ItemPatch[]) => {
@@ -236,12 +242,11 @@ export function IncomeView({
       </div>
 
       {view === 'fact' && (
-        <DealProposals
+        <DealsInFact
           forumId={forum.id}
           deals={deals}
           setDeals={setDeals}
           items={items}
-          onItems={setItems}
           dates={dates}
           today={today}
         />
@@ -256,11 +261,7 @@ export function IncomeView({
             <Lightbulb className="size-4" />
             Рекомендация на сегодня, {formatDate(today)}
           </h3>
-          <ul className="mt-1.5 list-disc space-y-1 pl-6 text-ink/80">
-            {todayAdvice.map((a) => (
-              <li key={a}>{a}</li>
-            ))}
-          </ul>
+          <p className="mt-1 text-ink/80">{todayAdvice.join(' ')}</p>
         </section>
       )}
 
@@ -413,23 +414,6 @@ export function IncomeView({
           </tbody>
         </table>
       </div>
-
-      {view === 'plan' && advice.length > 0 && (
-        <section
-          className="mt-3 rounded-lg border border-brand/20 bg-brand/5 px-4 py-3 text-sm"
-          data-testid="income-advice"
-        >
-          <h3 className="flex items-center gap-2 font-semibold text-brand">
-            <Lightbulb className="size-4" />
-            Как устроен план продаж
-          </h3>
-          <ul className="mt-1.5 list-disc space-y-1 pl-6 text-ink/80">
-            {advice.map((a) => (
-              <li key={a}>{a}</li>
-            ))}
-          </ul>
-        </section>
-      )}
     </div>
   );
 }
@@ -563,6 +547,10 @@ function ItemRow({
   const editTerms = view === 'plan' || it.factOnly;
   const plan = itemSum(it, 'plan', null);
   const fact = itemSum(it, 'fact', null);
+  const sold = qtyOf(it.fact) + it.deals.qty;
+  // В факте при сделках воронки — средняя скидка и цена по фактическим суммам клиентов
+  const avg = view === 'fact' && it.deals.count > 0;
+  const discount = avg ? factDiscountPct(it) : it.discounts[k];
   const muted = 'px-2 py-1.5 text-right tabular-nums text-ink/70';
   return (
     <tr className="border-t border-line/60" data-testid="income-row">
@@ -616,19 +604,19 @@ function ItemRow({
             onCommit={(v) => onSave([{ key: it.key, discount: Math.min(100, v) }])}
             testId={`income-discount-${it.key}`}
           />
-        ) : it.discounts[k] ? (
-          formatPct(it.discounts[k])
+        ) : discount ? (
+          <span title={avg ? 'Средняя скидка по проданным' : undefined}>
+            {avg && 'ср. '}
+            {formatPct(discount)}
+          </span>
         ) : (
           '—'
         )}
       </td>
       <td
-        className={cn(
-          'px-2 py-1.5 text-right tabular-nums',
-          it.discounts[k] ? 'text-ink' : 'text-ink/50',
-        )}
+        className={cn('px-2 py-1.5 text-right tabular-nums', discount ? 'text-ink' : 'text-ink/50')}
       >
-        {formatRub(Math.round(netPrice(it, k)))}
+        {formatRub(Math.round(avg && sold ? fact / sold : netPrice(it, k)))}
       </td>
       {view === 'plan' ? (
         <>
@@ -654,12 +642,20 @@ function ItemRow({
         <>
           <td className="px-1 py-1">
             <NumberCell
-              value={qtyOf(it.fact)}
+              value={sold}
               format={formatQty}
               label={`Продано, шт.: ${it.label}`}
-              onCommit={(v) => onSave([{ key: it.key, factQty: v }])}
+              onCommit={(v) => onSave([{ key: it.key, factQty: Math.max(0, v - it.deals.qty) }])}
               testId={`income-fact-${it.key}`}
             />
+            {it.deals.count > 0 && (
+              <div
+                className="pr-2 text-right text-[10px] text-ink/50"
+                title="Оплаченные сделки воронки"
+              >
+                из воронки {it.deals.qty}
+              </div>
+            )}
           </td>
           <td className="px-2 py-1.5 text-right tabular-nums">{formatRub(fact)}</td>
           {it.factOnly ? (

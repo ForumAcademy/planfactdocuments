@@ -38,8 +38,9 @@ import {
   autoPlan,
   currentStage,
   incomeSum,
-  stageDates,
   incomeTarget,
+  stageDates,
+  withDeals,
   type IncomeConfig,
   type IncomeItemValue,
 } from '@/lib/income';
@@ -91,21 +92,19 @@ export function FunnelView({
     [items],
   );
   const expenses = tasks.reduce((s, t) => s + t.cost, 0);
-  const planSum = React.useMemo(
-    () =>
-      incomeSum(
-        autoPlan(
-          items,
-          incomeTarget(expenses),
-          currentStage(stageDates(config, forum.salesStartDate, forum.startDate), today),
-        ),
-        'plan',
-      ),
-    [items, expenses, config, forum.salesStartDate, forum.startDate, today],
-  );
+  // План продаж — как в «Доходах»: завершённые стадии равны проданному, включая оплаты воронки
+  const planSum = React.useMemo(() => {
+    const dates = stageDates(config, forum.salesStartDate, forum.startDate);
+    const planned = autoPlan(
+      withDeals(items, deals, dates, today),
+      incomeTarget(expenses),
+      currentStage(dates, today),
+    );
+    return incomeSum(planned, 'plan');
+  }, [items, deals, expenses, config, forum.salesStartDate, forum.startDate, today]);
 
   const base = `/forums/${forum.id}/funnel`;
-  const proposals = deals.filter((d) => d.status === 'paid' && d.incomeStatus === null).length;
+  const paid = deals.filter((d) => d.status === 'paid' && d.incomeStatus === null);
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-4" data-testid="funnel-view">
@@ -180,14 +179,13 @@ export function FunnelView({
             )}
           </div>
         )}
-        {proposals > 0 && (
+        {paid.length > 0 && (
           <Link
             href={`/forums/${forum.id}/income?view=fact`}
             className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-status-green/30 bg-status-green/10 px-3 py-1.5 text-sm text-status-green hover:bg-status-green/15"
-            data-testid="funnel-proposals-link"
+            data-testid="funnel-paid-link"
           >
-            {proposals} {pluralRu(proposals, 'оплата ждёт', 'оплаты ждут', 'оплат ждут')} решения в
-            факте доходов
+            Оплачено {formatRub(paid.reduce((s, d) => s + d.amount, 0))} — в факте доходов
             <ArrowRight className="size-3.5" />
           </Link>
         )}
