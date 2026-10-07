@@ -317,7 +317,6 @@ function FunnelBoard({
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,460px)_minmax(0,1fr)]">
         <section className="flex flex-col rounded-lg border border-line bg-white p-4">
           <h2 className="font-semibold">Воронка продаж</h2>
-          <p className="text-xs text-ink/50">Дошли до этапа и конверсия. Нажмите на слой</p>
           <FunnelChart stats={stats} selected={selected} onSelect={setSelected} />
         </section>
         <StageList
