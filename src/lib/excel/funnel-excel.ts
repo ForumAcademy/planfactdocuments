@@ -221,3 +221,47 @@ export async function buildFunnelWorkbook(
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
 }
+
+/**
+ * Шаблон для загрузки сделок: пустой лист с теми же столбцами, что и выгрузка, и списками
+ * для статуса, этапа отказа и направления.
+ */
+export async function buildFunnelTemplate(directions: string[]): Promise<Blob> {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet(FUNNEL_SHEET_NAME);
+  ws.columns = COLUMNS.map((c) => ({ header: c.header, key: c.key, width: c.width }));
+  ws.getRow(1).font = { bold: true };
+  ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8E8F8' } };
+  ws.views = [{ state: 'frozen', ySplit: 1 }];
+  const statuses = [
+    `0. ${statusLabel('refused')}`,
+    ...DEAL_STAGES.map((s, i) => `${i + 1}. ${statusLabel(s.key)}`),
+  ];
+  const stages = DEAL_STAGES.filter((s) => s.key !== 'paid').map((s) => statusLabel(s.key));
+  // Список в проверке данных Excel — не длиннее 255 символов
+  const list = (values: string[]) => {
+    const f = `"${values.map((v) => v.replace(/[",]/g, ' ')).join(',')}"`;
+    return f.length <= 255 ? [f] : null;
+  };
+  const validate = (key: ColumnKey, values: string[]) => {
+    const formulae = list(values);
+    if (!formulae) return;
+    const col = COLUMNS.findIndex((c) => c.key === key) + 1;
+    for (let r = 2; r <= 500; r++) {
+      ws.getCell(r, col).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        showErrorMessage: false,
+        formulae,
+      };
+    }
+  };
+  validate('status', statuses);
+  validate('lostStage', stages);
+  if (directions.length) validate('direction', directions);
+  ws.getColumn('amount').numFmt = '#,##0';
+  const buf = await wb.xlsx.writeBuffer();
+  return new Blob([buf], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+}

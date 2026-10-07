@@ -353,3 +353,22 @@ export async function getDeals(forumId: number): Promise<DealValue[]> {
   const rows = await prisma.deal.findMany({ where: { forumId }, orderBy: { id: 'desc' } });
   return rows.map(toDealValue);
 }
+
+/**
+ * Сколько задач типового мастер-плана не хватает форуму, созданному из него: все номера
+ * задач форума есть в шаблоне, а недостающие идут после последней (обрезанный хвост).
+ * Для форумов со своим планом — null.
+ */
+export async function getTemplateGap(
+  tasks: TaskDTO[],
+): Promise<{ missing: number; total: number } | null> {
+  if (!tasks.length) return null;
+  const template = await prisma.templateTask.findMany({ select: { number: true } });
+  const numbers = new Set(template.map((t) => t.number));
+  if (tasks.some((t) => !numbers.has(t.number))) return null;
+  const have = new Set(tasks.map((t) => t.number));
+  const last = Math.max(...have);
+  const missing = [...numbers].filter((n) => !have.has(n));
+  if (!missing.length || missing.some((n) => n < last)) return null;
+  return { missing: missing.length, total: numbers.size };
+}

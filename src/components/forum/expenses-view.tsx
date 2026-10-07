@@ -197,7 +197,7 @@ export function ExpensesView() {
             title="Все задачи форума по направлениям с пустой стоимостью — заполнить и загрузить"
             data-testid="expenses-template"
           >
-            <FileSpreadsheet /> Шаблон
+            <FileSpreadsheet /> Шаблон Excel
           </Button>
           <Button
             variant="outline"
@@ -205,14 +205,14 @@ export function ExpensesView() {
             disabled={busy}
             data-testid="expenses-export"
           >
-            <Download /> Выгрузить
+            <Download /> Выгрузить в Excel
           </Button>
           <Button
             variant="outline"
             onClick={() => setImportOpen(true)}
             data-testid="expenses-import"
           >
-            <Upload /> Загрузить
+            <Upload /> Загрузить из Excel
           </Button>
         </div>
       </div>
@@ -246,7 +246,8 @@ export function ExpensesView() {
         </TabGroup>
       </div>
 
-      {barTotal > 0 && (
+      {/* В факте линия есть всегда: пока факта нет — пустая, с подсказкой */}
+      {(barTotal > 0 || view === 'fact') && (
         <div className="mt-4" data-testid={`expenses-bar-${view}`}>
           <div className="flex h-3 w-full overflow-hidden rounded-full bg-surface">
             {barGroups.map(({ g, v }) => (
@@ -258,6 +259,9 @@ export function ExpensesView() {
             ))}
           </div>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink/70">
+            {!barGroups.length && (
+              <span>Фактических расходов пока нет: внесите факт по задачам ниже или из Excel</span>
+            )}
             {barGroups.map(({ g, v }) => (
               <span key={g.category.key} className="inline-flex items-center gap-1.5">
                 <span className="size-2.5 rounded-sm" style={{ background: g.category.color }} />

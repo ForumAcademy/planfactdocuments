@@ -116,6 +116,68 @@ export async function createForum(
   });
 }
 
+/** Дописывает в форум задачи типового мастер-плана, которых в нём нет (по номеру). */
+export async function addMissingTemplateTasks(forumId: number): Promise<ActionResult<number>> {
+  return run(async () => {
+    const { userName } = await requireEditor();
+    const f = await prisma.forum.findUniqueOrThrow({ where: { id: forumId } });
+    const refs = {
+      startDate: dbToISO(f.startDate)!,
+      endDate: dbToISO(f.endDate),
+      salesStartDate: dbToISO(f.salesStartDate)!,
+    };
+    const added = await prisma.$transaction(
+      async (tx) => {
+        const have = await tx.task.findMany({
+          where: { forumId },
+          select: { number: true, order: true },
+        });
+        const numbers = new Set(have.map((t) => t.number));
+        let order = have.reduce((m, t) => Math.max(m, t.order), 0);
+        const templates = (
+          await tx.templateTask.findMany({
+            include: { roles: true, stage: true },
+            orderBy: [{ order: 'asc' }, { number: 'asc' }],
+          })
+        ).filter((t) => !numbers.has(t.number));
+        if (!templates.length) return 0;
+        await insertTasks(
+          tx,
+          templates.map((t) => {
+            const d = computeTaskDates(t.termText, t.stage, refs);
+            return {
+              data: {
+                forumId,
+                number: t.number,
+                order: ++order,
+                stageId: t.stageId,
+                blockId: t.blockId,
+                description: t.description,
+                termText: t.termText,
+                startDate: isoToDb(d.startDate),
+                endDate: isoToDb(d.endDate),
+                needsClarification: d.needsClarification,
+                comment: mergeNoteIntoComment(t.comment, d.note),
+                cost: t.cost,
+              },
+              roleIds: t.roles.map((r) => r.id),
+              employeeIds: [],
+              history: 'Дописана из типового мастер-плана',
+            };
+          }),
+          userName,
+        );
+        await syncAutoAssignments(tx, { forumId });
+        return templates.length;
+      },
+      { timeout: 60_000, maxWait: 10_000 },
+    );
+    revalidatePath('/');
+    revalidatePath(`/forums/${forumId}`, 'layout');
+    return added;
+  });
+}
+
 /** Копирует задачи: даты вычисляются заново, ручные даты сдвигаются на разницу дат форумов. */
 async function copyTasks(
   db: Db,

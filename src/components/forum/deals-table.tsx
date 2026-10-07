@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { Download, Plus, Search, Trash2, Upload, X } from 'lucide-react';
+import { Download, FileSpreadsheet, Plus, Search, Trash2, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
@@ -181,6 +181,12 @@ export function DealsTable({
     downloadBlob(blob, `${safeFileName(forum.name)} — воронка.xlsx`);
   };
 
+  const downloadTemplate = async () => {
+    const { buildFunnelTemplate } = await import('@/lib/excel/funnel-excel');
+    const blob = await buildFunnelTemplate(directions.map((d) => d.label));
+    downloadBlob(blob, `${safeFileName(forum.name)} — шаблон воронки.xlsx`);
+  };
+
   const onFile = async (file: File | undefined) => {
     if (!file) return;
     try {
@@ -301,6 +307,16 @@ export function DealsTable({
         </Select>
         {saving && <Spinner className="text-xs" label="Сохраняем…" />}
         <div className="ml-auto flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void downloadTemplate()}
+            title="Пустой файл со столбцами таблицы — заполнить и загрузить"
+            data-testid="deals-template"
+          >
+            <FileSpreadsheet className="size-4" />
+            Шаблон Excel
+          </Button>
           <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
             <Upload className="size-4" />
             Загрузить из Excel

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Lightbulb, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { NumberCell } from '@/components/ui/number-cell';
 import { Spinner } from '@/components/ui/spinner';
@@ -176,29 +177,38 @@ export function IncomeView({
     onAuto: () => save([{ key: it.key, planManual: false }]),
     onRemove: () => void remove(it),
   });
-  const addRow = (g: IncomeGroup, colSpan: number) =>
-    view === 'plan' ? (
-      <AddItemRow
+  // «Добавить статью» — справа над таблицей; форма открывается между заголовком и таблицей
+  const [adding, setAdding] = React.useState<string | null>(null);
+  const factOnly = view === 'fact';
+  const addActions = (g: IncomeGroup) => (
+    <AddItemActions
+      group={g}
+      factOnly={factOnly}
+      restore={factOnly ? [] : removedDefaults.filter((x) => x.group === g.key)}
+      onRestore={(key) => save([{ key, removed: false }])}
+      onOpen={() => setAdding(g.key)}
+    />
+  );
+  const addForm = (g: IncomeGroup) =>
+    adding === g.key && (
+      <AddItemForm
+        key={`${g.key}-${view}`}
         group={g}
-        colSpan={colSpan}
         stage={stageNow}
-        restore={removedDefaults.filter((x) => x.group === g.key)}
-        onRestore={(key) => save([{ key, removed: false }])}
-        onAdd={(v) => apply(() => addIncomeItem(forum.id, { group: g.key, ...v }))}
-      />
-    ) : (
-      <AddItemRow
-        group={g}
-        colSpan={colSpan}
-        stage={stageNow}
-        factOnly
-        restore={[]}
-        onRestore={() => undefined}
-        onAdd={(v) => apply(() => addIncomeItem(forum.id, { group: g.key, ...v, factOnly: true }))}
+        factOnly={factOnly}
+        onCancel={() => setAdding(null)}
+        onAdd={async (v) => {
+          const ok = await apply(() =>
+            addIncomeItem(forum.id, { group: g.key, ...v, ...(factOnly && { factOnly: true }) }),
+          );
+          if (ok) setAdding(null);
+          return ok;
+        }}
       />
     );
   const [gPartners, gTickets] = INCOME_GROUPS;
-  const cols = view === 'plan' ? 7 : 9;
+  /** Столбцов в таблицах статей и итогов — одинаково, чтобы суммы стояли друг под другом */
+  const cols = view === 'plan' ? 8 : 10;
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-4" data-testid="income-view">
@@ -270,15 +280,24 @@ export function IncomeView({
         note="Стадий продаж нет; скидка — индивидуальная для статьи"
         sum={sumOf(partners)}
         plan={view === 'fact' ? incomeSum(partners, 'plan') : undefined}
+        actions={addActions(gPartners)}
       />
+      {addForm(gPartners)}
       <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
-        <table className="w-full min-w-[1000px] text-sm" data-testid="income-group-partners">
+        <table className={tableClass} data-testid="income-group-partners">
+          <Cols view={view} />
           <ItemsHead view={view} />
           <tbody>
             {partners.map((it) => (
               <ItemRow key={it.key} {...rowProps(it)} />
             ))}
-            {addRow(gPartners, cols)}
+            {partners.length === 0 && (
+              <tr className="border-t border-line/60">
+                <td colSpan={cols} className="py-1.5 pl-6 text-xs text-ink/50">
+                  Нет статей
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -289,6 +308,7 @@ export function IncomeView({
         note="У каждой статьи своя стадия продаж, цена и скидка"
         sum={sumOf(tickets)}
         plan={view === 'fact' ? incomeSum(tickets, 'plan') : undefined}
+        actions={addActions(gTickets)}
       />
       <StageDates
         dates={dates}
@@ -296,8 +316,10 @@ export function IncomeView({
         forumStart={forum.startDate}
         onSave={saveConfig}
       />
+      {addForm(gTickets)}
       <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
-        <table className="w-full min-w-[1100px] text-sm" data-testid="income-group-tickets">
+        <table className={tableClass} data-testid="income-group-tickets">
+          <Cols view={view} />
           <ItemsHead view={view} withStage />
           {PRICE_STAGES.map((st, k) => {
             const rows = tickets.filter((i) => i.stage === k);
@@ -334,7 +356,7 @@ export function IncomeView({
                 </tr>
                 {rows.length === 0 && (
                   <tr className="border-t border-line/60">
-                    <td colSpan={cols + 1} className="py-1.5 pl-6 text-xs text-ink/50">
+                    <td colSpan={cols} className="py-1.5 pl-6 text-xs text-ink/50">
                       Нет статей на этой стадии
                     </td>
                   </tr>
@@ -345,7 +367,6 @@ export function IncomeView({
               </tbody>
             );
           })}
-          <tbody>{addRow(gTickets, cols + 1)}</tbody>
         </table>
       </div>
 
@@ -357,16 +378,19 @@ export function IncomeView({
         </h2>
         <span className="text-xs text-ink/50">Партнёрства и билеты по стадиям</span>
       </div>
-      <div className="mt-2 overflow-hidden rounded-lg border border-line bg-white">
-        <table className="w-full text-sm" data-testid="income-totals">
+      <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
+        <table className={tableClass} data-testid="income-totals">
+          <Cols view={view} />
           <tbody>
             <TotalRow
+              view={view}
               label="Партнёрства"
               value={sumOf(partners)}
               plan={view === 'fact' ? incomeSum(partners, 'plan') : undefined}
             />
             {PRICE_STAGES.map((st, k) => (
               <TotalRow
+                view={view}
                 key={st.key}
                 label={`Билеты · ${st.label}`}
                 value={sumOf(allTickets, k)}
@@ -375,11 +399,13 @@ export function IncomeView({
               />
             ))}
             <TotalRow
+              view={view}
               label="Билеты, все стадии"
               value={sumOf(allTickets)}
               plan={view === 'fact' ? incomeSum(allTickets, 'plan') : undefined}
             />
             <TotalRow
+              view={view}
               label={
                 view === 'plan' ? 'Итого план с учётом скидок' : 'Итого продано с учётом скидок'
               }
@@ -389,25 +415,26 @@ export function IncomeView({
               testId={view === 'plan' ? 'income-plan-net' : 'income-fact-net'}
             />
             <TotalRow
+              view={view}
               label={`Цель: расходы ${formatRub(expenses)} + ${Math.round(INCOME_MARGIN * 100)}%`}
               value={target}
               muted
             />
             {view === 'plan' && target > 0 && (
               <tr className="border-t border-line">
-                <td className="px-3 py-2">
+                <td className="px-3 py-2" colSpan={6}>
                   {planGap > 0 ? 'До цели по плану не хватает' : 'План выше цели на'}
                 </td>
                 <td
                   className={cn(
-                    'w-48 px-3 py-2 text-right font-medium tabular-nums',
+                    'px-2 py-2 text-right font-medium tabular-nums',
                     planGap > 0 ? 'text-status-red' : 'text-status-green',
                   )}
                   data-testid="income-plan-gap"
                 >
                   {formatRub(Math.abs(planGap))}
                 </td>
-                <td className="w-72" />
+                <td />
               </tr>
             )}
           </tbody>
@@ -422,11 +449,14 @@ function SectionTitle({
   note,
   sum,
   plan,
+  actions,
 }: {
   group: IncomeGroup;
   note: string;
   sum: number;
   plan?: number;
+  /** Кнопки справа над таблицей */
+  actions?: React.ReactNode;
 }) {
   return (
     <div className="mt-5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -441,11 +471,13 @@ function SectionTitle({
         </span>
       )}
       <span className="text-xs text-ink/50">{note}</span>
+      {actions && <div className="ml-auto self-center">{actions}</div>}
     </div>
   );
 }
 
 function TotalRow({
+  view,
   label,
   value,
   plan,
@@ -454,6 +486,7 @@ function TotalRow({
   indent,
   testId,
 }: {
+  view: View;
   label: string;
   value: number;
   /** В факте — план для сравнения */
@@ -472,11 +505,14 @@ function TotalRow({
         indent && 'text-ink/80',
       )}
     >
-      <td className={cn('px-3 py-2', indent && 'pl-8')}>{label}</td>
-      <td className="w-48 px-3 py-2 text-right tabular-nums" data-testid={testId}>
+      {/* Сумма — в столбце «Сумма по плану» / «Выручка» таблиц статей выше */}
+      <td className={cn('px-3 py-2', indent && 'pl-8')} colSpan={6}>
+        {label}
+      </td>
+      <td className="px-2 py-2 text-right tabular-nums" data-testid={testId}>
         {formatRub(value)}
       </td>
-      <td className="w-72 px-3 py-2">
+      <td className="px-3 py-2" colSpan={view === 'plan' ? 1 : 3}>
         {plan !== undefined && (
           <div className="flex items-center gap-3 text-xs font-normal text-ink/60">
             <span className="w-28 text-right tabular-nums">из {formatRub(plan)}</span>
@@ -491,29 +527,48 @@ function TotalRow({
 }
 
 const th = 'px-2 py-2 text-right font-medium';
+const tableClass = 'w-full min-w-[1150px] table-fixed text-sm';
+
+/** Ширины столбцов — общие для всех таблиц «Доходов» */
+const COL_WIDTHS: Record<View, (number | undefined)[]> = {
+  plan: [undefined, 176, 144, 96, 144, 128, 160, 80],
+  fact: [undefined, 176, 144, 96, 144, 128, 144, 112, 144, 160],
+};
+
+function Cols({ view }: { view: View }) {
+  return (
+    <colgroup>
+      {COL_WIDTHS[view].map((w, i) => (
+        <col key={i} style={w ? { width: w } : undefined} />
+      ))}
+    </colgroup>
+  );
+}
 
 function ItemsHead({ view, withStage }: { view: View; withStage?: boolean }) {
   return (
     <thead className="bg-surface text-left text-xs text-ink/70">
       <tr>
-        <th className="px-3 py-2 font-medium">Статья</th>
-        {withStage && <th className="w-44 px-2 py-2 font-medium">Стадия</th>}
-        <th className={cn(th, 'w-36')}>Цена 1 ед.</th>
-        <th className={cn(th, 'w-24')}>Скидка</th>
-        <th className={cn(th, 'w-36')}>Цена со скидкой</th>
+        <th className="px-3 py-2 font-medium" colSpan={withStage ? 1 : 2}>
+          Статья
+        </th>
+        {withStage && <th className="px-2 py-2 font-medium">Стадия</th>}
+        <th className={th}>Цена 1 ед.</th>
+        <th className={th}>Скидка</th>
+        <th className={th}>Цена со скидкой</th>
         {view === 'plan' ? (
           <>
-            <th className={cn(th, 'w-32')}>План, шт.</th>
-            <th className={cn(th, 'w-40')}>Сумма по плану</th>
-            <th className={cn(th, 'w-20 px-3')}>Доля</th>
+            <th className={th}>План, шт.</th>
+            <th className={th}>Сумма по плану</th>
+            <th className={cn(th, 'px-3')}>Доля</th>
           </>
         ) : (
           <>
-            <th className={cn(th, 'w-32')}>Продано, шт.</th>
-            <th className={cn(th, 'w-36')}>Выручка</th>
-            <th className={cn(th, 'w-28')}>План, шт.</th>
-            <th className={cn(th, 'w-36')}>План, ₽</th>
-            <th className={cn(th, 'w-40 px-3')}>Выполнение плана</th>
+            <th className={th}>Продано, шт.</th>
+            <th className={th}>Выручка</th>
+            <th className={th}>План, шт.</th>
+            <th className={th}>План, ₽</th>
+            <th className={cn(th, 'px-3')}>Выполнение плана</th>
           </>
         )}
       </tr>
@@ -554,7 +609,7 @@ function ItemRow({
   const muted = 'px-2 py-1.5 text-right tabular-nums text-ink/70';
   return (
     <tr className="border-t border-line/60" data-testid="income-row">
-      <td className="py-1 pl-4 pr-3">
+      <td className="py-1 pl-4 pr-3" colSpan={withStage ? 1 : 2}>
         <LabelCell
           item={it}
           onRename={(label) => onSave([{ key: it.key, label }])}
@@ -942,27 +997,66 @@ function LabelCell({
   );
 }
 
-/** Строка «+ Добавить позицию» в конце группы; там же — возврат убранных позиций по умолчанию. */
-function AddItemRow({
+/** «+ Добавить статью» справа над таблицей; там же — возврат убранных позиций по умолчанию. */
+function AddItemActions({
   group,
-  colSpan,
+  factOnly,
   restore,
   onRestore,
+  onOpen,
+}: {
+  group: IncomeGroup;
+  factOnly: boolean;
+  restore: { key: string; label: string }[];
+  onRestore: (key: string) => void;
+  onOpen: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-sm">
+      {restore.map((r) => (
+        <button
+          key={r.key}
+          type="button"
+          className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-xs text-ink/60 hover:bg-surface hover:text-ink"
+          onClick={() => onRestore(r.key)}
+          title="Вернуть позицию по умолчанию"
+        >
+          <RotateCcw className="size-3" />
+          Вернуть «{r.label}»
+        </button>
+      ))}
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={onOpen}
+        title={
+          factOnly ? 'Например, продажа с индивидуальной скидкой — в плане её не будет' : undefined
+        }
+        data-testid={`income-add-${group.key}`}
+      >
+        <Plus className="size-4" />
+        {factOnly ? 'Добавить статью факта' : 'Добавить статью'}
+      </Button>
+    </div>
+  );
+}
+
+/** Форма новой статьи — между заголовком группы и таблицей */
+function AddItemForm({
+  group,
   onAdd,
+  onCancel,
   factOnly,
   stage: initialStage,
 }: {
   group: IncomeGroup;
-  colSpan: number;
-  restore: { key: string; label: string }[];
-  onRestore: (key: string) => void;
   onAdd: (v: { label: string; price: number; discount: number; stage: number }) => Promise<boolean>;
+  onCancel: () => void;
   /** Стадия по умолчанию для нового билета — текущая */
   stage: number;
   /** Статья только для факта: со скидкой, без плана */
   factOnly?: boolean;
 }) {
-  const [open, setOpen] = React.useState(false);
   const [label, setLabel] = React.useState('');
   const [price, setPrice] = React.useState('');
   const [discount, setDiscount] = React.useState('');
@@ -974,114 +1068,73 @@ function AddItemRow({
     const n = Math.round(Number(price.replace(/[\s  ₽]/g, '').replace(',', '.')) || 0);
     if (!name) return;
     const d = Number(discount.replace(/[\s%]/g, '').replace(',', '.')) || 0;
-    if (
-      await onAdd({
-        label: name,
-        price: Math.max(0, n),
-        discount: Math.min(100, Math.max(0, d)),
-        stage: withStage ? stage : 0,
-      })
-    ) {
-      setLabel('');
-      setPrice('');
-      setDiscount('');
-      setOpen(false);
-    }
+    await onAdd({
+      label: name,
+      price: Math.max(0, n),
+      discount: Math.min(100, Math.max(0, d)),
+      stage: withStage ? stage : 0,
+    });
   };
   return (
-    <tr className="border-t border-line/60">
-      <td colSpan={colSpan} className="py-1.5 pl-12 pr-3">
-        {open ? (
-          <form className="flex flex-wrap items-center gap-2" onSubmit={submit}>
-            <input
-              autoFocus
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="Название позиции"
-              maxLength={120}
-              className="h-8 w-64 rounded border border-line px-2 text-sm focus:border-brand focus:outline-none"
-              aria-label="Название новой позиции"
-              data-testid={`income-add-label-${group.key}`}
-            />
-            <input
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              inputMode="numeric"
-              placeholder="Стоимость 1 ед., ₽"
-              className="h-8 w-44 rounded border border-line px-2 text-right text-sm tabular-nums focus:border-brand focus:outline-none"
-              aria-label="Стоимость одной единицы"
-              data-testid={`income-add-price-${group.key}`}
-            />
-            {withStage && (
-              <select
-                value={stage}
-                onChange={(e) => setStage(Number(e.target.value))}
-                className="h-8 rounded border border-line bg-white px-2 text-sm focus:border-brand focus:outline-none"
-                aria-label="Стадия продаж"
-                data-testid={`income-add-stage-${group.key}`}
-              >
-                {PRICE_STAGES.map((st, k) => (
-                  <option key={st.key} value={k}>
-                    {st.label}
-                  </option>
-                ))}
-              </select>
-            )}
-            <input
-              value={discount}
-              onChange={(e) => setDiscount(e.target.value)}
-              inputMode="decimal"
-              placeholder="Скидка, %"
-              className="h-8 w-28 rounded border border-line px-2 text-right text-sm tabular-nums focus:border-brand focus:outline-none"
-              aria-label="Скидка, %"
-              data-testid={`income-add-discount-${group.key}`}
-            />
-            <button
-              type="submit"
-              className="h-8 rounded bg-brand px-3 text-sm font-medium text-white hover:bg-brand/90"
-              data-testid={`income-add-submit-${group.key}`}
-            >
-              Добавить
-            </button>
-            <button
-              type="button"
-              className="h-8 rounded px-2 text-sm text-ink/70 hover:bg-surface"
-              onClick={() => setOpen(false)}
-            >
-              Отмена
-            </button>
-          </form>
-        ) : (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-brand hover:bg-brand-light"
-              onClick={() => setOpen(true)}
-              data-testid={`income-add-${group.key}`}
-            >
-              <Plus className="size-4" />
-              {factOnly ? 'Добавить статью факта' : 'Добавить позицию'}
-            </button>
-            {factOnly && (
-              <span className="text-xs text-ink/50">
-                например, продажа с индивидуальной скидкой — в плане её не будет
-              </span>
-            )}
-            {restore.map((r) => (
-              <button
-                key={r.key}
-                type="button"
-                className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-xs text-ink/60 hover:bg-surface hover:text-ink"
-                onClick={() => onRestore(r.key)}
-                title="Вернуть позицию по умолчанию"
-              >
-                <RotateCcw className="size-3" />
-                Вернуть «{r.label}»
-              </button>
-            ))}
-          </div>
-        )}
-      </td>
-    </tr>
+    <form
+      className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-brand/30 bg-brand-light/40 px-3 py-2"
+      onSubmit={submit}
+      onKeyDown={(e) => e.key === 'Escape' && onCancel()}
+    >
+      <input
+        autoFocus
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        placeholder={factOnly ? 'Название статьи факта' : 'Название статьи'}
+        maxLength={120}
+        className="h-8 w-64 rounded border border-line bg-white px-2 text-sm focus:border-brand focus:outline-none"
+        aria-label="Название новой статьи"
+        data-testid={`income-add-label-${group.key}`}
+      />
+      <input
+        value={price}
+        onChange={(e) => setPrice(e.target.value)}
+        inputMode="numeric"
+        placeholder="Стоимость 1 ед., ₽"
+        className="h-8 w-44 rounded border border-line bg-white px-2 text-right text-sm tabular-nums focus:border-brand focus:outline-none"
+        aria-label="Стоимость одной единицы"
+        data-testid={`income-add-price-${group.key}`}
+      />
+      {withStage && (
+        <select
+          value={stage}
+          onChange={(e) => setStage(Number(e.target.value))}
+          className="h-8 rounded border border-line bg-white px-2 text-sm focus:border-brand focus:outline-none"
+          aria-label="Стадия продаж"
+          data-testid={`income-add-stage-${group.key}`}
+        >
+          {PRICE_STAGES.map((st, k) => (
+            <option key={st.key} value={k}>
+              {st.label}
+            </option>
+          ))}
+        </select>
+      )}
+      <input
+        value={discount}
+        onChange={(e) => setDiscount(e.target.value)}
+        inputMode="decimal"
+        placeholder="Скидка, %"
+        className="h-8 w-28 rounded border border-line bg-white px-2 text-right text-sm tabular-nums focus:border-brand focus:outline-none"
+        aria-label="Скидка, %"
+        data-testid={`income-add-discount-${group.key}`}
+      />
+      <Button type="submit" size="sm" data-testid={`income-add-submit-${group.key}`}>
+        Добавить
+      </Button>
+      <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
+        Отмена
+      </Button>
+      {factOnly && (
+        <span className="text-xs text-ink/50">
+          например, продажа с индивидуальной скидкой — в плане её не будет
+        </span>
+      )}
+    </form>
   );
 }

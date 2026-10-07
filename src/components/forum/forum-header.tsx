@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { TabGroup, TabLink } from '@/components/ui/tab-links';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { toast } from 'sonner';
 import * as React from 'react';
 import { CalendarDays, ChevronRight, Globe, MapPin, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -11,7 +12,8 @@ import { ForumFormDialog } from '@/components/forums/forum-form-dialog';
 import { daysLeftText, forumDateRange } from '@/components/forums/forum-card';
 import { formatDate } from '@/lib/dates';
 import { COUNTER_CLASS, countStatuses, progressPercent, type TaskStatusCode } from '@/lib/status';
-import { cn } from '@/lib/utils';
+import { cn, pluralRu } from '@/lib/utils';
+import { addMissingTemplateTasks } from '@/server/actions/forums';
 import { useForum } from './forum-context';
 import { PlanImportButton } from './plan-import-dialog';
 import { PlanExportButton } from './plan-export-dialog';
@@ -84,14 +86,20 @@ export function ForumBreadcrumbs() {
   );
 }
 
-export function ForumHeader({ forumOptions }: { forumOptions: { id: number; name: string }[] }) {
+export function ForumHeader({
+  forumOptions,
+  templateGap,
+}: {
+  forumOptions: { id: number; name: string }[];
+  /** Сколько задач мастер-плана не хватает форуму (форум создан до дозаполнения шаблона) */
+  templateGap: { missing: number; total: number } | null;
+}) {
   const { forum, tasks, today, filters, setFilters, saving } = useForum();
   const pathname = usePathname();
   const sp = useSearchParams();
   const [editOpen, setEditOpen] = React.useState(false);
   const c = countStatuses(tasks, today);
   const current = activeSection(pathname);
-  const onReport = !TASK_SECTIONS.some((k) => pathname.endsWith(`/${k}`));
 
   const toggleStatus = (s: TaskStatusCode) => {
     const on = filters.status.length === 1 && filters.status[0] === s;
@@ -117,10 +125,9 @@ export function ForumHeader({ forumOptions }: { forumOptions: { id: number; name
     <button
       type="button"
       onClick={onClick}
-      disabled={onReport}
-      title={onReport ? undefined : `Показать задачи: ${label.toLowerCase()}`}
+      title={`Показать задачи: ${label.toLowerCase()}`}
       className={cn(
-        'flex min-w-[92px] flex-col items-start rounded-md border px-3 py-1.5 text-left transition-colors disabled:cursor-default',
+        'flex min-w-[92px] flex-col items-start rounded-md border px-3 py-1.5 text-left transition-colors',
         active ? 'border-brand bg-brand-light' : 'border-line bg-white hover:border-brand/50',
       )}
     >
@@ -170,40 +177,6 @@ export function ForumHeader({ forumOptions }: { forumOptions: { id: number; name
               )}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2" data-testid="status-counters">
-            {counter(
-              'Не начато',
-              c.notStarted,
-              filters.status.join() === 'NOT_STARTED',
-              () => toggleStatus('NOT_STARTED'),
-              'text-ink',
-            )}
-            {counter(
-              'В работе',
-              c.inProgress,
-              filters.status.join() === 'IN_PROGRESS',
-              () => toggleStatus('IN_PROGRESS'),
-              COUNTER_CLASS.inProgress,
-            )}
-            {counter(
-              'Выполнено',
-              c.done,
-              filters.status.join() === 'DONE',
-              () => toggleStatus('DONE'),
-              COUNTER_CLASS.done,
-            )}
-            {counter(
-              'Просрочено',
-              c.overdue,
-              filters.due === 'overdue',
-              toggleOverdue,
-              c.overdue ? COUNTER_CLASS.overdue : 'text-ink',
-            )}
-            <div className="ml-1 hidden flex-col items-start sm:flex">
-              <span className="text-lg font-semibold leading-tight">{progressPercent(c)}%</span>
-              <span className="text-[11px] text-ink/60">готовность</span>
-            </div>
-          </div>
         </div>
         <TabGroup className="thin-scroll mt-3 flex gap-1 overflow-x-auto" role="tablist">
           {SECTIONS.map((s) => (
@@ -221,6 +194,45 @@ export function ForumHeader({ forumOptions }: { forumOptions: { id: number; name
             </TabLink>
           ))}
         </TabGroup>
+        {current?.sub && (
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="flex flex-wrap items-center gap-2" data-testid="status-counters">
+              {counter(
+                'Не начато',
+                c.notStarted,
+                filters.status.join() === 'NOT_STARTED',
+                () => toggleStatus('NOT_STARTED'),
+                'text-ink',
+              )}
+              {counter(
+                'В работе',
+                c.inProgress,
+                filters.status.join() === 'IN_PROGRESS',
+                () => toggleStatus('IN_PROGRESS'),
+                COUNTER_CLASS.inProgress,
+              )}
+              {counter(
+                'Выполнено',
+                c.done,
+                filters.status.join() === 'DONE',
+                () => toggleStatus('DONE'),
+                COUNTER_CLASS.done,
+              )}
+              {counter(
+                'Просрочено',
+                c.overdue,
+                filters.due === 'overdue',
+                toggleOverdue,
+                c.overdue ? COUNTER_CLASS.overdue : 'text-ink',
+              )}
+              <div className="ml-1 hidden flex-col items-start sm:flex">
+                <span className="text-lg font-semibold leading-tight">{progressPercent(c)}%</span>
+                <span className="text-[11px] text-ink/60">готовность</span>
+              </div>
+            </div>
+            {templateGap && <TemplateGapNote gap={templateGap} />}
+          </div>
+        )}
         {current?.sub && (
           <div className="mb-3 mt-3 flex flex-wrap items-center gap-2">
             <TabGroup
@@ -267,4 +279,36 @@ function siteLabel(url: string): string {
     .replace(/^https?:\/\//, '')
     .replace(/^www\./, '')
     .replace(/\/$/, '');
+}
+
+/** Форум создан, когда в базе было не всё мастер-плана: можно дописать недостающие задачи */
+function TemplateGapNote({ gap }: { gap: { missing: number; total: number } }) {
+  const { forum, tasks } = useForum();
+  const router = useRouter();
+  const [busy, setBusy] = React.useState(false);
+  const add = async () => {
+    setBusy(true);
+    const res = await addMissingTemplateTasks(forum.id);
+    setBusy(false);
+    if (!res.ok) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success(`Добавлено задач из мастер-плана: ${res.data}`);
+    router.refresh();
+  };
+  return (
+    <div
+      className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm"
+      data-testid="template-gap"
+    >
+      <span>
+        В форуме {tasks.length} {pluralRu(tasks.length, 'задача', 'задачи', 'задач')}, в
+        мастер-плане {gap.total}
+      </span>
+      <Button size="sm" variant="outline" onClick={() => void add()} disabled={busy}>
+        {busy ? 'Добавляем…' : `Добавить недостающие ${gap.missing}`}
+      </Button>
+    </div>
+  );
 }

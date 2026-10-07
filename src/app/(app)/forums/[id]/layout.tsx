@@ -3,7 +3,7 @@ import { ForumProvider } from '@/components/forum/forum-context';
 import { ForumBreadcrumbs, ForumHeader } from '@/components/forum/forum-header';
 import { TaskPanel } from '@/components/forum/task-panel';
 import { todayMsk } from '@/lib/dates';
-import { getDicts, getForum, getForumOptions, getTasks } from '@/server/queries';
+import { getDicts, getForum, getForumOptions, getTasks, getTemplateGap } from '@/server/queries';
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -27,10 +27,14 @@ export default async function ForumLayout({
     getDicts(),
     getForumOptions(),
   ]);
+  const templateGap = await getTemplateGap(tasks);
   return (
     <ForumProvider forum={forum} tasks={tasks} dicts={dicts} today={todayMsk()}>
       <ForumBreadcrumbs />
-      <ForumHeader forumOptions={options.filter((o) => o.id !== forumId)} />
+      <ForumHeader
+        forumOptions={options.filter((o) => o.id !== forumId)}
+        templateGap={templateGap}
+      />
       {children}
       <TaskPanel />
     </ForumProvider>
