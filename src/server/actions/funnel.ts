@@ -1,5 +1,6 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireEditor } from '@/lib/auth';
@@ -7,6 +8,11 @@ import { isoToDb, todayMsk } from '@/lib/dates';
 import { DEAL_STAGES, isDealStage, type DealStageKey, type DealValue } from '@/lib/funnel';
 import { run, UserError, type ActionResult } from '@/server/action-utils';
 import { getDeals, toDealValue } from '@/server/queries';
+
+/** Линия доходов над вкладками форума берёт эти данные из layout — обновить его */
+function refreshStatusLines(forumId: number) {
+  revalidatePath(`/forums/${forumId}`, 'layout');
+}
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Неверная дата');
 const text = (max: number) => z.string().trim().max(max);
@@ -63,6 +69,7 @@ export async function createDeal(
         ...toData(p),
       },
     });
+    refreshStatusLines(forumId);
     return toDealValue(d);
   });
 }
@@ -96,6 +103,7 @@ export async function updateDeal(
         extra.paidDate = isoToDb(today);
     }
     const d = await prisma.deal.update({ where: { id }, data: { ...toData(p), ...extra } });
+    refreshStatusLines(forumId);
     return toDealValue(d);
   });
 }
@@ -104,6 +112,7 @@ export async function deleteDeal(forumId: number, id: number): Promise<ActionRes
   return run(async () => {
     await requireEditor();
     await prisma.deal.deleteMany({ where: { id, forumId } });
+    refreshStatusLines(forumId);
     return null;
   });
 }
@@ -159,6 +168,7 @@ export async function importDeals(
       }
     }
     await prisma.$transaction(ops);
+    refreshStatusLines(forumId);
     return { deals: await getDeals(forumId), added, updated };
   });
 }
@@ -182,6 +192,7 @@ export async function setDealExcluded(
       where: { id: dealId },
       data: { incomeStatus: excluded ? 'rejected' : null },
     });
+    refreshStatusLines(forumId);
     return toDealValue(d);
   });
 }

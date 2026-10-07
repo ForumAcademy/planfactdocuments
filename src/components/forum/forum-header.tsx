@@ -17,6 +17,7 @@ import { addMissingTemplateTasks } from '@/server/actions/forums';
 import { useForum } from './forum-context';
 import { PlanImportButton } from './plan-import-dialog';
 import { PlanExportButton } from './plan-export-dialog';
+import { StatusLines } from './status-lines';
 
 /** Подразделы вкладки «План» (страницы /tasks и /gantt) */
 const PLAN_SECTIONS = [
@@ -89,8 +90,11 @@ export function ForumBreadcrumbs() {
 export function ForumHeader({
   forumOptions,
   templateGap,
+  income,
 }: {
   forumOptions: { id: number; name: string }[];
+  /** Данные доходов для линии доходов */
+  income: React.ComponentProps<typeof StatusLines>['income'];
   /** Сколько задач мастер-плана не хватает форуму (форум создан до дозаполнения шаблона) */
   templateGap: { missing: number; total: number } | null;
 }) {
@@ -178,6 +182,7 @@ export function ForumHeader({
             </div>
           </div>
         </div>
+        <StatusLines income={income} />
         <TabGroup className="thin-scroll mt-3 flex gap-1 overflow-x-auto" role="tablist">
           {SECTIONS.map((s) => (
             <TabLink

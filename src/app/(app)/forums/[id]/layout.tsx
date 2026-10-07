@@ -3,7 +3,16 @@ import { ForumProvider } from '@/components/forum/forum-context';
 import { ForumBreadcrumbs, ForumHeader } from '@/components/forum/forum-header';
 import { TaskPanel } from '@/components/forum/task-panel';
 import { todayMsk } from '@/lib/dates';
-import { getDicts, getForum, getForumOptions, getTasks, getTemplateGap } from '@/server/queries';
+import {
+  getDeals,
+  getDicts,
+  getForum,
+  getForumOptions,
+  getIncomeConfig,
+  getIncomeItems,
+  getTasks,
+  getTemplateGap,
+} from '@/server/queries';
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -22,10 +31,13 @@ export default async function ForumLayout({
   const forumId = Number(id);
   const forum = await getForum(forumId);
   if (!forum) notFound();
-  const [tasks, dicts, options] = await Promise.all([
+  const [tasks, dicts, options, incomeItems, incomeConfig, deals] = await Promise.all([
     getTasks(forumId),
     getDicts(),
     getForumOptions(),
+    getIncomeItems(forumId),
+    getIncomeConfig(forumId),
+    getDeals(forumId),
   ]);
   const templateGap = await getTemplateGap(tasks);
   return (
@@ -34,6 +46,11 @@ export default async function ForumLayout({
       <ForumHeader
         forumOptions={options.filter((o) => o.id !== forumId)}
         templateGap={templateGap}
+        income={{
+          items: incomeItems,
+          config: incomeConfig,
+          deals: deals.filter((d) => d.status === 'paid'),
+        }}
       />
       {children}
       <TaskPanel />

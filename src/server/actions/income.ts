@@ -1,6 +1,7 @@
 'use server';
 
 import { randomUUID } from 'node:crypto';
+import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireEditor } from '@/lib/auth';
@@ -13,6 +14,11 @@ import {
 } from '@/lib/income';
 import { run, UserError, type ActionResult } from '@/server/action-utils';
 import { getIncomeConfig, getIncomeItems } from '@/server/queries';
+
+/** Линия доходов над вкладками форума берёт эти данные из layout — обновить его */
+function refreshStatusLines(forumId: number) {
+  revalidatePath(`/forums/${forumId}`, 'layout');
+}
 
 const amount = z.number().int().min(0).max(2_000_000_000);
 const qty = z.number().int().min(0).max(1_000_000);
@@ -64,6 +70,7 @@ export async function saveIncomeConfig(
         ...(p.finalDate !== undefined ? { priceFinalDate: isoToDb(p.finalDate) } : {}),
       },
     });
+    refreshStatusLines(forumId);
     return getIncomeConfig(forumId);
   });
 }
@@ -99,6 +106,7 @@ export async function saveIncomeItems(
         });
       }),
     );
+    refreshStatusLines(forumId);
     return getIncomeItems(forumId);
   });
 }
@@ -140,6 +148,7 @@ export async function addIncomeItem(
         factOnly: data.factOnly ?? false,
       },
     });
+    refreshStatusLines(forumId);
     return getIncomeItems(forumId);
   });
 }
@@ -162,6 +171,7 @@ export async function removeIncomeItem(
     } else {
       await prisma.incomeItem.deleteMany({ where: { forumId, key } });
     }
+    refreshStatusLines(forumId);
     return getIncomeItems(forumId);
   });
 }
