@@ -662,9 +662,10 @@ function ItemRow({
             {it.deals.count > 0 && (
               <div
                 className="pr-2 text-right text-[10px] text-ink/50"
-                title="Оплаченные сделки воронки"
+                title="Оплаченные сделки воронки и проданное, внесённое вручную"
               >
                 из воронки {it.deals.qty}
+                {sold > it.deals.qty && ` · вручную ${sold - it.deals.qty}`}
               </div>
             )}
           </td>
