@@ -36,7 +36,7 @@ import {
   type ExpenseGroup,
 } from '@/lib/expenses';
 import type { TaskDTO } from '@/lib/types';
-import { cn, formatRub, formatRubShort, markerLabels, pluralRu } from '@/lib/utils';
+import { cn, formatRub, pluralRu } from '@/lib/utils';
 import { setExpenseLimit } from '@/server/actions/forums';
 import { CostCell } from './cells';
 import { ExpensesImportDialog } from './expenses-import-dialog';
@@ -66,6 +66,9 @@ export function ExpensesView() {
   const [limit, setLimit] = React.useState(forum.expenseLimit);
   React.useEffect(() => setLimit(forum.expenseLimit), [forum.expenseLimit]);
   const overLimit = limit != null && total > limit;
+  // Предельно допустимые расходы — заданный лимит, а пока он не задан — стоимость задач
+  const cap = limit ?? total;
+  const overFact = cap > 0 && fact > cap;
 
   const saveLimit = async (v: number) => {
     const next = v || null;
@@ -127,25 +130,11 @@ export function ExpensesView() {
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-4" data-testid="expenses-view">
-      <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
-        <div>
-          <div className="text-xs text-ink/60">Расходы форума по задачам (план)</div>
-          <div
-            className={cn('text-2xl font-semibold tabular-nums', overLimit && 'text-status-red')}
-            data-testid="expenses-total"
-            data-over-limit={overLimit || undefined}
-          >
-            {formatRub(total)}
-          </div>
-          <div className="text-xs text-ink/60">
-            {withCost} {pluralRu(withCost, 'статья', 'статьи', 'статей')} со стоимостью из{' '}
-            {tasks.length} {pluralRu(tasks.length, 'задачи', 'задач', 'задач')}
-          </div>
-        </div>
+      <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
         <div className="min-w-[220px]" data-testid="expenses-limit-block">
           <div className="text-xs text-ink/60">Предельно допустимые расходы</div>
           <NumberCell
-            value={limit ?? 0}
+            value={cap}
             format={(v) => (v ? formatRub(v) : 'Не задан')}
             label="Предельно допустимые расходы, ₽"
             onCommit={(v) => void saveLimit(v)}
@@ -153,22 +142,45 @@ export function ExpensesView() {
             className="-ml-1 block w-auto py-0 text-left text-2xl font-semibold leading-8"
             inputClassName="h-8 w-48 text-left text-lg"
           />
-          {limit ? (
+          <div
+            className={cn('text-xs', overLimit ? 'text-status-red' : 'text-ink/60')}
+            data-testid="expenses-total"
+            data-over-limit={overLimit || undefined}
+          >
+            {limit == null
+              ? `По стоимости задач: ${withCost} ${pluralRu(withCost, 'статья', 'статьи', 'статей')} из ${tasks.length}`
+              : overLimit
+                ? `Стоимость задач ${formatRub(total)} — больше на ${formatRub(total - limit)}`
+                : total === limit
+                  ? `Совпадает со стоимостью задач (${withCost} ${pluralRu(withCost, 'статья', 'статьи', 'статей')})`
+                  : `Стоимость задач ${formatRub(total)} · не распределено ${formatRub(limit - total)}`}
+          </div>
+        </div>
+        <div className="min-w-[260px]" data-testid="expenses-fact-block">
+          <div className="text-xs text-ink/60">Фактические расходы</div>
+          <div
+            className={cn(
+              'text-2xl font-semibold tabular-nums leading-8',
+              overFact && 'text-status-red',
+            )}
+            data-testid="expenses-fact-total"
+          >
+            {formatRub(fact)}
+          </div>
+          {cap > 0 && (
             <>
               <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface">
                 <div
-                  className={cn('h-full', overLimit ? 'bg-status-red' : 'bg-status-green')}
-                  style={{ width: `${Math.min(100, (total / limit) * 100)}%` }}
+                  className={cn('h-full', overFact ? 'bg-status-red' : 'bg-status-green')}
+                  style={{ width: `${Math.min(100, (fact / cap) * 100)}%` }}
                 />
               </div>
-              <div className={cn('mt-0.5 text-xs', overLimit ? 'text-status-red' : 'text-ink/60')}>
-                {overLimit
-                  ? `Превышение на ${formatRub(total - limit)}`
-                  : `Остаток ${formatRub(limit - total)} · ${pct(total, limit)} лимита`}
+              <div className={cn('mt-0.5 text-xs', overFact ? 'text-status-red' : 'text-ink/60')}>
+                {overFact
+                  ? `Превышение на ${formatRub(fact - cap)}`
+                  : `Остаток ${formatRub(cap - fact)} · ${pct(fact, cap)} от предельных`}
               </div>
             </>
-          ) : (
-            <div className="text-xs text-ink/60">Нажмите, чтобы задать</div>
           )}
         </div>
         <div className="ml-auto flex flex-wrap gap-2">
@@ -198,8 +210,6 @@ export function ExpensesView() {
           </Button>
         </div>
       </div>
-
-      <ExpensesSummary plan={total} fact={fact} limit={limit} />
 
       <div className="mt-5">
         <TabGroup
@@ -494,96 +504,6 @@ function CategoryMenu({ task: t }: { task: TaskDTO }) {
         )}
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-/**
- * Сводка над вкладками «План» / «Факт»: полоса фактических расходов с отметками
- * «План» и «Лимит» — сразу видно, сколько потрачено из плана и не превышен ли лимит.
- */
-function ExpensesSummary({
-  plan,
-  fact,
-  limit,
-}: {
-  plan: number;
-  fact: number;
-  limit: number | null;
-}) {
-  const max = Math.max(plan, fact, limit ?? 0) * 1.05 || 1;
-  const at = (v: number) => `${Math.min(100, (v / max) * 100)}%`;
-  const bad = fact > plan || (limit != null && fact > limit);
-  const [planShift, limitShift, twoRows] = markerLabels(plan, limit ?? 0, max);
-  const note = plan
-    ? fact > plan
-      ? `Больше плана на ${formatRub(fact - plan)}`
-      : `${pct(fact, plan)} от плана · остаток ${formatRub(plan - fact)}`
-    : null;
-  return (
-    <section
-      className="mt-4 rounded-lg border border-line bg-white px-4 py-3"
-      data-testid="expenses-summary"
-    >
-      <div className="grid grid-cols-[3rem_1fr] gap-x-3 gap-y-2 sm:grid-cols-[3rem_1fr_15rem]">
-        <div className="self-center text-sm font-medium">Факт</div>
-        <div className="relative self-center">
-          <div className="h-3 w-full overflow-hidden rounded-full bg-surface">
-            <div
-              className={cn('h-full', bad ? 'bg-status-red' : 'bg-status-green')}
-              style={{ width: at(fact) }}
-              title={`Факт: ${formatRub(fact)}`}
-            />
-          </div>
-          {plan > 0 && <SummaryMarker left={at(plan)} strong />}
-          {limit ? <SummaryMarker left={at(limit)} /> : null}
-        </div>
-        <div className="col-start-2 sm:col-start-auto">
-          <div
-            className={cn('font-semibold tabular-nums', bad && 'text-status-red')}
-            data-testid="expenses-fact-total"
-          >
-            {formatRub(fact)}
-          </div>
-          {note && (
-            <div className={cn('text-xs', bad ? 'text-status-red' : 'text-ink/60')}>{note}</div>
-          )}
-        </div>
-        {(plan > 0 || limit) && (
-          <div
-            className={cn('relative col-start-2 text-[11px] text-ink/60', twoRows ? 'h-8' : 'h-4')}
-          >
-            {plan > 0 && (
-              <span
-                className={cn('absolute whitespace-nowrap font-medium text-ink', planShift)}
-                style={{ left: at(plan) }}
-              >
-                План<span className="hidden sm:inline"> · {formatRubShort(plan)}</span>
-              </span>
-            )}
-            {limit ? (
-              <span
-                className={cn('absolute whitespace-nowrap', limitShift)}
-                style={{ left: at(limit) }}
-              >
-                Лимит<span className="hidden sm:inline"> · {formatRubShort(limit)}</span>
-              </span>
-            ) : null}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function SummaryMarker({ left, strong }: { left: string; strong?: boolean }) {
-  return (
-    <div
-      className={cn(
-        'absolute -inset-y-1 w-0 border-l',
-        strong ? 'border-ink/70' : 'border-dashed border-ink/40',
-      )}
-      style={{ left }}
-    />
   );
 }
 
