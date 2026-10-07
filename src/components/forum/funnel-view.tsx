@@ -36,7 +36,9 @@ import {
 } from '@/lib/funnel';
 import {
   autoPlan,
+  currentStage,
   incomeSum,
+  stageDates,
   incomeTarget,
   type IncomeConfig,
   type IncomeItemValue,
@@ -90,8 +92,16 @@ export function FunnelView({
   );
   const expenses = tasks.reduce((s, t) => s + t.cost, 0);
   const planSum = React.useMemo(
-    () => incomeSum(autoPlan(items, incomeTarget(expenses), config), 'plan'),
-    [items, expenses, config],
+    () =>
+      incomeSum(
+        autoPlan(
+          items,
+          incomeTarget(expenses),
+          currentStage(stageDates(config, forum.salesStartDate, forum.startDate), today),
+        ),
+        'plan',
+      ),
+    [items, expenses, config, forum.salesStartDate, forum.startDate, today],
   );
 
   const base = `/forums/${forum.id}/funnel`;

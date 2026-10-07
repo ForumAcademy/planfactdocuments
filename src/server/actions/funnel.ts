@@ -166,8 +166,6 @@ export async function importDeals(
   });
 }
 
-const FACT_FIELD = ['factQty', 'factMid', 'factFinal'] as const;
-
 /** Позиция доходов, к которой относится сделка: её направление, иначе «Участник» */
 function directionOf(items: IncomeItemValue[], key: string | null): IncomeItemValue | undefined {
   return (
@@ -221,18 +219,20 @@ export async function decideDealIncome(
         : 0;
     const qty = Math.max(1, deal.qty);
     const unit = Math.round(deal.amount / qty);
-    const field = FACT_FIELD[stage];
 
     const bump = async (it: IncomeItemValue) => {
       await prisma.incomeItem.upsert({
         where: { forumId_key: { forumId, key: it.key } },
-        update: { [field]: { increment: qty } },
-        create: { forumId, key: it.key, price: it.prices[0], [field]: qty },
+        update: { factQty: { increment: qty } },
+        create: { forumId, key: it.key, price: it.prices[0], stage: it.stage, factQty: qty },
       });
       return it.key;
     };
     const fits = (i: IncomeItemValue, lbl: string) =>
-      i.group === group && i.label === lbl && Math.round(netPrice(i, stage)) === unit;
+      i.group === group &&
+      i.label === lbl &&
+      i.stage === stage &&
+      Math.round(netPrice(i, stage)) === unit;
 
     let key: string;
     const same = items.find((i) => fits(i, name));
@@ -241,7 +241,7 @@ export async function decideDealIncome(
       // Цена ниже цены направления — это скидка от неё, если она считается без копеек
       let price = unit;
       let discount = 0;
-      const base = dir.prices[stage];
+      const base = dir.prices[0];
       if (unit > 0 && base > unit) {
         const disc = Math.round((1 - unit / base) * 10_000) / 100;
         if (Math.abs(Math.round(base * (1 - disc / 100)) - unit) <= 1) {
@@ -260,7 +260,17 @@ export async function decideDealIncome(
       else {
         key = `c_${randomUUID().slice(0, 8)}`;
         await prisma.incomeItem.create({
-          data: { forumId, key, group, label: lbl, price, discount, factOnly: true, [field]: qty },
+          data: {
+            forumId,
+            key,
+            group,
+            label: lbl,
+            price,
+            discount,
+            stage,
+            factOnly: true,
+            factQty: qty,
+          },
         });
       }
     }
