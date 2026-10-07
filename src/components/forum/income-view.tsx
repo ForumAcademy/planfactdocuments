@@ -250,7 +250,7 @@ export function IncomeView({
           ))}
         </TabGroup>
         {saving && <Spinner className="text-xs" label="Сохраняем…" />}
-        {view === 'fact' && <DealsInFact forumId={forum.id} deals={deals} />}
+        <DealsInFact forumId={forum.id} deals={deals} />
       </div>
 
       {/* Партнёрства: без стадий продаж */}
@@ -363,8 +363,7 @@ export function IncomeView({
             {view === 'plan' && target > 0 && (
               <tr className="border-t border-line">
                 <td className="px-3 py-2 text-ink/70" colSpan={6}>
-                  {planGap > 0 ? 'До цели' : 'План выше цели'} {formatRub(target)}{' '}
-                  {planGap > 0 ? 'не хватает' : 'на'}
+                  {planGap > 0 ? 'До цели' : 'Сверх цели'}
                 </td>
                 <td
                   className={cn(

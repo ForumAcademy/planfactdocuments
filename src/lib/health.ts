@@ -99,7 +99,6 @@ export function taskHealth(tasks: StatusInput[], today: ISODate): HealthLine {
       diffDays(today, t.endDate) <= TASK_SOON_DAYS &&
       !shouldStart(t, today),
   ).length;
-  const due = tasks.filter((t) => t.endDate !== null && t.endDate < today).length;
   const reasons: string[] = [];
   if (c.overdue) reasons.push(`просрочено: ${tasksWord(c.overdue)}`);
   if (late) reasons.push(`пора начинать: ${tasksWord(late)}`);
@@ -116,8 +115,8 @@ export function taskHealth(tasks: StatusInput[], today: ISODate): HealthLine {
   return {
     health,
     fill: share(c.done, c.total),
-    mark: c.total ? share(due, c.total) : null,
-    markLabel: 'Должно быть выполнено к сегодняшнему дню',
+    // Отметки у задач нет: лимита по задачам нет, линия — просто доля выполненных
+    mark: null,
     value: `${c.done} из ${c.total} выполнено`,
     badge,
     summary: `Выполнено ${c.done} из ${c.total} (${percent(share(c.done, c.total))}) · в работе ${c.inProgress} · не начато ${c.notStarted} · просрочено ${c.overdue}`,
