@@ -1,11 +1,11 @@
 import { diffDays, formatDate } from './dates';
 
 /**
- * Доходы форума: партнёрства и билеты. У каждой позиции — цена одной единицы,
+ * Доходы форума: партнёрства и билеты. У каждой статьи — цена одной единицы,
  * индивидуальная скидка (%), плановое и фактически проданное количество.
- * Билеты продаются в три этапа — «Старт продаж», «Середина», «Финальная стадия»: на каждом
- * этапе у билета свои цена, скидка, план и факт, итог складывается из всех этапов.
- * У партнёрств этапов нет — их условия хранятся как условия «Старта». Позиции по умолчанию можно переименовать
+ * Билеты продаются в три стадии — «Старт продаж», «Середина», «Финальная стадия»: у каждой
+ * статьи-билета указана её стадия (например, «Участник» на старте и «Участник» на середине —
+ * две статьи со своими ценами), итог складывается из всех стадий. У партнёрств стадий нет. Позиции по умолчанию можно переименовать
  * или убрать, свои (например, «Билет для своих» со скидкой 20%) — добавить в любую группу.
  */
 
@@ -19,22 +19,16 @@ export type PriceStageKey = (typeof PRICE_STAGES)[number]['key'];
 
 export type Triple = [number, number, number];
 
-/** Настройки доходов форума: даты смены этапов и доли этапов для автоподбора плана */
+const sum3 = (t: Triple) => t[0] + t[1] + t[2];
+
+/** Настройки доходов форума: с какой даты начинаются «Середина» и «Финальная стадия» */
 export interface IncomeConfig {
-  /** С какой даты начинаются «Середина» и «Финальная стадия»; null — период делится поровну */
+  /** null — период от старта продаж до форума делится на три равные части */
   midDate: string | null;
   finalDate: string | null;
-  /** Как автоподбор раскладывает план позиции по этапам, % */
-  shares: Triple;
 }
 
-export const DEFAULT_SHARES: Triple = [30, 40, 30];
-
-export const DEFAULT_INCOME_CONFIG: IncomeConfig = {
-  midDate: null,
-  finalDate: null,
-  shares: DEFAULT_SHARES,
-};
+export const DEFAULT_INCOME_CONFIG: IncomeConfig = { midDate: null, finalDate: null };
 
 export const INCOME_GROUPS = [
   { key: 'partners', label: 'Партнёрства', color: '#0A0A9F' },
@@ -118,14 +112,12 @@ export interface IncomeItemValue {
   key: string;
   group: IncomeGroupKey;
   label: string;
-  /** Цена 1 ед. по этапам, руб. */
+  /** Стадия продаж статьи (0 — старт, 1 — середина, 2 — финал); у партнёрств всегда 0 */
+  stage: number;
+  /** Цена 1 ед., руб., и индивидуальная скидка, % — одинаковы по всем стадиям (тройка ради расчётов по стадиям) */
   prices: Triple;
-  /** Индивидуальная скидка по этапам, % */
   discounts: Triple;
-  /** Цена / скидка этапа задана своя (иначе — как на предыдущем этапе); для старта всегда true */
-  priceSet: [boolean, boolean, boolean];
-  discountSet: [boolean, boolean, boolean];
-  /** План и факт по этапам, шт. */
+  /** План и факт по стадиям, шт.: количество стоит только в стадии статьи */
   plan: Triple;
   fact: Triple;
   /** План задан вручную; иначе количество подбирается под цель автоматически */
@@ -138,17 +130,10 @@ export interface SavedIncomeItem {
   id?: number;
   key: string;
   price: number;
-  priceMid?: number | null;
-  priceFinal?: number | null;
   discount?: number;
-  discountMid?: number | null;
-  discountFinal?: number | null;
   planQty: number;
-  planMid?: number;
-  planFinal?: number;
   factQty: number;
-  factMid?: number;
-  factFinal?: number;
+  stage?: number;
   planManual?: boolean;
   factOnly?: boolean;
   label?: string | null;
@@ -156,11 +141,31 @@ export interface SavedIncomeItem {
   removed?: boolean;
 }
 
-/** Значения по этапам: незаданный этап берёт значение предыдущего */
-function inherit(first: number, rest: (number | null | undefined)[]): Triple {
-  const out: number[] = [first];
-  for (const v of rest) out.push(v ?? out[out.length - 1]);
-  return out as Triple;
+/** Количество в стадии: [0, n, 0] и т. п. */
+export function atStage(n: number, stage: number): Triple {
+  const t: Triple = [0, 0, 0];
+  t[stage] = n;
+  return t;
+}
+
+const clampStage = (n: number | undefined) => Math.min(2, Math.max(0, Math.round(n ?? 0)));
+
+/** Статья с новыми ценой, скидкой, количеством или стадией */
+export function withValues(
+  i: IncomeItemValue,
+  p: { price?: number; discount?: number; planQty?: number; factQty?: number; stage?: number },
+): IncomeItemValue {
+  const stage = hasStages(i) ? clampStage(p.stage ?? i.stage) : 0;
+  const price = p.price ?? i.prices[i.stage];
+  const discount = p.discount ?? i.discounts[i.stage];
+  return {
+    ...i,
+    stage,
+    prices: [price, price, price],
+    discounts: [discount, discount, discount],
+    plan: atStage(p.planQty ?? sum3(i.plan), stage),
+    fact: atStage(p.factQty ?? sum3(i.fact), stage),
+  };
 }
 
 /**
@@ -172,19 +177,22 @@ export function incomeItems(saved: SavedIncomeItem[]): IncomeItemValue[] {
   const value = (
     s: SavedIncomeItem | undefined,
     base: Pick<IncomeItemValue, 'key' | 'group' | 'label'> & { price: number },
-  ): IncomeItemValue => ({
-    key: base.key,
-    group: base.group,
-    label: base.label,
-    prices: inherit(base.price, [s?.priceMid, s?.priceFinal]),
-    discounts: inherit(s?.discount ?? 0, [s?.discountMid, s?.discountFinal]),
-    priceSet: [true, s?.priceMid != null, s?.priceFinal != null],
-    discountSet: [true, s?.discountMid != null, s?.discountFinal != null],
-    plan: [s?.planQty ?? 0, s?.planMid ?? 0, s?.planFinal ?? 0],
-    fact: [s?.factQty ?? 0, s?.factMid ?? 0, s?.factFinal ?? 0],
-    planManual: s?.planManual ?? false,
-    factOnly: s?.factOnly ?? false,
-  });
+  ): IncomeItemValue => {
+    const stage = base.group === 'tickets' ? clampStage(s?.stage) : 0;
+    const d = s?.discount ?? 0;
+    return {
+      key: base.key,
+      group: base.group,
+      label: base.label,
+      stage,
+      prices: [base.price, base.price, base.price],
+      discounts: [d, d, d],
+      plan: atStage(s?.planQty ?? 0, stage),
+      fact: atStage(s?.factQty ?? 0, stage),
+      planManual: s?.planManual ?? false,
+      factOnly: s?.factOnly ?? false,
+    };
+  };
   const defaults = INCOME_ITEMS.filter((d) => !byKey.get(d.key)?.removed).map((d) => {
     const s = byKey.get(d.key);
     return value(s, {
@@ -205,28 +213,12 @@ export function incomeItems(saved: SavedIncomeItem[]): IncomeItemValue[] {
         price: s.price,
       }),
     );
-  return [...defaults, ...custom].map(flatten);
+  return [...defaults, ...custom];
 }
-
-const sum3 = (t: Triple) => t[0] + t[1] + t[2];
 
 /** Этапы продаж есть только у билетов */
 export function hasStages(i: Pick<IncomeItemValue, 'group'>): boolean {
   return i.group === 'tickets';
-}
-
-/** Партнёрство без этапов: все условия — как на «Старте», количество — целиком в нём */
-function flatten(i: IncomeItemValue): IncomeItemValue {
-  if (hasStages(i)) return i;
-  return {
-    ...i,
-    prices: [i.prices[0], i.prices[0], i.prices[0]],
-    discounts: [i.discounts[0], i.discounts[0], i.discounts[0]],
-    priceSet: [true, false, false],
-    discountSet: [true, false, false],
-    plan: [sum3(i.plan), 0, 0],
-    fact: [sum3(i.fact), 0, 0],
-  };
 }
 
 /** Цена со скидкой на этапе */
@@ -264,13 +256,6 @@ export function incomeSum(
   return items.reduce((s, i) => s + itemSum(i, kind, stage), 0);
 }
 
-/** Доли этапов для автоподбора, нормированные к 1 (если все нули — поровну) */
-export function shareWeights(cfg: Pick<IncomeConfig, 'shares'>): Triple {
-  const total = cfg.shares.reduce((a, b) => a + Math.max(0, b), 0);
-  if (!total) return [1 / 3, 1 / 3, 1 / 3];
-  return cfg.shares.map((v) => Math.max(0, v) / total) as Triple;
-}
-
 /**
  * Даты этапов: старт — начало продаж; «Середина» и «Финал» — заданные даты, а если
  * их нет — период от старта продаж до форума делится на три равные части.
@@ -298,15 +283,6 @@ export function currentStage(dates: [string, string, string], today: string): nu
   return 0;
 }
 
-/** Делит количество по долям этапов; остаток — на этап с наибольшей долей */
-export function splitByShares(qty: number, w: Triple): Triple {
-  const out = w.map((x) => Math.floor(qty * x)) as Triple;
-  const rest = qty - sum3(out);
-  const top = w.indexOf(Math.max(...w));
-  out[top] += rest;
-  return out;
-}
-
 export function incomeTarget(expenses: number): number {
   return Math.round(expenses * (1 + INCOME_MARGIN));
 }
@@ -331,22 +307,24 @@ const mixOf = (i: IncomeItemValue) => defaultIncomeItem(i.key)?.mix ?? CUSTOM_MI
  * чтобы вместе с ручными доход (со скидками, по всем этапам) был не меньше цели. Партнёрств —
  * не больше типового числа (1 генеральный, 2 стратегических, 5 партнёров), остальное
  * добирается билетами в типовой пропорции; остаток — самой дешёвой позицией. Количество
- * позиции раскладывается по этапам в долях из настроек.
+ * ставится в стадию статьи; на завершённых стадиях (до openStage) автоплан равен проданному.
  */
 export function autoPlan(
   items: IncomeItemValue[],
   target: number,
-  cfg: Pick<IncomeConfig, 'shares'> = DEFAULT_INCOME_CONFIG,
+  openStage = 0,
 ): IncomeItemValue[] {
-  const w = shareWeights(cfg);
-  const unitOf = (i: IncomeItemValue) =>
-    hasStages(i) ? w.reduce((s, x, k) => s + x * netPrice(i, k), 0) : netPrice(i, 0);
-  const unit = new Map(items.map((i) => [i.key, unitOf(i)]));
+  // Завершённые стадии уже не продать: автоплан билетов там равен проданному
+  const closed = (i: IncomeItemValue) => hasStages(i) && i.stage < openStage;
+  items = items.map((i) =>
+    !i.planManual && !i.factOnly && closed(i) ? { ...i, plan: [...i.fact] as Triple } : i,
+  );
+  const unit = new Map(items.map((i) => [i.key, netPrice(i, i.stage)]));
   const price = (i: IncomeItemValue) => unit.get(i.key)!;
-  const auto = items.filter((i) => !i.planManual && !i.factOnly && price(i) > 0);
+  const auto = items.filter((i) => !i.planManual && !i.factOnly && !closed(i) && price(i) > 0);
   const qty = new Map<string, number>(auto.map((i) => [i.key, 0]));
   const manualSum = incomeSum(
-    items.filter((i) => i.planManual),
+    items.filter((i) => i.planManual || (closed(i) && !i.factOnly)),
     'plan',
   );
   let rest = target - manualSum;
@@ -377,24 +355,10 @@ export function autoPlan(
     }
   }
   const out = items.map((i) => {
-    if (i.planManual || i.factOnly) return i;
+    if (i.planManual || i.factOnly || closed(i)) return i;
     const q = qty.get(i.key) ?? 0;
-    return { ...i, plan: hasStages(i) ? splitByShares(q, w) : ([q, 0, 0] as Triple) };
+    return { ...i, plan: atStage(q, i.stage) };
   });
-  // Раскладка по этапам округляет количество — добираем до цели самой дешёвой продажей
-  const pool = out.filter((i) => !i.planManual && (qty.get(i.key) ?? 0) > 0);
-  for (let guard = 0; guard < 3 && pool.length; guard++) {
-    const gap = target - incomeSum(out, 'plan');
-    if (gap <= 0) break;
-    let best = { item: pool[0], stage: 0, p: Infinity };
-    for (const i of pool)
-      for (let k = 0; k < (hasStages(i) ? 3 : 1); k++) {
-        const p = netPrice(i, k);
-        if (p > 0 && p < best.p) best = { item: i, stage: k, p };
-      }
-    if (!Number.isFinite(best.p)) break;
-    best.item.plan[best.stage] += Math.ceil(gap / best.p);
-  }
   return out;
 }
 
@@ -410,9 +374,21 @@ const formatNum = (n: number) => n.toLocaleString('ru-RU').replace(/ | /g, ' ')
 
 /** «2 стратегических партнёра»; для переименованной или своей позиции — «2 шт. «Название»» */
 export function formatItemQty(item: Pick<IncomeItemValue, 'key' | 'label'>, n: number): string {
-  const d = defaultIncomeItem(item.key);
+  // Своя статья с названием позиции по умолчанию (например, «Участник» на середине) склоняется так же
+  const d = defaultIncomeItem(item.key) ?? INCOME_ITEMS.find((x) => x.label === item.label);
   if (d && d.label === item.label) return `${formatNum(n)} ${plural(n, d.words)}`;
   return `${formatNum(n)} шт. «${item.label}»`;
+}
+
+/** Список «что продать»: статьи с одинаковым названием (одна позиция на разных стадиях) — вместе */
+function mergeByLabel(list: { i: IncomeItemValue; n: number }[]): string[] {
+  const out = new Map<string, { i: IncomeItemValue; n: number }>();
+  for (const x of list) {
+    const id = `${x.i.group}:${x.i.label}`;
+    const prev = out.get(id);
+    out.set(id, prev ? { i: prev.i, n: prev.n + x.n } : { ...x });
+  }
+  return [...out.values()].map((x) => formatItemQty(x.i, x.n));
 }
 
 /** Рекомендация по плану продаж: что продать, чтобы выйти на цель, и как сместить структуру. */
@@ -422,9 +398,9 @@ export function planAdvice(items: IncomeItemValue[], target: number): string[] {
   const list = items.filter((i) => sum3(i.plan) > 0);
   const lines: string[] = [];
   if (list.length) {
-    const what = list.map((i) => formatItemQty(i, sum3(i.plan)));
+    const what = mergeByLabel(list.map((i) => ({ i, n: sum3(i.plan) })));
     const tail = what.length > 1 ? `${what.slice(0, -1).join(', ')} и ${what.at(-1)}` : what[0];
-    lines.push(`Чтобы выйти на цель, нужно продать за все этапы ${tail}.`);
+    lines.push(`Чтобы выйти на цель, нужно продать за все стадии ${tail}.`);
   }
   const manualSum = incomeSum(
     items.filter((i) => i.planManual),
@@ -444,7 +420,7 @@ export function planAdvice(items: IncomeItemValue[], target: number): string[] {
   const byStage = PRICE_STAGES.map((st, k) => ({ st, sum: incomeSum(tickets, 'plan', k) }));
   if (incomeSum(tickets, 'plan') > 0) {
     lines.push(
-      'Билеты по этапам: ' +
+      'Билеты по стадиям: ' +
         byStage.map(({ st, sum }) => `${st.label.toLowerCase()} — ${formatNum(sum)} ₽`).join(', ') +
         '.',
     );
@@ -519,7 +495,7 @@ export function salesAdvice(
   const lines: string[] = [];
   const pct = Math.floor((fact / target) * 100);
   lines.push(
-    `До форума ${formatNum(daysLeft)} ${plural(daysLeft, ['день', 'дня', 'дней'])}, идёт этап «${PRICE_STAGES[stage].label}» (до ${formatDate(stageEnd)}). ` +
+    `До форума ${formatNum(daysLeft)} ${plural(daysLeft, ['день', 'дня', 'дней'])}, идёт стадия «${PRICE_STAGES[stage].label}» (до ${formatDate(stageEnd)}). ` +
       (gap > 0
         ? `Продано ${formatRubShort(fact)} — ${pct}% цели, осталось ${formatRubShort(gap)}.`
         : `Цель уже достигнута: продано ${formatRubShort(fact)}, всё дальнейшее — сверх цели.`),
@@ -538,9 +514,11 @@ export function salesAdvice(
     if (!plan && !sold) continue;
     const q = `${formatNum(ticketsQty('fact', k))} из ${formatNum(ticketsQty('plan', k))} билетов`;
     lines.push(
-      sold < plan
-        ? `Этап «${PRICE_STAGES[k].label}» закрыт с недобором ${formatRubShort(plan - sold)} (продано ${q}) — его нужно перекрыть на оставшихся этапах.`
-        : `Этап «${PRICE_STAGES[k].label}» закрыт с перевыполнением на ${formatRubShort(sold - plan)} (продано ${q}).`,
+      sold === plan
+        ? `Стадия «${PRICE_STAGES[k].label}» закрыта по плану (продано ${q}).`
+        : sold < plan
+          ? `Стадия «${PRICE_STAGES[k].label}» закрыта с недобором ${formatRubShort(plan - sold)} (продано ${q}) — его нужно перекрыть на оставшихся стадиях.`
+          : `Стадия «${PRICE_STAGES[k].label}» закрыта с перевыполнением на ${formatRubShort(sold - plan)} (продано ${q}).`,
     );
   }
 
@@ -551,8 +529,8 @@ export function salesAdvice(
   const soldNow = ticketsQty('fact', stage);
   if (planNow > 0) {
     const expected = Math.round(planNow * passed);
-    const head = `На этапе «${PRICE_STAGES[stage].label}» продано ${formatNum(soldNow)} из ${formatNum(planNow)} билетов`;
-    if (soldNow >= planNow) lines.push(`${head} — план этапа уже выполнен.`);
+    const head = `На стадии «${PRICE_STAGES[stage].label}» продано ${formatNum(soldNow)} из ${formatNum(planNow)} билетов`;
+    if (soldNow >= planNow) lines.push(`${head} — план стадии уже выполнен.`);
     else if (soldNow + Math.max(1, Math.round(planNow * 0.05)) < expected)
       lines.push(
         `${head}; по графику к сегодняшнему дню должно быть около ${formatNum(expected)} — отстаём на ${formatNum(expected - soldNow)}.`,
@@ -582,15 +560,16 @@ export function salesAdvice(
   // Плана не хватает до цели (недобор закрытых этапов или план ниже цели) — добор билетом
   const main =
     tickets
-      .filter((i) => !i.factOnly && netPrice(i, stage) > 0)
+      .filter((i) => !i.factOnly && i.stage >= stage && netPrice(i, i.stage) > 0)
       .reduce<IncomeItemValue | null>(
-        (a, b) => (!a || sum3(b.plan) > sum3(a.plan) ? b : a),
+        (a, b) =>
+          !a || b.stage < a.stage || (b.stage === a.stage && sum3(b.plan) > sum3(a.plan)) ? b : a,
         null,
       ) ?? null;
   const missing = gap - restSum;
   let extra = 0;
   if (missing > 0 && main) {
-    extra = Math.ceil(missing / netPrice(main, stage));
+    extra = Math.ceil(missing / netPrice(main, main.stage));
     const partner = partners
       .filter((i) => !i.factOnly && netPrice(i, 0) > 0)
       .reduce<IncomeItemValue | null>(
@@ -598,29 +577,28 @@ export function salesAdvice(
         null,
       );
     lines.push(
-      `Оставшегося плана не хватает до цели на ${formatRubShort(missing)}: сверх плана нужно продать ещё ${formatItemQty(main, extra)} по цене текущего этапа` +
+      `Оставшегося плана не хватает до цели на ${formatRubShort(missing)}: сверх плана нужно продать ещё ${formatItemQty(main, extra)} (${PRICE_STAGES[main.stage].label.toLowerCase()})` +
         (partner && missing / netPrice(partner, 0) <= 5
           ? ` или ${formatItemQty(partner, Math.ceil(missing / netPrice(partner, 0)))}.`
           : '.'),
     );
   }
 
-  const what = [
-    ...restParts.map((x) => formatItemQty(x.i, x.n)),
-    ...restTickets.map((x) => formatItemQty(x.i, x.n + (x.i === main ? extra : 0))),
-  ];
-  if (main && extra && !restTickets.some((x) => x.i === main))
-    what.push(formatItemQty(main, extra));
+  const what = mergeByLabel([
+    ...restParts,
+    ...restTickets.map((x) => ({ i: x.i, n: x.n + (x.i === main ? extra : 0) })),
+    ...(main && extra && !restTickets.some((x) => x.i === main) ? [{ i: main, n: extra }] : []),
+  ]);
   if (what.length) lines.push(`Чтобы выйти на цель, до форума осталось продать ${listJoin(what)}.`);
 
   const ticketsLeft = restTickets.reduce((s, x) => s + x.n, 0) + extra;
   const stageLeft =
-    restTickets.reduce((s, x) => s + x.byStage[stage], 0) + (stage === 2 ? 0 : extra);
+    restTickets.reduce((s, x) => s + x.byStage[stage], 0) + (main?.stage === stage ? extra : 0);
   if (ticketsLeft > 0) {
     lines.push(
       `Темп по билетам: около ${formatNum(perWeek(ticketsLeft, daysLeft))} в неделю до форума` +
         (stageLeft > 0 && stage < 2
-          ? `; до конца этапа «${PRICE_STAGES[stage].label}» — ${formatNum(stageLeft)} шт., около ${formatNum(perWeek(stageLeft, stageDaysLeft))} в неделю, пока цена ниже.`
+          ? `; до конца стадии «${PRICE_STAGES[stage].label}» — ${formatNum(stageLeft)} шт., около ${formatNum(perWeek(stageLeft, stageDaysLeft))} в неделю, пока цена ниже.`
           : '.'),
     );
   }

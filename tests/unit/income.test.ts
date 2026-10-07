@@ -9,6 +9,7 @@ import {
   planAdvice,
   salesAdvice,
   hasStages,
+  withValues,
   itemSum,
   netPrice,
   stageDates,
@@ -84,7 +85,7 @@ describe('доходы', () => {
     const plan = autoPlan(incomeItems([]), 13_000_000);
     const advice = planAdvice(plan, 13_000_000);
     expect(advice[0]).toMatch(
-      /^Чтобы выйти на цель, нужно продать за все этапы 1 генерального партнёра/,
+      /^Чтобы выйти на цель, нужно продать за все стадии 1 генерального партнёра/,
     );
     expect(advice.join(' ')).toMatch(/билетов участника/);
     expect(planAdvice(plan, 0)).toEqual([]);
@@ -129,76 +130,69 @@ describe('доходы', () => {
   });
 });
 
-describe('этапы продаж билетов и скидки позиций', () => {
-  const cfg = { shares: [30, 40, 30] as [number, number, number] };
-
-  it('цена и скидка этапа: пустое значение равно предыдущему этапу', () => {
-    const vip = incomeItems([
-      { key: 'vip', price: 100_000, priceFinal: 150_000, discountMid: 10, planQty: 0, factQty: 0 },
-    ]).find((i) => i.key === 'vip')!;
-    expect(vip.prices).toEqual([100_000, 100_000, 150_000]);
-    expect(vip.priceSet).toEqual([true, false, true]);
-    expect(vip.discounts).toEqual([0, 10, 10]);
-    expect(netPrice(vip, 2)).toBe(135_000);
-  });
-
-  it('у партнёрств нет этапов: условия старта, количество целиком в нём', () => {
-    const [partner] = incomeItems([
-      {
-        key: 'partner',
-        price: 150_000,
-        priceFinal: 200_000,
-        discount: 20,
-        planQty: 1,
-        planMid: 2,
-        factQty: 1,
-        factFinal: 1,
-      },
-    ]).filter((i) => i.key === 'partner');
-    expect(hasStages(partner)).toBe(false);
-    expect(partner.prices).toEqual([150_000, 150_000, 150_000]);
-    expect(partner.plan).toEqual([3, 0, 0]);
-    expect(itemSum(partner, 'plan', null)).toBe(360_000);
-    expect(itemSum(partner, 'fact', null)).toBe(240_000);
-  });
-
-  it('итог билетов копится по всем этапам с их ценами и скидками', () => {
-    const [own] = incomeItems([
+describe('стадии продаж и скидки статей', () => {
+  it('стадия есть только у билетов; цена и скидка — у статьи', () => {
+    const items = incomeItems([
+      { key: 'partner', price: 500_000, discount: 20, planQty: 3, factQty: 1, stage: 2 },
       {
         id: 1,
         key: 'c_1',
         group: 'tickets',
-        label: 'Билет для своих',
-        price: 100_000,
-        priceMid: 120_000,
-        priceFinal: 150_000,
-        discount: 20,
-        planQty: 2,
-        planMid: 1,
-        planFinal: 1,
-        factQty: 1,
-        factMid: 1,
+        label: 'Участник',
+        price: 120_000,
+        discount: 10,
+        planQty: 5,
+        factQty: 2,
+        stage: 1,
         planManual: true,
       },
-    ]).filter((i) => i.key === 'c_1');
-    expect(itemSum(own, 'plan', 0)).toBe(160_000);
-    expect(itemSum(own, 'plan', 1)).toBe(96_000);
-    expect(itemSum(own, 'plan', null)).toBe(160_000 + 96_000 + 120_000);
-    expect(incomeSum([own], 'fact')).toBe(80_000 + 96_000);
-    expect(incomeSum([own], 'fact', 2)).toBe(0);
+    ]);
+    const partner = items.find((i) => i.key === 'partner')!;
+    expect(hasStages(partner)).toBe(false);
+    expect(partner.stage).toBe(0);
+    expect(itemSum(partner, 'plan', null)).toBe(1_200_000);
+    const mid = items.find((i) => i.key === 'c_1')!;
+    expect(mid.stage).toBe(1);
+    expect(mid.plan).toEqual([0, 5, 0]);
+    expect(netPrice(mid, mid.stage)).toBe(108_000);
+    expect(incomeSum([mid], 'plan', 1)).toBe(540_000);
+    expect(incomeSum([mid], 'plan', 0)).toBe(0);
+    expect(incomeSum([mid], 'fact')).toBe(216_000);
   });
 
-  it('автоподбор раскладывает билеты по долям этапов, со скидками не меньше цели', () => {
-    const items = incomeItems([
-      { key: 'participant', price: 100_000, discount: 10, planQty: 0, factQty: 0 },
-    ]);
-    const plan = autoPlan(items, 13_000_000, cfg);
-    expect(incomeSum(plan, 'plan')).toBeGreaterThanOrEqual(13_000_000);
-    const p = plan.find((i) => i.key === 'participant')!;
-    expect(p.plan[1]).toBeGreaterThan(p.plan[0]);
-    expect(plan.filter((i) => !hasStages(i)).every((i) => i.plan[1] === 0 && i.plan[2] === 0)).toBe(
-      true,
+  it('смена стадии переносит количество', () => {
+    const [vip] = incomeItems([{ key: 'vip', price: 150_000, planQty: 4, factQty: 1 }]).filter(
+      (i) => i.key === 'vip',
     );
+    const moved = withValues(vip, { stage: 2, price: 180_000 });
+    expect(moved.plan).toEqual([0, 0, 4]);
+    expect(moved.fact).toEqual([0, 0, 1]);
+    expect(itemSum(moved, 'plan', 2)).toBe(720_000);
+  });
+
+  it('итог копится по всем стадиям; автоподбор ставит количество в стадию статьи', () => {
+    const items = incomeItems([
+      { key: 'participant', price: 80_000, planQty: 0, factQty: 0 },
+      {
+        id: 1,
+        key: 'c_1',
+        group: 'tickets',
+        label: 'Участник',
+        price: 100_000,
+        discount: 10,
+        planQty: 0,
+        factQty: 0,
+        stage: 2,
+      },
+    ]);
+    const plan = autoPlan(items, 13_000_000);
+    expect(incomeSum(plan, 'plan')).toBeGreaterThanOrEqual(13_000_000);
+    const fin = plan.find((i) => i.key === 'c_1')!;
+    expect(fin.plan[0] + fin.plan[1]).toBe(0);
+    expect(
+      [0, 1, 2].reduce((s, k) => s + incomeSum(plan, 'plan', k), 0) - incomeSum(plan, 'plan'),
+    ).toBe(0);
+    expect(planAdvice(plan, 13_000_000)[0]).toMatch(/билетов участника/);
   });
 
   it('даты этапов: без заданных — период до форума делится на три части', () => {
@@ -213,6 +207,27 @@ describe('этапы продаж билетов и скидки позиций'
   });
 });
 
+describe('автоподбор и завершённые стадии', () => {
+  it('на завершённой стадии автоплан равен проданному, цель добирают открытые стадии', () => {
+    const items = incomeItems([
+      { key: 'participant', price: 80_000, planQty: 0, factQty: 7 },
+      {
+        id: 1,
+        key: 'c_1',
+        group: 'tickets',
+        label: 'Участник',
+        price: 100_000,
+        planQty: 0,
+        factQty: 0,
+        stage: 2,
+      },
+    ]);
+    const plan = autoPlan(items, 13_000_000, 2);
+    expect(plan.find((i) => i.key === 'participant')!.plan).toEqual([7, 0, 0]);
+    expect(incomeSum(plan, 'plan')).toBeGreaterThanOrEqual(13_000_000);
+  });
+});
+
 describe('статьи только для факта', () => {
   it('не попадают в план и автоподбор, но входят в факт', () => {
     const items = incomeItems([
@@ -224,8 +239,7 @@ describe('статьи только для факта', () => {
         price: 100_000,
         discount: 35,
         planQty: 0,
-        factQty: 0,
-        factMid: 2,
+        factQty: 2,
         factOnly: true,
       },
     ]);
@@ -246,16 +260,21 @@ describe('рекомендация на сегодня', () => {
       { key: 'strategic', price: 1_500_000, planQty: 2, factQty: 0, planManual: true },
       { key: 'partner', price: 500_000, planQty: 0, factQty: 0, planManual: true },
       { key: 'vip', price: 150_000, planQty: 0, factQty: 0, planManual: true },
-      {
-        key: 'participant',
+      { key: 'participant', price: 100_000, planQty: 10, factQty: 4, planManual: true },
+      ...[
+        [1, 20, 10],
+        [2, 10, 0],
+      ].map(([stage, planQty, factQty]) => ({
+        id: stage,
+        key: `c_${stage}`,
+        group: 'tickets',
+        label: 'Участник',
         price: 100_000,
-        planQty: 10,
-        planMid: 20,
-        planFinal: 10,
-        factQty: 4,
-        factMid: 10,
+        planQty,
+        factQty,
+        stage,
         planManual: true,
-      },
+      })),
     ]);
 
   it('до старта продаж рекомендации нет', () => {
@@ -266,10 +285,10 @@ describe('рекомендация на сегодня', () => {
     // план 10 млн; продано 3 млн + 4 и 10 билетов = 4,4 млн
     const a = salesAdvice(items(), 10_000_000, dates, '2026-11-01', '2026-07-15');
     expect(a[0]).toMatch(
-      /^До форума 109 дней, идёт этап «Середина» \(до 01\.09\.2026\)\. Продано 4 400 000 ₽ — 44% цели, осталось 5 600 000 ₽\./,
+      /^До форума 109 дней, идёт стадия «Середина» \(до 01\.09\.2026\)\. Продано 4 400 000 ₽ — 44% цели, осталось 5 600 000 ₽\./,
     );
     expect(a.join(' ')).toMatch(
-      /«Старт продаж» закрыт с недобором 600 000 ₽ \(продано 4 из 10 билетов\)/,
+      /«Старт продаж» закрыта с недобором 600 000 ₽ \(продано 4 из 10 билетов\)/,
     );
     expect(a.join(' ')).toMatch(/продано 10 из 20 билетов — идём по графику/);
     // осталось по плану: 2 стратегических (3 млн) + 10 + 10 билетов (2 млн) = 5 млн, не хватает 600 тыс.

@@ -323,7 +323,6 @@ export async function getIncomeConfig(forumId: number): Promise<IncomeConfig> {
   return {
     midDate: dbToISO(f.priceMidDate),
     finalDate: dbToISO(f.priceFinalDate),
-    shares: [f.shareStart, f.shareMid, f.shareFinal],
   };
 }
 

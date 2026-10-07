@@ -18,22 +18,17 @@ const amount = z.number().int().min(0).max(2_000_000_000);
 const qty = z.number().int().min(0).max(1_000_000);
 const label = z.string().trim().min(1, 'Укажите название позиции').max(120);
 
+const stage = z.number().int().min(0).max(2);
+
 const patchSchema = z.object({
   key: z.string().min(1).max(40),
   price: amount.optional(),
-  /** null — как на предыдущем этапе */
-  priceMid: amount.nullable().optional(),
-  priceFinal: amount.nullable().optional(),
+  /** Индивидуальная скидка, % */
+  discount: z.number().min(0).max(100).optional(),
   planQty: qty.optional(),
   factQty: qty.optional(),
-  factMid: qty.optional(),
-  factFinal: qty.optional(),
-  planMid: qty.optional(),
-  planFinal: qty.optional(),
-  /** Индивидуальная скидка, %; для «Середины» и «Финала» null — как на предыдущем этапе */
-  discount: z.number().min(0).max(100).optional(),
-  discountMid: z.number().min(0).max(100).nullable().optional(),
-  discountFinal: z.number().min(0).max(100).nullable().optional(),
+  /** Стадия продаж билета */
+  stage: stage.optional(),
   planManual: z.boolean().optional(),
   label: label.optional(),
   /** Вернуть убранную позицию по умолчанию */
@@ -45,17 +40,15 @@ async function requireForum(forumId: number) {
   if (!forum) throw new UserError('Форум не найден');
 }
 
-const pct = z.number().min(0).max(100);
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Неверная дата');
 const configSchema = z
   .object({
     midDate: isoDate.nullable(),
     finalDate: isoDate.nullable(),
-    shares: z.tuple([pct, pct, pct]),
   })
   .partial();
 
-/** Настройки доходов форума: даты этапов продаж билетов и доли этапов для автоподбора. */
+/** Настройки доходов форума: даты стадий продаж билетов. */
 export async function saveIncomeConfig(
   forumId: number,
   patch: z.input<typeof configSchema>,
@@ -69,13 +62,6 @@ export async function saveIncomeConfig(
       data: {
         ...(p.midDate !== undefined ? { priceMidDate: isoToDb(p.midDate) } : {}),
         ...(p.finalDate !== undefined ? { priceFinalDate: isoToDb(p.finalDate) } : {}),
-        ...(p.shares
-          ? {
-              shareStart: Math.round(p.shares[0]),
-              shareMid: Math.round(p.shares[1]),
-              shareFinal: Math.round(p.shares[2]),
-            }
-          : {}),
       },
     });
     return getIncomeConfig(forumId);
@@ -120,7 +106,14 @@ export async function saveIncomeItems(
 /** Новая позиция доходов в группе «Партнёрства» или «Билеты»; factOnly — статья только для факта. */
 export async function addIncomeItem(
   forumId: number,
-  input: { group: string; label: string; price: number; discount?: number; factOnly?: boolean },
+  input: {
+    group: string;
+    label: string;
+    price: number;
+    discount?: number;
+    stage?: number;
+    factOnly?: boolean;
+  },
 ): Promise<ActionResult<IncomeItemValue[]>> {
   return run(async () => {
     await requireEditor();
@@ -130,6 +123,7 @@ export async function addIncomeItem(
         label,
         price: amount,
         discount: z.number().min(0).max(100).optional(),
+        stage: stage.optional(),
         factOnly: z.boolean().optional(),
       })
       .parse(input);
@@ -142,6 +136,7 @@ export async function addIncomeItem(
         label: data.label,
         price: data.price,
         discount: data.discount ?? 0,
+        stage: data.group === 'tickets' ? (data.stage ?? 0) : 0,
         factOnly: data.factOnly ?? false,
       },
     });

@@ -30,6 +30,7 @@ import {
   type IncomeGroup,
   type IncomeItemValue,
   type Triple,
+  withValues,
 } from '@/lib/income';
 import { cn, formatRub } from '@/lib/utils';
 import {
@@ -46,64 +47,27 @@ type ItemPatch = {
   key: string;
   label?: string;
   price?: number;
-  priceMid?: number | null;
-  priceFinal?: number | null;
   discount?: number;
-  discountMid?: number | null;
-  discountFinal?: number | null;
   planQty?: number;
-  planMid?: number;
-  planFinal?: number;
-  planManual?: boolean;
   factQty?: number;
-  factMid?: number;
-  factFinal?: number;
+  stage?: number;
+  planManual?: boolean;
   removed?: false;
 };
 
-/** Поля этапа: старт / середина / финал */
-const PRICE_FIELD = ['price', 'priceMid', 'priceFinal'] as const;
-const DISCOUNT_FIELD = ['discount', 'discountMid', 'discountFinal'] as const;
-const PLAN_FIELD = ['planQty', 'planMid', 'planFinal'] as const;
-const FACT_FIELD = ['factQty', 'factMid', 'factFinal'] as const;
+type View = 'plan' | 'fact';
 
 const pctOf = (part: number, total: number) =>
   total ? `${Math.round((part / total) * 100).toLocaleString('ru-RU')}%` : '—';
 const formatQty = (n: number) => `${n.toLocaleString('ru-RU').replace(/ | /g, ' ')} шт.`;
 const formatPct = (n: number) => `${n.toLocaleString('ru-RU')}%`;
-const sumOf = (t: Triple) => t[0] + t[1] + t[2];
+const qtyOf = (t: Triple) => t[0] + t[1] + t[2];
 
-/** Оптимистичное применение правки; незаданные цена и скидка этапа идут за предыдущим этапом */
+/** Оптимистичное применение правки */
 function applyPatch(i: IncomeItemValue, p: ItemPatch): IncomeItemValue {
-  const n: IncomeItemValue = {
-    ...i,
-    prices: [...i.prices],
-    discounts: [...i.discounts],
-    priceSet: [...i.priceSet],
-    discountSet: [...i.discountSet],
-    plan: [...i.plan],
-    fact: [...i.fact],
-  };
+  const n = withValues(i, p);
   if (p.label !== undefined) n.label = p.label;
   if (p.planManual !== undefined) n.planManual = p.planManual;
-  for (let k = 0; k < 3; k++) {
-    const price = p[PRICE_FIELD[k]];
-    if (price !== undefined) {
-      n.priceSet[k] = k === 0 || price !== null;
-      if (price !== null) n.prices[k] = price;
-    }
-    const disc = p[DISCOUNT_FIELD[k]];
-    if (disc !== undefined) {
-      n.discountSet[k] = k === 0 || disc !== null;
-      if (disc !== null) n.discounts[k] = disc;
-    }
-    if (k > 0 && !n.priceSet[k]) n.prices[k] = n.prices[k - 1];
-    if (k > 0 && !n.discountSet[k]) n.discounts[k] = n.discounts[k - 1];
-    const plan = p[PLAN_FIELD[k]];
-    if (plan !== undefined) n.plan[k] = plan;
-    const fact = p[FACT_FIELD[k]];
-    if (fact !== undefined) n.fact[k] = fact;
-  }
   return n;
 }
 
@@ -119,20 +83,18 @@ export function IncomeView({
 }) {
   const { forum, tasks, today } = useForum();
   const sp = useSearchParams();
-  const view = sp.get('view') === 'fact' ? 'fact' : 'plan';
+  const view: View = sp.get('view') === 'fact' ? 'fact' : 'plan';
   const [items, setItems] = React.useState(initialItems);
   const [cfg, setCfg] = React.useState(initialConfig);
   const [deals, setDeals] = React.useState(initialDeals);
   const [saving, setSaving] = React.useState(false);
   const dates = stageDates(cfg, forum.salesStartDate, forum.startDate);
   const stageNow = currentStage(dates, today);
-  /** Выбранный этап продаж билетов; null — все этапы вместе */
-  const [stage, setStage] = React.useState<number | null>(stageNow);
 
   const expenses = tasks.reduce((s, t) => s + t.cost, 0);
   const target = incomeTarget(expenses);
-  // План с автоподбором под цель: ручные позиции как есть, остальные добирают до цели
-  const planned = React.useMemo(() => autoPlan(items, target, cfg), [items, target, cfg]);
+  // План с автоподбором под цель: ручные позиции и завершённые стадии как есть, остальные добирают до цели
+  const planned = React.useMemo(() => autoPlan(items, target, stageNow), [items, target, stageNow]);
   // В плане — только плановые статьи; в факте — ещё и статьи только для факта
   const shown = view === 'plan' ? planned.filter((i) => !i.factOnly) : planned;
   const partners = shown.filter((i) => !hasStages(i));
@@ -196,48 +158,42 @@ export function IncomeView({
     if (ok) await apply(() => removeIncomeItem(forum.id, it.key));
   };
 
-  /** Ручной план этапа: остальные этапы фиксируются такими, как сейчас */
-  const savePlan = (it: IncomeItemValue, k: number, v: number) => {
-    const plan = [...it.plan] as Triple;
-    plan[k] = v;
-    void save([
-      { key: it.key, planQty: plan[0], planMid: plan[1], planFinal: plan[2], planManual: true },
-    ]);
-  };
-  const resetAuto = (it: IncomeItemValue) => save([{ key: it.key, planManual: false }]);
-
   const base = `/forums/${forum.id}/income`;
   const planGap = target - planSum;
-  const partnersPlan = incomeSum(partners, 'plan');
-  const ticketsPlan = incomeSum(tickets, 'plan');
-  const ticketsFact = incomeSum(tickets, 'fact');
-  const partnersFact = incomeSum(partners, 'fact');
+  const sumOf = (list: IncomeItemValue[], stage: number | null = null) =>
+    incomeSum(list, view, stage);
+  const allTickets = planned.filter(hasStages);
+  const rowProps = (it: IncomeItemValue) => ({
+    item: it,
+    view,
+    total: planSum,
+    onSave: save,
+    onAuto: () => save([{ key: it.key, planManual: false }]),
+    onRemove: () => void remove(it),
+  });
   const addRow = (g: IncomeGroup, colSpan: number) =>
     view === 'plan' ? (
       <AddItemRow
         group={g}
         colSpan={colSpan}
+        stage={stageNow}
         restore={removedDefaults.filter((x) => x.group === g.key)}
         onRestore={(key) => save([{ key, removed: false }])}
-        onAdd={(label, price) =>
-          apply(() => addIncomeItem(forum.id, { group: g.key, label, price }))
-        }
+        onAdd={(v) => apply(() => addIncomeItem(forum.id, { group: g.key, ...v }))}
       />
     ) : (
       <AddItemRow
         group={g}
         colSpan={colSpan}
+        stage={stageNow}
         factOnly
         restore={[]}
         onRestore={() => undefined}
-        onAdd={(label, price, discount) =>
-          apply(() =>
-            addIncomeItem(forum.id, { group: g.key, label, price, discount, factOnly: true }),
-          )
-        }
+        onAdd={(v) => apply(() => addIncomeItem(forum.id, { group: g.key, ...v, factOnly: true }))}
       />
     );
   const [gPartners, gTickets] = INCOME_GROUPS;
+  const cols = view === 'plan' ? 7 : 9;
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-4" data-testid="income-view">
@@ -308,137 +264,130 @@ export function IncomeView({
         </section>
       )}
 
-      {/* Партнёрства: без этапов продаж */}
+      {/* Партнёрства: без стадий продаж */}
       <SectionTitle
         group={gPartners}
-        note="Одна цена на весь период продаж; скидка — индивидуальная для позиции"
-        sum={view === 'plan' ? partnersPlan : partnersFact}
-        plan={view === 'fact' ? partnersPlan : undefined}
+        note="Стадий продаж нет; скидка — индивидуальная для статьи"
+        sum={sumOf(partners)}
+        plan={view === 'fact' ? incomeSum(partners, 'plan') : undefined}
       />
       <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
-        <table className="w-full min-w-[900px] text-sm" data-testid="income-group-partners">
-          {view === 'plan' ? <PlanHead /> : <FactHead />}
+        <table className="w-full min-w-[1000px] text-sm" data-testid="income-group-partners">
+          <ItemsHead view={view} />
           <tbody>
-            {partners.map((it) =>
-              view === 'plan' ? (
-                <PlanRow
-                  key={it.key}
-                  item={it}
-                  stage={0}
-                  total={planSum}
-                  onSave={save}
-                  onPlan={(v) => savePlan(it, 0, v)}
-                  onAuto={() => resetAuto(it)}
-                  onRemove={() => void remove(it)}
-                />
-              ) : (
-                <FactRow
-                  key={it.key}
-                  item={it}
-                  stage={0}
-                  onSave={save}
-                  onRemove={() => void remove(it)}
-                />
-              ),
-            )}
-            {addRow(gPartners, view === 'plan' ? 7 : 9)}
+            {partners.map((it) => (
+              <ItemRow key={it.key} {...rowProps(it)} />
+            ))}
+            {addRow(gPartners, cols)}
           </tbody>
         </table>
       </div>
 
-      {/* Билеты: три этапа продаж */}
+      {/* Билеты: у каждой статьи своя стадия продаж */}
       <SectionTitle
         group={gTickets}
-        note="Цена, скидка и план — свои на каждом этапе; итог складывается из всех этапов"
-        sum={view === 'plan' ? ticketsPlan : ticketsFact}
-        plan={view === 'fact' ? ticketsPlan : undefined}
+        note="У каждой статьи своя стадия продаж, цена и скидка"
+        sum={sumOf(tickets)}
+        plan={view === 'fact' ? incomeSum(tickets, 'plan') : undefined}
       />
-      <StageSwitch
-        cfg={cfg}
+      <StageDates
         dates={dates}
         current={stageNow}
-        selected={stage}
-        onSelect={setStage}
         forumStart={forum.startDate}
-        sums={[0, 1, 2].map((k) => ({
-          plan: incomeSum(tickets, 'plan', k),
-          fact: incomeSum(tickets, 'fact', k),
-        }))}
-        view={view}
         onSave={saveConfig}
       />
       <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
-        <table className="w-full min-w-[900px] text-sm" data-testid="income-group-tickets">
-          {stage === null ? (
-            <AllStagesHead view={view} />
-          ) : view === 'plan' ? (
-            <PlanHead stage={stage} />
-          ) : (
-            <FactHead stage={stage} />
-          )}
-          <tbody>
-            {tickets.map((it) =>
-              stage === null ? (
-                <AllStagesRow
-                  key={it.key}
-                  item={it}
-                  view={view}
-                  onAuto={() => resetAuto(it)}
-                  onRemove={() => void remove(it)}
-                  onRename={(label) => save([{ key: it.key, label }])}
-                />
-              ) : view === 'plan' ? (
-                <PlanRow
-                  key={it.key}
-                  item={it}
-                  stage={stage}
-                  total={planSum}
-                  onSave={save}
-                  onPlan={(v) => savePlan(it, stage, v)}
-                  onAuto={() => resetAuto(it)}
-                  onRemove={() => void remove(it)}
-                />
-              ) : (
-                <FactRow
-                  key={it.key}
-                  item={it}
-                  stage={stage}
-                  onSave={save}
-                  onRemove={() => void remove(it)}
-                />
-              ),
-            )}
-            {addRow(gTickets, view === 'plan' || stage === null ? 7 : 9)}
-          </tbody>
+        <table className="w-full min-w-[1100px] text-sm" data-testid="income-group-tickets">
+          <ItemsHead view={view} withStage />
+          {PRICE_STAGES.map((st, k) => {
+            const rows = tickets.filter((i) => i.stage === k);
+            return (
+              <tbody key={st.key} data-testid={`income-stage-${st.key}`}>
+                <tr className="border-t border-line bg-surface/50">
+                  <td className="px-3 py-1.5" colSpan={6}>
+                    <span className="font-medium">{st.label}</span>
+                    <span className="ml-2 text-xs text-ink/60">
+                      {formatDate(dates[k])} – {formatDate(k < 2 ? dates[k + 1] : forum.startDate)}
+                    </span>
+                    {k === stageNow && (
+                      <span className="ml-2 rounded bg-brand px-1.5 py-0.5 text-[10px] font-medium text-white">
+                        сейчас
+                      </span>
+                    )}
+                    {k < stageNow && (
+                      <span className="ml-2 text-[10px] text-ink/50">завершена</span>
+                    )}
+                  </td>
+                  <td
+                    className="px-2 py-1.5 text-right font-medium tabular-nums"
+                    data-testid={`income-stage-sum-${st.key}`}
+                  >
+                    {formatRub(sumOf(rows))}
+                  </td>
+                  <td colSpan={view === 'plan' ? 1 : 3} className="px-3 py-1.5 text-xs text-ink/60">
+                    {view === 'fact' ? (
+                      <span className="flex items-center gap-2">
+                        из {formatRub(incomeSum(rows, 'plan'))}
+                      </span>
+                    ) : null}
+                  </td>
+                </tr>
+                {rows.length === 0 && (
+                  <tr className="border-t border-line/60">
+                    <td colSpan={cols + 1} className="py-1.5 pl-6 text-xs text-ink/50">
+                      Нет статей на этой стадии
+                    </td>
+                  </tr>
+                )}
+                {rows.map((it) => (
+                  <ItemRow key={it.key} {...rowProps(it)} withStage />
+                ))}
+              </tbody>
+            );
+          })}
+          <tbody>{addRow(gTickets, cols + 1)}</tbody>
         </table>
       </div>
 
-      {/* Итог: партнёрства + билеты за все этапы */}
+      {/* Итог: партнёрства + билеты по стадиям */}
       <div className="mt-6 flex items-baseline gap-3">
         <h2 className="flex items-center gap-2 font-semibold">
           <span className="h-4 w-1.5 rounded-sm bg-ink/70" />
           Итого
         </h2>
-        <span className="text-xs text-ink/50">Партнёрства и билеты за все этапы</span>
+        <span className="text-xs text-ink/50">Партнёрства и билеты по стадиям</span>
       </div>
       <div className="mt-2 overflow-hidden rounded-lg border border-line bg-white">
         <table className="w-full text-sm" data-testid="income-totals">
           <tbody>
-            <TotalRow label="Партнёрства" value={view === 'plan' ? partnersPlan : partnersFact} />
             <TotalRow
-              label="Билеты, все этапы"
-              value={view === 'plan' ? ticketsPlan : ticketsFact}
+              label="Партнёрства"
+              value={sumOf(partners)}
+              plan={view === 'fact' ? incomeSum(partners, 'plan') : undefined}
+            />
+            {PRICE_STAGES.map((st, k) => (
+              <TotalRow
+                key={st.key}
+                label={`Билеты · ${st.label}`}
+                value={sumOf(allTickets, k)}
+                plan={view === 'fact' ? incomeSum(allTickets, 'plan', k) : undefined}
+                indent
+              />
+            ))}
+            <TotalRow
+              label="Билеты, все стадии"
+              value={sumOf(allTickets)}
+              plan={view === 'fact' ? incomeSum(allTickets, 'plan') : undefined}
             />
             <TotalRow
               label={
                 view === 'plan' ? 'Итого план с учётом скидок' : 'Итого продано с учётом скидок'
               }
               value={view === 'plan' ? planSum : factSum}
+              plan={view === 'fact' ? planSum : undefined}
               strong
               testId={view === 'plan' ? 'income-plan-net' : 'income-fact-net'}
-              extra={view === 'fact' ? <Progress part={factSum} total={planSum} /> : null}
             />
-            {view === 'fact' && <TotalRow label="План" value={planSum} muted />}
             <TotalRow
               label={`Цель: расходы ${formatRub(expenses)} + ${Math.round(INCOME_MARGIN * 100)}%`}
               value={target}
@@ -458,7 +407,7 @@ export function IncomeView({
                 >
                   {formatRub(Math.abs(planGap))}
                 </td>
-                <td className="w-48" />
+                <td className="w-72" />
               </tr>
             )}
           </tbody>
@@ -516,17 +465,20 @@ function SectionTitle({
 function TotalRow({
   label,
   value,
+  plan,
   strong,
   muted,
+  indent,
   testId,
-  extra,
 }: {
   label: string;
   value: number;
+  /** В факте — план для сравнения */
+  plan?: number;
   strong?: boolean;
   muted?: boolean;
+  indent?: boolean;
   testId?: string;
-  extra?: React.ReactNode;
 }) {
   return (
     <tr
@@ -534,136 +486,141 @@ function TotalRow({
         'border-t border-line first:border-t-0',
         strong && 'font-semibold',
         muted && 'text-ink/70',
+        indent && 'text-ink/80',
       )}
     >
-      <td className="px-3 py-2">{label}</td>
+      <td className={cn('px-3 py-2', indent && 'pl-8')}>{label}</td>
       <td className="w-48 px-3 py-2 text-right tabular-nums" data-testid={testId}>
         {formatRub(value)}
       </td>
-      <td className="w-48 px-3 py-2">{extra}</td>
+      <td className="w-72 px-3 py-2">
+        {plan !== undefined && (
+          <div className="flex items-center gap-3 text-xs font-normal text-ink/60">
+            <span className="w-28 text-right tabular-nums">из {formatRub(plan)}</span>
+            <div className="flex-1">
+              <Progress part={value} total={plan} />
+            </div>
+          </div>
+        )}
+      </td>
     </tr>
   );
 }
 
 const th = 'px-2 py-2 text-right font-medium';
 
-function PlanHead({ stage }: { stage?: number }) {
+function ItemsHead({ view, withStage }: { view: View; withStage?: boolean }) {
   return (
     <thead className="bg-surface text-left text-xs text-ink/70">
       <tr>
-        <th className="px-3 py-2 font-medium">
-          Позиция
-          {stage !== undefined && (
-            <span className="ml-1 font-normal text-ink/50">· {PRICE_STAGES[stage].label}</span>
-          )}
-        </th>
+        <th className="px-3 py-2 font-medium">Статья</th>
+        {withStage && <th className="w-44 px-2 py-2 font-medium">Стадия</th>}
         <th className={cn(th, 'w-36')}>Цена 1 ед.</th>
         <th className={cn(th, 'w-24')}>Скидка</th>
         <th className={cn(th, 'w-36')}>Цена со скидкой</th>
-        <th className={cn(th, 'w-32')}>План, шт.</th>
-        <th className={cn(th, 'w-40')}>Сумма по плану</th>
-        <th className={cn(th, 'w-20 px-3')}>Доля</th>
+        {view === 'plan' ? (
+          <>
+            <th className={cn(th, 'w-32')}>План, шт.</th>
+            <th className={cn(th, 'w-40')}>Сумма по плану</th>
+            <th className={cn(th, 'w-20 px-3')}>Доля</th>
+          </>
+        ) : (
+          <>
+            <th className={cn(th, 'w-32')}>Продано, шт.</th>
+            <th className={cn(th, 'w-36')}>Выручка</th>
+            <th className={cn(th, 'w-28')}>План, шт.</th>
+            <th className={cn(th, 'w-36')}>План, ₽</th>
+            <th className={cn(th, 'w-40 px-3')}>Выполнение плана</th>
+          </>
+        )}
       </tr>
     </thead>
   );
 }
 
-function FactHead({ stage }: { stage?: number }) {
-  return (
-    <thead className="bg-surface text-left text-xs text-ink/70">
-      <tr>
-        <th className="px-3 py-2 font-medium">
-          Позиция
-          {stage !== undefined && (
-            <span className="ml-1 font-normal text-ink/50">· {PRICE_STAGES[stage].label}</span>
-          )}
-        </th>
-        <th className={cn(th, 'w-32')}>Цена 1 ед.</th>
-        <th className={cn(th, 'w-20')}>Скидка</th>
-        <th className={cn(th, 'w-32')}>Цена со скидкой</th>
-        <th className={cn(th, 'w-32')}>Продано, шт.</th>
-        <th className={cn(th, 'w-40')}>Выручка</th>
-        <th className={cn(th, 'w-32')}>План, шт.</th>
-        <th className={cn(th, 'w-40')}>План, ₽</th>
-        <th className={cn(th, 'w-44 px-3')}>Выполнение плана</th>
-      </tr>
-    </thead>
-  );
-}
-
-function AllStagesHead({ view }: { view: 'plan' | 'fact' }) {
-  return (
-    <thead className="bg-surface text-left text-xs text-ink/70">
-      <tr>
-        <th className="px-3 py-2 font-medium">
-          Позиция <span className="ml-1 font-normal text-ink/50">· все этапы</span>
-        </th>
-        {PRICE_STAGES.map((st) => (
-          <th key={st.key} className={cn(th, 'w-32')}>
-            {st.short}, шт.
-          </th>
-        ))}
-        <th className={cn(th, 'w-32')}>{view === 'plan' ? 'План, шт.' : 'Продано, шт.'}</th>
-        <th className={cn(th, 'w-40')}>{view === 'plan' ? 'Сумма по плану' : 'Выручка'}</th>
-        <th className={cn(th, 'w-44 px-3')}>{view === 'plan' ? '' : 'Выполнение плана'}</th>
-      </tr>
-    </thead>
-  );
-}
-
-/** Строка плана: условия этапа (цена, скидка), количество и сумма */
-function PlanRow({
+/**
+ * Строка статьи. В плане правятся условия (стадия, цена, скидка) и количество; в факте —
+ * продано, название и условия статей только для факта.
+ */
+function ItemRow({
   item: it,
-  stage: k,
+  view,
+  withStage,
   total,
   onSave,
-  onPlan,
   onAuto,
   onRemove,
 }: {
   item: IncomeItemValue;
-  stage: number;
+  view: View;
+  withStage?: boolean;
   total: number;
   onSave: (p: ItemPatch[]) => void;
-  onPlan: (v: number) => void;
   onAuto: () => void;
   onRemove: () => void;
 }) {
-  const sum = itemSum(it, 'plan', k);
-  const priceInherited = k > 0 && !it.priceSet[k];
-  const discInherited = k > 0 && !it.discountSet[k];
+  const k = it.stage;
+  const editTerms = view === 'plan' || it.factOnly;
+  const plan = itemSum(it, 'plan', null);
+  const fact = itemSum(it, 'fact', null);
+  const muted = 'px-2 py-1.5 text-right tabular-nums text-ink/70';
   return (
     <tr className="border-t border-line/60" data-testid="income-row">
       <td className="py-1 pl-4 pr-3">
         <LabelCell
           item={it}
           onRename={(label) => onSave([{ key: it.key, label }])}
-          onRemove={onRemove}
+          onRemove={view === 'plan' || it.factOnly ? onRemove : undefined}
         />
       </td>
-      <td className="px-1 py-1">
-        <InheritCell
-          value={it.prices[k]}
-          inherited={priceInherited}
-          canReset={k > 0 && it.priceSet[k]}
-          format={formatRub}
-          label={`Цена 1 ед.${k > 0 ? ` («${PRICE_STAGES[k].label}»)` : ''}: ${it.label}`}
-          testId={`income-price-${k}-${it.key}`}
-          onCommit={(v) => onSave([{ key: it.key, [PRICE_FIELD[k]]: v }])}
-          onReset={() => onSave([{ key: it.key, [PRICE_FIELD[k]]: null }])}
-        />
+      {withStage && (
+        <td className="px-1 py-1">
+          {editTerms ? (
+            <select
+              value={k}
+              onChange={(e) => onSave([{ key: it.key, stage: Number(e.target.value) }])}
+              className="h-7 w-full rounded border border-transparent bg-transparent px-1 text-sm hover:border-line focus:border-brand focus:outline-none"
+              aria-label={`Стадия: ${it.label}`}
+              data-testid={`income-stage-select-${it.key}`}
+            >
+              {PRICE_STAGES.map((st, s) => (
+                <option key={st.key} value={s}>
+                  {st.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="px-1 text-ink/70">{PRICE_STAGES[k].label}</span>
+          )}
+        </td>
+      )}
+      <td className={editTerms ? 'px-1 py-1' : muted}>
+        {editTerms ? (
+          <NumberCell
+            value={it.prices[k]}
+            format={formatRub}
+            label={`Цена 1 ед.: ${it.label}`}
+            onCommit={(v) => onSave([{ key: it.key, price: v }])}
+            testId={`income-price-${it.key}`}
+          />
+        ) : (
+          formatRub(it.prices[k])
+        )}
       </td>
-      <td className="px-1 py-1">
-        <InheritCell
-          value={it.discounts[k]}
-          inherited={discInherited}
-          canReset={k > 0 && it.discountSet[k]}
-          format={(v) => (v ? formatPct(v) : '—')}
-          label={`Скидка, %: ${it.label}`}
-          testId={`income-discount-${k}-${it.key}`}
-          onCommit={(v) => onSave([{ key: it.key, [DISCOUNT_FIELD[k]]: Math.min(100, v) }])}
-          onReset={() => onSave([{ key: it.key, [DISCOUNT_FIELD[k]]: null }])}
-        />
+      <td className={editTerms ? 'px-1 py-1' : muted}>
+        {editTerms ? (
+          <NumberCell
+            value={it.discounts[k]}
+            format={(v) => (v ? formatPct(v) : '—')}
+            label={`Скидка, %: ${it.label}`}
+            onCommit={(v) => onSave([{ key: it.key, discount: Math.min(100, v) }])}
+            testId={`income-discount-${it.key}`}
+          />
+        ) : it.discounts[k] ? (
+          formatPct(it.discounts[k])
+        ) : (
+          '—'
+        )}
       </td>
       <td
         className={cn(
@@ -673,168 +630,53 @@ function PlanRow({
       >
         {formatRub(Math.round(netPrice(it, k)))}
       </td>
-      <td className="px-1 py-1">
-        <div className="flex items-center justify-end gap-1">
-          <AutoBadge item={it} onAuto={onAuto} />
-          <NumberCell
-            value={it.plan[k]}
-            format={formatQty}
-            label={`План, шт.: ${it.label}`}
-            onCommit={onPlan}
-            testId={`income-plan-${k}-${it.key}`}
-            className={cn('min-w-0 flex-1', !it.planManual && 'text-ink/60')}
-          />
-        </div>
-      </td>
-      <td className="px-2 py-1.5 text-right tabular-nums">{formatRub(sum)}</td>
-      <td className="px-3 py-1.5 text-right text-xs tabular-nums text-ink/60">
-        {sum ? pctOf(sum, total) : ''}
-      </td>
-    </tr>
-  );
-}
-
-/**
- * Строка факта на этапе: продано, выручка со скидкой и выполнение плана этапа. Название можно
- * поменять; у статьи только для факта правятся цена и скидка, её можно убрать.
- */
-function FactRow({
-  item: it,
-  stage: k,
-  onSave,
-  onRemove,
-}: {
-  item: IncomeItemValue;
-  stage: number;
-  onSave: (p: ItemPatch[]) => void;
-  onRemove: () => void;
-}) {
-  const fact = itemSum(it, 'fact', k);
-  const plan = itemSum(it, 'plan', k);
-  return (
-    <tr className="border-t border-line/60" data-testid="income-row">
-      <td className="py-1 pl-4 pr-3">
-        <LabelCell
-          item={it}
-          onRename={(label) => onSave([{ key: it.key, label }])}
-          onRemove={it.factOnly ? onRemove : undefined}
-        />
-      </td>
-      {it.factOnly ? (
+      {view === 'plan' ? (
         <>
           <td className="px-1 py-1">
-            <InheritCell
-              value={it.prices[k]}
-              inherited={k > 0 && !it.priceSet[k]}
-              canReset={k > 0 && it.priceSet[k]}
-              format={formatRub}
-              label={`Цена 1 ед.: ${it.label}`}
-              testId={`income-price-${k}-${it.key}`}
-              onCommit={(v) => onSave([{ key: it.key, [PRICE_FIELD[k]]: v }])}
-              onReset={() => onSave([{ key: it.key, [PRICE_FIELD[k]]: null }])}
-            />
+            <div className="flex items-center justify-end gap-1">
+              <AutoBadge item={it} onAuto={onAuto} />
+              <NumberCell
+                value={qtyOf(it.plan)}
+                format={formatQty}
+                label={`План, шт.: ${it.label}`}
+                onCommit={(v) => onSave([{ key: it.key, planQty: v, planManual: true }])}
+                testId={`income-plan-${it.key}`}
+                className={cn('min-w-0 flex-1', !it.planManual && 'text-ink/60')}
+              />
+            </div>
           </td>
-          <td className="px-1 py-1">
-            <InheritCell
-              value={it.discounts[k]}
-              inherited={k > 0 && !it.discountSet[k]}
-              canReset={k > 0 && it.discountSet[k]}
-              format={(v) => (v ? formatPct(v) : '—')}
-              label={`Скидка, %: ${it.label}`}
-              testId={`income-discount-${k}-${it.key}`}
-              onCommit={(v) => onSave([{ key: it.key, [DISCOUNT_FIELD[k]]: Math.min(100, v) }])}
-              onReset={() => onSave([{ key: it.key, [DISCOUNT_FIELD[k]]: null }])}
-            />
+          <td className="px-2 py-1.5 text-right tabular-nums">{formatRub(plan)}</td>
+          <td className="px-3 py-1.5 text-right text-xs tabular-nums text-ink/60">
+            {plan ? pctOf(plan, total) : ''}
           </td>
         </>
       ) : (
         <>
-          <td className="px-2 py-1.5 text-right tabular-nums text-ink/70">
-            {formatRub(it.prices[k])}
+          <td className="px-1 py-1">
+            <NumberCell
+              value={qtyOf(it.fact)}
+              format={formatQty}
+              label={`Продано, шт.: ${it.label}`}
+              onCommit={(v) => onSave([{ key: it.key, factQty: v }])}
+              testId={`income-fact-${it.key}`}
+            />
           </td>
-          <td className="px-2 py-1.5 text-right tabular-nums text-ink/70">
-            {it.discounts[k] ? formatPct(it.discounts[k]) : '—'}
-          </td>
-        </>
-      )}
-      <td className="px-2 py-1.5 text-right tabular-nums text-ink/70">
-        {formatRub(Math.round(netPrice(it, k)))}
-      </td>
-      <td className="px-1 py-1">
-        <NumberCell
-          value={it.fact[k]}
-          format={formatQty}
-          label={`Продано, шт.: ${it.label}`}
-          onCommit={(v) => onSave([{ key: it.key, [FACT_FIELD[k]]: v }])}
-          testId={`income-fact-${k}-${it.key}`}
-        />
-      </td>
-      <td className="px-2 py-1.5 text-right tabular-nums">{formatRub(fact)}</td>
-      {it.factOnly ? (
-        <td colSpan={3} className="px-3 py-1.5 text-right text-xs text-ink/50">
-          нет в плане
-        </td>
-      ) : (
-        <>
-          <td className="px-2 py-1.5 text-right tabular-nums text-ink/70">
-            {formatQty(it.plan[k])}
-          </td>
-          <td className="px-2 py-1.5 text-right tabular-nums text-ink/70">{formatRub(plan)}</td>
-          <td className="px-3 py-1.5">
-            <Progress part={fact} total={plan} />
-          </td>
-        </>
-      )}
-    </tr>
-  );
-}
-
-/** Билет за все этапы: количество по этапам и накопленный итог */
-function AllStagesRow({
-  item: it,
-  view,
-  onAuto,
-  onRemove,
-  onRename,
-}: {
-  item: IncomeItemValue;
-  view: 'plan' | 'fact';
-  onAuto: () => void;
-  onRemove: () => void;
-  onRename: (label: string) => void;
-}) {
-  const q = view === 'plan' ? it.plan : it.fact;
-  const sum = itemSum(it, view, null);
-  const plan = itemSum(it, 'plan', null);
-  return (
-    <tr className="border-t border-line/60" data-testid="income-row">
-      <td className="py-1 pl-4 pr-3">
-        <LabelCell
-          item={it}
-          onRename={onRename}
-          onRemove={view === 'plan' || it.factOnly ? onRemove : undefined}
-        />
-      </td>
-      {q.map((n, k) => (
-        <td key={k} className="px-2 py-1.5 text-right tabular-nums text-ink/70">
-          {formatQty(n)}
-        </td>
-      ))}
-      <td className="px-2 py-1.5 text-right tabular-nums">
-        <div className="flex items-center justify-end gap-1">
-          {view === 'plan' && <AutoBadge item={it} onAuto={onAuto} />}
-          {formatQty(sumOf(q))}
-        </div>
-      </td>
-      <td className="px-2 py-1.5 text-right tabular-nums">{formatRub(sum)}</td>
-      <td className="px-3 py-1.5">
-        {view === 'fact' &&
-          (it.factOnly ? (
-            <span className="block text-right text-xs text-ink/50">нет в плане</span>
+          <td className="px-2 py-1.5 text-right tabular-nums">{formatRub(fact)}</td>
+          {it.factOnly ? (
+            <td colSpan={3} className="px-3 py-1.5 text-right text-xs text-ink/50">
+              нет в плане
+            </td>
           ) : (
-            <Progress part={sum} total={plan} />
-          ))}
-      </td>
+            <>
+              <td className={muted}>{formatQty(qtyOf(it.plan))}</td>
+              <td className={muted}>{formatRub(plan)}</td>
+              <td className="px-3 py-1.5">
+                <Progress part={fact} total={plan} />
+              </td>
+            </>
+          )}
+        </>
+      )}
     </tr>
   );
 }
@@ -861,191 +703,49 @@ function AutoBadge({ item: it, onAuto }: { item: IncomeItemValue; onAuto: () => 
   );
 }
 
-/** Значение этапа: своё или (серым) как на предыдущем этапе; ↺ возвращает к предыдущему */
-function InheritCell({
-  value,
-  inherited,
-  canReset,
-  format,
-  label,
-  testId,
-  onCommit,
-  onReset,
-}: {
-  value: number;
-  inherited: boolean;
-  canReset: boolean;
-  format: (n: number) => string;
-  label: string;
-  testId: string;
-  onCommit: (v: number) => void;
-  onReset: () => void;
-}) {
-  return (
-    <div
-      className="group flex items-center justify-end gap-0.5"
-      title={inherited ? 'Как на предыдущем этапе — нажмите, чтобы задать своё' : undefined}
-    >
-      <NumberCell
-        value={value}
-        format={format}
-        label={label}
-        onCommit={onCommit}
-        testId={testId}
-        className={cn('min-w-0 flex-1', inherited && 'text-ink/40')}
-      />
-      {canReset && (
-        <button
-          type="button"
-          className="rounded p-1 text-ink/40 opacity-0 hover:bg-surface hover:text-brand focus-visible:opacity-100 group-hover:opacity-100"
-          title="Как на предыдущем этапе"
-          aria-label={`${label}: как на предыдущем этапе`}
-          onClick={onReset}
-        >
-          <RotateCcw className="size-3" />
-        </button>
-      )}
-    </div>
-  );
-}
-
-/**
- * Переключатель этапов продаж билетов: карточки «Старт продаж», «Середина», «Финальная
- * стадия» с датами, долей автоподбора и суммой этапа, плюс «Все этапы» — накопленный итог.
- */
-function StageSwitch({
-  cfg,
+/** Даты стадий продаж билетов: старт — из карточки форума, «Середину» и «Финал» можно сдвинуть */
+function StageDates({
   dates,
   current,
-  selected,
-  onSelect,
   forumStart,
-  sums,
-  view,
   onSave,
 }: {
-  cfg: IncomeConfig;
   dates: [string, string, string];
   current: number;
-  selected: number | null;
-  onSelect: (k: number | null) => void;
   forumStart: string;
-  sums: { plan: number; fact: number }[];
-  view: 'plan' | 'fact';
   onSave: (patch: Partial<IncomeConfig>) => void;
 }) {
-  const setShare = (k: number, v: number) => {
-    const shares = [...cfg.shares] as Triple;
-    shares[k] = Math.min(100, v);
-    onSave({ shares });
-  };
-  const total = sums.reduce((a, s) => ({ plan: a.plan + s.plan, fact: a.fact + s.fact }), {
-    plan: 0,
-    fact: 0,
-  });
-  const amount = (s: { plan: number; fact: number }) =>
-    view === 'plan' ? formatRub(s.plan) : `${formatRub(s.fact)} из ${formatRub(s.plan)}`;
-  const card = (active: boolean) =>
-    cn(
-      'cursor-pointer rounded-md border px-3 py-2 text-left transition-colors',
-      active
-        ? 'border-brand bg-brand/5 ring-1 ring-brand'
-        : 'border-line bg-white hover:border-brand/50',
-    );
   return (
     <div
-      className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4"
-      role="tablist"
-      data-testid="income-stages"
+      className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink/70"
+      data-testid="income-stage-dates"
     >
-      {PRICE_STAGES.map((st, k) => {
-        const to = k < 2 ? dates[k + 1] : forumStart;
-        return (
-          <div
-            key={st.key}
-            role="tab"
-            tabIndex={0}
-            aria-selected={selected === k}
-            onClick={() => onSelect(k)}
-            onKeyDown={(e) =>
-              (e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget && onSelect(k)
-            }
-            className={card(selected === k)}
-            data-testid={`income-stage-${st.key}`}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className={cn('text-sm font-medium', selected === k && 'text-brand')}>
-                {k + 1}. {st.label}
-              </span>
-              {k === current && (
-                <span className="rounded bg-brand px-1.5 py-0.5 text-[10px] font-medium text-white">
-                  сейчас
-                </span>
-              )}
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-ink/70">
-              {k === 0 ? (
-                <span title="Дата старта продаж задаётся в карточке форума">
-                  с {formatDate(dates[0])}
-                </span>
-              ) : (
-                <label
-                  className="inline-flex items-center gap-1"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  с
-                  <input
-                    type="date"
-                    value={dates[k]}
-                    min={dates[k - 1]}
-                    max={forumStart}
-                    onChange={(e) =>
-                      e.target.value &&
-                      onSave(k === 1 ? { midDate: e.target.value } : { finalDate: e.target.value })
-                    }
-                    className="h-6 rounded border border-line bg-white px-1 text-xs tabular-nums focus:border-brand focus:outline-none"
-                    aria-label={`Дата начала этапа «${st.label}»`}
-                    data-testid={`income-stage-date-${st.key}`}
-                  />
-                </label>
-              )}
-              <span>по {formatDate(to)}</span>
-            </div>
-            <div className="mt-1 text-sm font-semibold tabular-nums">{amount(sums[k])}</div>
-            <div
-              className="flex items-center gap-1 text-xs text-ink/60"
-              onClick={(e) => e.stopPropagation()}
-              title="Как автоподбор раскладывает план билетов по этапам"
-            >
-              Доля автоподбора
-              <NumberCell
-                value={cfg.shares[k]}
-                format={formatPct}
-                label={`Доля автоподбора на этапе «${st.label}», %`}
-                onCommit={(v) => setShare(k, v)}
-                testId={`income-share-${st.key}`}
-                className="w-auto py-0 text-left text-xs font-medium text-ink"
-                inputClassName="h-6 w-16 text-left"
-              />
-            </div>
-          </div>
-        );
-      })}
-      <div
-        role="tab"
-        tabIndex={0}
-        aria-selected={selected === null}
-        onClick={() => onSelect(null)}
-        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onSelect(null)}
-        className={card(selected === null)}
-        data-testid="income-stage-all"
-      >
-        <span className={cn('text-sm font-medium', selected === null && 'text-brand')}>
-          Все этапы
+      <span>Стадии продаж:</span>
+      {PRICE_STAGES.map((st, k) => (
+        <span key={st.key} className="inline-flex items-center gap-1">
+          <span className={cn(k === current && 'font-medium text-brand')}>{st.label}</span>с
+          {k === 0 ? (
+            <span title="Дата старта продаж задаётся в карточке форума">
+              {formatDate(dates[0])}
+            </span>
+          ) : (
+            <input
+              type="date"
+              value={dates[k]}
+              min={dates[k - 1]}
+              max={forumStart}
+              onChange={(e) =>
+                e.target.value &&
+                onSave(k === 1 ? { midDate: e.target.value } : { finalDate: e.target.value })
+              }
+              className="h-6 rounded border border-line bg-white px-1 text-xs tabular-nums focus:border-brand focus:outline-none"
+              aria-label={`Дата начала стадии «${st.label}»`}
+              data-testid={`income-stage-date-${st.key}`}
+            />
+          )}
         </span>
-        <div className="mt-1 text-xs text-ink/70">Накопленный итог по билетам</div>
-        <div className="mt-1 text-sm font-semibold tabular-nums">{amount(total)}</div>
-      </div>
+      ))}
+      <span>до форума {formatDate(forumStart)}</span>
     </div>
   );
 }
@@ -1235,12 +935,15 @@ function AddItemRow({
   onRestore,
   onAdd,
   factOnly,
+  stage: initialStage,
 }: {
   group: IncomeGroup;
   colSpan: number;
   restore: { key: string; label: string }[];
   onRestore: (key: string) => void;
-  onAdd: (label: string, price: number, discount: number) => Promise<boolean>;
+  onAdd: (v: { label: string; price: number; discount: number; stage: number }) => Promise<boolean>;
+  /** Стадия по умолчанию для нового билета — текущая */
+  stage: number;
   /** Статья только для факта: со скидкой, без плана */
   factOnly?: boolean;
 }) {
@@ -1248,13 +951,22 @@ function AddItemRow({
   const [label, setLabel] = React.useState('');
   const [price, setPrice] = React.useState('');
   const [discount, setDiscount] = React.useState('');
+  const [stage, setStage] = React.useState(initialStage);
+  const withStage = group.key === 'tickets';
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = label.trim();
     const n = Math.round(Number(price.replace(/[\s  ₽]/g, '').replace(',', '.')) || 0);
     if (!name) return;
     const d = Number(discount.replace(/[\s%]/g, '').replace(',', '.')) || 0;
-    if (await onAdd(name, Math.max(0, n), Math.min(100, Math.max(0, d)))) {
+    if (
+      await onAdd({
+        label: name,
+        price: Math.max(0, n),
+        discount: Math.min(100, Math.max(0, d)),
+        stage: withStage ? stage : 0,
+      })
+    ) {
       setLabel('');
       setPrice('');
       setDiscount('');
@@ -1285,17 +997,30 @@ function AddItemRow({
               aria-label="Стоимость одной единицы"
               data-testid={`income-add-price-${group.key}`}
             />
-            {factOnly && (
-              <input
-                value={discount}
-                onChange={(e) => setDiscount(e.target.value)}
-                inputMode="decimal"
-                placeholder="Скидка, %"
-                className="h-8 w-28 rounded border border-line px-2 text-right text-sm tabular-nums focus:border-brand focus:outline-none"
-                aria-label="Скидка, %"
-                data-testid={`income-add-discount-${group.key}`}
-              />
+            {withStage && (
+              <select
+                value={stage}
+                onChange={(e) => setStage(Number(e.target.value))}
+                className="h-8 rounded border border-line bg-white px-2 text-sm focus:border-brand focus:outline-none"
+                aria-label="Стадия продаж"
+                data-testid={`income-add-stage-${group.key}`}
+              >
+                {PRICE_STAGES.map((st, k) => (
+                  <option key={st.key} value={k}>
+                    {st.label}
+                  </option>
+                ))}
+              </select>
             )}
+            <input
+              value={discount}
+              onChange={(e) => setDiscount(e.target.value)}
+              inputMode="decimal"
+              placeholder="Скидка, %"
+              className="h-8 w-28 rounded border border-line px-2 text-right text-sm tabular-nums focus:border-brand focus:outline-none"
+              aria-label="Скидка, %"
+              data-testid={`income-add-discount-${group.key}`}
+            />
             <button
               type="submit"
               className="h-8 rounded bg-brand px-3 text-sm font-medium text-white hover:bg-brand/90"
