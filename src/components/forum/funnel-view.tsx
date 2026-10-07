@@ -37,6 +37,7 @@ import {
   currentStage,
   incomeSum,
   incomeTarget,
+  targetExpenses,
   stageDates,
   withDeals,
   type IncomeConfig,
@@ -91,7 +92,7 @@ export function FunnelView({
     (key: string | null) => items.find((i) => i.key === key)?.label ?? '',
     [items],
   );
-  const expenses = tasks.reduce((s, t) => s + t.cost, 0);
+  const expenses = targetExpenses(tasks, forum.expenseLimit);
   // План продаж — как в «Доходах»: завершённые стадии равны проданному, включая оплаты воронки
   const planSum = React.useMemo(() => {
     const dates = stageDates(config, forum.salesStartDate, forum.startDate);

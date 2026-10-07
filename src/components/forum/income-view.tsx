@@ -22,6 +22,7 @@ import {
   hasStages,
   incomeSum,
   incomeTarget,
+  targetExpenses,
   itemSum,
   netPrice,
   salesAdvice,
@@ -95,7 +96,8 @@ export function IncomeView({
   );
   const stageNow = currentStage(dates, today);
 
-  const expenses = tasks.reduce((s, t) => s + t.cost, 0);
+  const expenses = targetExpenses(tasks, forum.expenseLimit);
+  const expensesLabel = forum.expenseLimit != null ? 'предельные расходы' : 'расходы';
   const target = incomeTarget(expenses);
   // Факт = введённое вручную + оплаченные сделки воронки; план с автоподбором под цель
   const planned = React.useMemo(
@@ -215,6 +217,7 @@ export function IncomeView({
       <IncomeSummary
         forumId={forum.id}
         expenses={expenses}
+        expensesLabel={expensesLabel}
         target={target}
         plan={planSum}
         fact={factSum}
@@ -416,7 +419,7 @@ export function IncomeView({
             />
             <TotalRow
               view={view}
-              label={`Цель: расходы ${formatRub(expenses)} + ${Math.round(INCOME_MARGIN * 100)}%`}
+              label={`Цель: ${expensesLabel} ${formatRub(expenses)} + ${Math.round(INCOME_MARGIN * 100)}%`}
               value={target}
               muted
             />
@@ -820,12 +823,14 @@ function StageDates({
 function IncomeSummary({
   forumId,
   expenses,
+  expensesLabel,
   target,
   plan,
   fact,
 }: {
   forumId: number;
   expenses: number;
+  expensesLabel: string;
   target: number;
   plan: number;
   fact: number;
@@ -845,7 +850,7 @@ function IncomeSummary({
         <div className="text-xs text-ink/60" data-testid="income-target">
           {expenses ? (
             <>
-              Цель {formatRub(target)}: расходы{' '}
+              Цель {formatRub(target)}: {expensesLabel}{' '}
               <Link href={`/forums/${forumId}/expenses`} className="text-brand hover:underline">
                 {formatRub(expenses)}
               </Link>{' '}

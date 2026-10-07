@@ -11,7 +11,7 @@ import {
   type Health,
   type HealthLine,
 } from '@/lib/health';
-import type { IncomeConfig, IncomeItemValue } from '@/lib/income';
+import { targetExpenses, type IncomeConfig, type IncomeItemValue } from '@/lib/income';
 import { cn } from '@/lib/utils';
 import { useForum } from './forum-context';
 
@@ -46,12 +46,12 @@ export function StatusLines({
     () =>
       incomeHealth({
         ...income,
-        expenses: tasks.reduce((s, t) => s + t.cost, 0),
+        expenses: targetExpenses(tasks, forum.expenseLimit),
         salesStart: forum.salesStartDate,
         forumStart: forum.startDate,
         today,
       }),
-    [income, tasks, forum.salesStartDate, forum.startDate, today],
+    [income, tasks, forum.expenseLimit, forum.salesStartDate, forum.startDate, today],
   );
   const base = `/forums/${forum.id}`;
   return (

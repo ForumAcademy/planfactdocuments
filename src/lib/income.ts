@@ -390,6 +390,11 @@ export function currentStage(dates: [string, string, string], today: string): nu
   return 0;
 }
 
+/** Расходы для цели доходов: предельно допустимые, а пока они не заданы — стоимость задач */
+export function targetExpenses(tasks: { cost: number }[], expenseLimit: number | null): number {
+  return expenseLimit ?? tasks.reduce((s, t) => s + t.cost, 0);
+}
+
 export function incomeTarget(expenses: number): number {
   return Math.round(expenses * (1 + INCOME_MARGIN));
 }
