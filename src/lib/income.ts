@@ -1,8 +1,46 @@
 /**
- * Доходы форума: партнёрства и билеты. У каждой позиции — цена одной единицы,
- * плановое и фактически проданное количество. Позиции по умолчанию можно переименовать
- * или убрать, свои — добавить в любую группу.
+ * Доходы форума: партнёрства и билеты. У каждой позиции — цена одной единицы на каждом
+ * из трёх этапов продаж («Старт продаж», «Середина», «Финальная стадия»), плановое
+ * количество и фактически проданное по этапам. Скидки двух видов — индивидуальные и
+ * партнёрские: в плане это доля от выручки, в факте — суммы по позициям.
+ * Позиции по умолчанию можно переименовать или убрать, свои — добавить в любую группу.
  */
+
+/** Этапы цен: чем ближе форум, тем дороже */
+export const PRICE_STAGES = [
+  { key: 'start', label: 'Старт продаж', short: 'Старт' },
+  { key: 'mid', label: 'Середина', short: 'Середина' },
+  { key: 'final', label: 'Финальная стадия', short: 'Финал' },
+] as const;
+export type PriceStageKey = (typeof PRICE_STAGES)[number]['key'];
+
+/** Виды скидок */
+export const DISCOUNTS = [
+  { key: 'personal', label: 'Индивидуальные скидки' },
+  { key: 'partner', label: 'Партнёрские скидки' },
+] as const;
+
+/** Настройки доходов форума: даты смены цен, структура плана по этапам, плановые скидки */
+export interface IncomeConfig {
+  /** С какой даты действуют цены «Середины» и «Финальной стадии»; null — делим период поровну */
+  midDate: string | null;
+  finalDate: string | null;
+  /** Доля плановых продаж на каждом этапе, % */
+  shares: [number, number, number];
+  /** Плановые скидки, % от выручки */
+  discountPersonal: number;
+  discountPartner: number;
+}
+
+export const DEFAULT_SHARES: [number, number, number] = [30, 40, 30];
+
+export const DEFAULT_INCOME_CONFIG: IncomeConfig = {
+  midDate: null,
+  finalDate: null,
+  shares: DEFAULT_SHARES,
+  discountPersonal: 0,
+  discountPartner: 0,
+};
 
 export const INCOME_GROUPS = [
   { key: 'partners', label: 'Партнёрства', color: '#0A0A9F' },
@@ -86,9 +124,22 @@ export interface IncomeItemValue {
   key: string;
   group: IncomeGroupKey;
   label: string;
+  /** Цена на «Старте продаж» */
   price: number;
+  /** Цена «Середины» и «Финальной стадии» */
+  priceMid: number;
+  priceFinal: number;
+  /** Цена этапа задана вручную (иначе — как на предыдущем этапе) */
+  priceMidSet: boolean;
+  priceFinalSet: boolean;
   planQty: number;
+  /** Продано по ценам «Старта», «Середины» и «Финала» */
   factQty: number;
+  factMid: number;
+  factFinal: number;
+  /** Фактические скидки по позиции, руб. */
+  discountPersonal: number;
+  discountPartner: number;
   /** План задан вручную; иначе количество подбирается под цель автоматически */
   planManual: boolean;
 }
@@ -97,8 +148,14 @@ export interface SavedIncomeItem {
   id?: number;
   key: string;
   price: number;
+  priceMid?: number | null;
+  priceFinal?: number | null;
   planQty: number;
   factQty: number;
+  factMid?: number;
+  factFinal?: number;
+  discountPersonal?: number;
+  discountPartner?: number;
   planManual?: boolean;
   label?: string | null;
   group?: string | null;
@@ -111,39 +168,144 @@ export interface SavedIncomeItem {
  */
 export function incomeItems(saved: SavedIncomeItem[]): IncomeItemValue[] {
   const byKey = new Map(saved.map((s) => [s.key, s]));
+  const value = (
+    s: SavedIncomeItem | undefined,
+    base: Pick<IncomeItemValue, 'key' | 'group' | 'label' | 'price'>,
+  ): IncomeItemValue => {
+    const priceMid = s?.priceMid ?? base.price;
+    return {
+      ...base,
+      priceMid,
+      priceFinal: s?.priceFinal ?? priceMid,
+      priceMidSet: s?.priceMid != null,
+      priceFinalSet: s?.priceFinal != null,
+      planQty: s?.planQty ?? 0,
+      factQty: s?.factQty ?? 0,
+      factMid: s?.factMid ?? 0,
+      factFinal: s?.factFinal ?? 0,
+      discountPersonal: s?.discountPersonal ?? 0,
+      discountPartner: s?.discountPartner ?? 0,
+      planManual: s?.planManual ?? false,
+    };
+  };
   const defaults = INCOME_ITEMS.filter((d) => !byKey.get(d.key)?.removed).map((d) => {
     const s = byKey.get(d.key);
-    return {
+    return value(s, {
       key: d.key,
       group: d.group,
       label: s?.label?.trim() || d.label,
       price: s?.price ?? d.price,
-      planQty: s?.planQty ?? 0,
-      factQty: s?.factQty ?? 0,
-      planManual: s?.planManual ?? false,
-    };
+    });
   });
   const custom = saved
     .filter((s) => !defaultIncomeItem(s.key) && !s.removed && isIncomeGroup(s.group))
     .sort((a, b) => (a.id ?? 0) - (b.id ?? 0))
-    .map((s) => ({
-      key: s.key,
-      group: s.group as IncomeGroupKey,
-      label: s.label?.trim() || 'Позиция',
-      price: s.price,
-      planQty: s.planQty,
-      factQty: s.factQty,
-      planManual: s.planManual ?? false,
-    }));
+    .map((s) =>
+      value(s, {
+        key: s.key,
+        group: s.group as IncomeGroupKey,
+        label: s.label?.trim() || 'Позиция',
+        price: s.price,
+      }),
+    );
   return [...defaults, ...custom];
+}
+
+/** Цены позиции по этапам: старт, середина, финал */
+export function stagePrices(i: IncomeItemValue): [number, number, number] {
+  return [i.price, i.priceMid, i.priceFinal];
+}
+
+/** Продано по этапам: старт, середина, финал */
+export function stageSold(i: IncomeItemValue): [number, number, number] {
+  return [i.factQty, i.factMid, i.factFinal];
+}
+
+/** Доли этапов в плане, нормированные к 1 (если все нули — поровну) */
+function shareWeights(cfg: IncomeConfig): [number, number, number] {
+  const sum = cfg.shares.reduce((a, b) => a + Math.max(0, b), 0);
+  if (!sum) return [1 / 3, 1 / 3, 1 / 3];
+  return cfg.shares.map((v) => Math.max(0, v) / sum) as [number, number, number];
+}
+
+/** Доля плановых скидок от выручки, 0…1 */
+export function planDiscountRate(cfg: IncomeConfig): number {
+  return Math.min(1, Math.max(0, (cfg.discountPersonal + cfg.discountPartner) / 100));
+}
+
+/** Средняя плановая цена единицы с учётом структуры продаж по этапам, без скидок */
+export function planUnitGross(i: IncomeItemValue, cfg: IncomeConfig): number {
+  const w = shareWeights(cfg);
+  return stagePrices(i).reduce((s, p, k) => s + p * w[k], 0);
+}
+
+/** Плановая цена единицы с учётом этапов и скидок — по ней план подбирается под цель */
+export function planUnitNet(i: IncomeItemValue, cfg: IncomeConfig): number {
+  return planUnitGross(i, cfg) * (1 - planDiscountRate(cfg));
+}
+
+/** План по позициям: выручка по ценам этапов, скидки и итог */
+export function planTotals(items: IncomeItemValue[], cfg: IncomeConfig) {
+  const gross = Math.round(items.reduce((s, i) => s + planUnitGross(i, cfg) * i.planQty, 0));
+  const personal = Math.round((gross * Math.max(0, cfg.discountPersonal)) / 100);
+  const partner = Math.round((gross * Math.max(0, cfg.discountPartner)) / 100);
+  return { gross, personal, partner, net: Math.max(0, gross - personal - partner) };
+}
+
+/** Факт по позициям: выручка по ценам этапов, скидки и итог */
+export function factTotals(items: IncomeItemValue[]) {
+  const gross = items.reduce(
+    (s, i) => s + stagePrices(i).reduce((a, p, k) => a + p * stageSold(i)[k], 0),
+    0,
+  );
+  const personal = items.reduce((s, i) => s + i.discountPersonal, 0);
+  const partner = items.reduce((s, i) => s + i.discountPartner, 0);
+  return { gross, personal, partner, net: gross - personal - partner };
+}
+
+/** Продано всего, шт. */
+export function soldQty(i: IncomeItemValue): number {
+  return i.factQty + i.factMid + i.factFinal;
+}
+
+/**
+ * Даты этапов цен: старт — начало продаж; «Середина» и «Финал» — заданные даты, а если
+ * их нет — период от старта продаж до форума делится на три равные части.
+ */
+export function stageDates(
+  cfg: Pick<IncomeConfig, 'midDate' | 'finalDate'>,
+  salesStart: string,
+  forumStart: string,
+): [string, string, string] {
+  const t0 = Date.parse(salesStart);
+  const t1 = Date.parse(forumStart);
+  const at = (k: number) =>
+    new Date(t0 + Math.round(((t1 - t0) * k) / 3 / 86_400_000) * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+  const mid = cfg.midDate ?? (t1 > t0 ? at(1) : salesStart);
+  const fin = cfg.finalDate ?? (t1 > t0 ? at(2) : mid);
+  return [salesStart, mid, fin < mid ? mid : fin];
+}
+
+/** Текущий этап цен на дату */
+export function currentStage(dates: [string, string, string], today: string): number {
+  if (today >= dates[2]) return 2;
+  if (today >= dates[1]) return 1;
+  return 0;
 }
 
 export function incomeTarget(expenses: number): number {
   return Math.round(expenses * (1 + INCOME_MARGIN));
 }
 
-export function incomeSum(items: IncomeItemValue[], field: 'planQty' | 'factQty'): number {
-  return items.reduce((s, i) => s + i.price * i[field], 0);
+/** Итог плана или факта с учётом этапов цен и скидок */
+export function incomeSum(
+  items: IncomeItemValue[],
+  field: 'planQty' | 'factQty',
+  cfg: IncomeConfig = DEFAULT_INCOME_CONFIG,
+): number {
+  return field === 'planQty' ? planTotals(items, cfg).net : factTotals(items).net;
 }
 
 /**
@@ -167,15 +329,21 @@ const mixOf = (i: IncomeItemValue) => defaultIncomeItem(i.key)?.mix ?? CUSTOM_MI
  * (1 генеральный, 2 стратегических, 5 партнёров), остальное добирается билетами в типовой
  * пропорции; остаток — самой дешёвой позицией, чтобы перебор был минимальным.
  */
-export function autoPlan(items: IncomeItemValue[], target: number): IncomeItemValue[] {
-  const auto = items.filter((i) => !i.planManual && i.price > 0);
+export function autoPlan(
+  items: IncomeItemValue[],
+  target: number,
+  cfg: IncomeConfig = DEFAULT_INCOME_CONFIG,
+): IncomeItemValue[] {
+  const unit = new Map(items.map((i) => [i.key, planUnitNet(i, cfg)]));
+  const price = (i: IncomeItemValue) => unit.get(i.key)!;
+  const auto = items.filter((i) => !i.planManual && price(i) > 0);
   const qty = new Map<string, number>(auto.map((i) => [i.key, 0]));
-  const manualSum = items.reduce((s, i) => s + (i.planManual ? i.price * i.planQty : 0), 0);
+  const manualSum = items.reduce((s, i) => s + (i.planManual ? price(i) * i.planQty : 0), 0);
   let rest = target - manualSum;
 
   if (rest > 0 && auto.length) {
     const scale = (list: IncomeItemValue[], amount: number, cap: boolean) => {
-      const base = list.reduce((s, i) => s + i.price * mixOf(i), 0);
+      const base = list.reduce((s, i) => s + price(i) * mixOf(i), 0);
       if (!base) return 0;
       const k = amount / base;
       let sum = 0;
@@ -184,7 +352,7 @@ export function autoPlan(items: IncomeItemValue[], target: number): IncomeItemVa
         const q = Math.floor(w * k);
         const v = cap ? Math.min(q, w) : q;
         qty.set(i.key, v);
-        sum += v * i.price;
+        sum += v * price(i);
       }
       return sum;
     };
@@ -194,8 +362,8 @@ export function autoPlan(items: IncomeItemValue[], target: number): IncomeItemVa
     if (rest > 0 && tickets.length) rest -= scale(tickets, rest, false);
     if (rest > 0) {
       const pool = tickets.length ? tickets : partners;
-      const cheapest = pool.reduce((a, b) => (b.price < a.price ? b : a));
-      qty.set(cheapest.key, qty.get(cheapest.key)! + Math.ceil(rest / cheapest.price));
+      const cheapest = pool.reduce((a, b) => (price(b) < price(a) ? b : a));
+      qty.set(cheapest.key, qty.get(cheapest.key)! + Math.ceil(rest / price(cheapest)));
     }
   }
   return items.map((i) => (i.planManual ? i : { ...i, planQty: qty.get(i.key) ?? 0 }));
@@ -219,9 +387,14 @@ export function formatItemQty(item: Pick<IncomeItemValue, 'key' | 'label'>, n: n
 }
 
 /** Рекомендация по плану продаж: что продать, чтобы выйти на цель, и как сместить структуру. */
-export function planAdvice(items: IncomeItemValue[], target: number): string[] {
+export function planAdvice(
+  items: IncomeItemValue[],
+  target: number,
+  cfg: IncomeConfig = DEFAULT_INCOME_CONFIG,
+): string[] {
   if (target <= 0) return [];
-  const sum = incomeSum(items, 'planQty');
+  const unit = (i: IncomeItemValue) => planUnitNet(i, cfg);
+  const sum = incomeSum(items, 'planQty', cfg);
   const list = items.filter((i) => i.planQty > 0);
   const lines: string[] = [];
   if (list.length) {
@@ -229,7 +402,7 @@ export function planAdvice(items: IncomeItemValue[], target: number): string[] {
     const tail = what.length > 1 ? `${what.slice(0, -1).join(', ')} и ${what.at(-1)}` : what[0];
     lines.push(`Чтобы выйти на цель, нужно продать ${tail}.`);
   }
-  const manualSum = items.reduce((s, i) => s + (i.planManual ? i.price * i.planQty : 0), 0);
+  const manualSum = items.reduce((s, i) => s + (i.planManual ? unit(i) * i.planQty : 0), 0);
   if (items.some((i) => i.planManual)) {
     lines.push(
       manualSum >= target
@@ -242,12 +415,27 @@ export function planAdvice(items: IncomeItemValue[], target: number): string[] {
   }
   const partnersSum = items
     .filter((i) => i.group !== 'tickets')
-    .reduce((s, i) => s + i.price * i.planQty, 0);
-  if (sum > 0) {
-    const share = Math.round((partnersSum / sum) * 100);
+    .reduce((s, i) => s + unit(i) * i.planQty, 0);
+  const planNoDiscount = items.reduce((s, i) => s + unit(i) * i.planQty, 0);
+  if (planNoDiscount > 0) {
+    const share = Math.round((partnersSum / planNoDiscount) * 100);
     lines.push(
       `Партнёрства дают ${share}% плана, билеты — ${100 - share}%.` +
         (share < 30 ? ' План держится на билетах: стоит усилить продажи партнёрств.' : ''),
+    );
+  }
+  const disc = planTotals(items, cfg);
+  if (disc.personal + disc.partner > 0) {
+    lines.push(
+      `Скидки в плане — ${formatNum(disc.personal + disc.partner)} ₽ ` +
+        `(${formatNum(cfg.discountPersonal + cfg.discountPartner)}% выручки); они уже учтены в количестве.`,
+    );
+  }
+  const [s0, s1, s2] = shareWeights(cfg).map((w) => Math.round(w * 100));
+  if (items.some((i) => i.priceMid !== i.price || i.priceFinal !== i.priceMid)) {
+    lines.push(
+      `План по этапам: ${s0}% продаж на старте, ${s1}% в середине и ${s2}% на финальной стадии. ` +
+        'Чем больше продаж на старте, тем ниже средняя цена.',
     );
   }
   const cheapestOf = (g: IncomeGroupKey) =>
@@ -261,8 +449,8 @@ export function planAdvice(items: IncomeItemValue[], target: number): string[] {
       .reduce<IncomeItemValue | null>((a, b) => (!a || b.planQty > a.planQty ? b : a), null) ??
     cheapestOf('tickets');
   const partner = cheapestOf('partners');
-  if (ticket && partner && partner.price >= ticket.price) {
-    const n = Math.round(partner.price / ticket.price);
+  if (ticket && partner && unit(partner) >= unit(ticket) && unit(ticket) > 0) {
+    const n = Math.round(unit(partner) / unit(ticket));
     lines.push(`Одно партнёрство «${partner.label}» заменяет ${formatItemQty(ticket, n)}.`);
   }
   return lines;

@@ -26,7 +26,7 @@ export function NumberCell({
   const commit = () => {
     setEditing(false);
     if (!draft.trim()) return;
-    const n = Math.round(Number(draft.replace(/шт\.?|[\s  ₽]/g, '').replace(',', '.')));
+    const n = Math.round(Number(draft.replace(/шт\.?|[\s  ₽%]/g, '').replace(',', '.')));
     if (!Number.isFinite(n) || n < 0) return;
     if (n !== value) onCommit(n);
   };

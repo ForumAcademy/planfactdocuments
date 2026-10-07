@@ -5,7 +5,12 @@ import { prisma } from '@/lib/db';
 import { dbToISO, isoToDb, todayMsk } from '@/lib/dates';
 import type { StatusCounts } from '@/lib/status';
 import type { DictsDTO, ForumDTO, TaskDTO } from '@/lib/types';
-import { incomeItems, type IncomeItemValue } from '@/lib/income';
+import {
+  DEFAULT_INCOME_CONFIG,
+  incomeItems,
+  type IncomeConfig,
+  type IncomeItemValue,
+} from '@/lib/income';
 
 export function toForumDTO(f: Forum): ForumDTO {
   return {
@@ -309,4 +314,16 @@ export async function getDatabaseData(): Promise<DatabaseData> {
 export async function getIncomeItems(forumId: number): Promise<IncomeItemValue[]> {
   const rows = await prisma.incomeItem.findMany({ where: { forumId } });
   return incomeItems(rows);
+}
+
+export async function getIncomeConfig(forumId: number): Promise<IncomeConfig> {
+  const f = await prisma.forum.findUnique({ where: { id: forumId } });
+  if (!f) return DEFAULT_INCOME_CONFIG;
+  return {
+    midDate: dbToISO(f.priceMidDate),
+    finalDate: dbToISO(f.priceFinalDate),
+    shares: [f.shareStart, f.shareMid, f.shareFinal],
+    discountPersonal: f.discountPersonalPct,
+    discountPartner: f.discountPartnerPct,
+  };
 }

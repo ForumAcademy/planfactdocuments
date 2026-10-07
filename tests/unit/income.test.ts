@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
   autoPlan,
+  currentStage,
+  factTotals,
   incomeItems,
   incomeLevel,
   incomeSum,
   incomeTarget,
   planAdvice,
+  planTotals,
+  planUnitGross,
+  stageDates,
+  stagePrices,
 } from '@/lib/income';
 
 describe('доходы', () => {
@@ -113,5 +119,85 @@ describe('доходы', () => {
     expect(plan.find((i) => i.key === 'c_1')!.planQty).toBe(1);
     expect(incomeSum(plan, 'planQty')).toBeGreaterThanOrEqual(10_000_000);
     expect(planAdvice(plan, 10_000_000)[0]).toMatch(/шт\. «VIP\+»/);
+  });
+});
+
+describe('этапы цен и скидки', () => {
+  const cfg = {
+    midDate: null,
+    finalDate: null,
+    shares: [30, 40, 30] as [number, number, number],
+    discountPersonal: 5,
+    discountPartner: 5,
+  };
+
+  it('цены этапов: пустая цена равна предыдущему этапу', () => {
+    const [vip] = incomeItems([
+      { key: 'vip', price: 100_000, priceFinal: 150_000, planQty: 0, factQty: 0 },
+    ]).filter((i) => i.key === 'vip');
+    expect(stagePrices(vip)).toEqual([100_000, 100_000, 150_000]);
+    expect(vip.priceMidSet).toBe(false);
+    expect(vip.priceFinalSet).toBe(true);
+  });
+
+  it('план: средняя цена по долям этапов, скидки вычитаются', () => {
+    const items = incomeItems([
+      {
+        key: 'vip',
+        price: 100_000,
+        priceMid: 120_000,
+        priceFinal: 150_000,
+        planQty: 10,
+        factQty: 0,
+        planManual: true,
+      },
+    ]).filter((i) => i.key === 'vip');
+    // 0,3×100 + 0,4×120 + 0,3×150 = 123 тыс.
+    expect(planUnitGross(items[0], cfg)).toBeCloseTo(123_000);
+    expect(planTotals(items, cfg)).toEqual({
+      gross: 1_230_000,
+      personal: 61_500,
+      partner: 61_500,
+      net: 1_107_000,
+    });
+    expect(incomeSum(items, 'planQty', cfg)).toBe(1_107_000);
+  });
+
+  it('факт: продажи по ценам этапов минус скидки', () => {
+    const items = incomeItems([
+      {
+        key: 'vip',
+        price: 100_000,
+        priceMid: 120_000,
+        planQty: 0,
+        factQty: 2,
+        factMid: 1,
+        factFinal: 1,
+        discountPersonal: 10_000,
+        discountPartner: 20_000,
+      },
+    ]).filter((i) => i.key === 'vip');
+    expect(factTotals(items)).toEqual({
+      gross: 440_000,
+      personal: 10_000,
+      partner: 20_000,
+      net: 410_000,
+    });
+  });
+
+  it('автоподбор учитывает скидки: план с учётом скидок не меньше цели', () => {
+    const plan = autoPlan(incomeItems([]), 13_000_000, cfg);
+    expect(incomeSum(plan, 'planQty', cfg)).toBeGreaterThanOrEqual(13_000_000);
+  });
+
+  it('даты этапов: без заданных — период до форума делится на три части', () => {
+    const d = stageDates({ midDate: null, finalDate: null }, '2026-01-01', '2026-10-01');
+    expect(d[0]).toBe('2026-01-01');
+    expect(d[1] > '2026-03-31' && d[1] < '2026-04-03').toBe(true);
+    expect(
+      stageDates({ midDate: '2026-05-01', finalDate: '2026-09-01' }, '2026-01-01', '2026-10-01'),
+    ).toEqual(['2026-01-01', '2026-05-01', '2026-09-01']);
+    expect(currentStage(['2026-01-01', '2026-05-01', '2026-09-01'], '2026-06-10')).toBe(1);
+    expect(currentStage(['2026-01-01', '2026-05-01', '2026-09-01'], '2026-09-01')).toBe(2);
   });
 });

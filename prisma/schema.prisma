@@ -108,50 +108,69 @@ model TemplateTask {
 // ---------- Форумы и задачи ----------
 
 model Forum {
-  id             Int           @id @default(autoincrement())
-  name           String
-  startDate      DateTime      @db.Date
-  endDate        DateTime?     @db.Date
-  salesStartDate DateTime      @db.Date
-  location       String?
+  id                  Int           @id @default(autoincrement())
+  name                String
+  startDate           DateTime      @db.Date
+  endDate             DateTime?     @db.Date
+  salesStartDate      DateTime      @db.Date
+  location            String?
   /// Сайт форума
-  website        String?
+  website             String?
   /// Цвет карточки (ключ из src/lib/forum-colors.ts)
-  color          String        @default("blue")
+  color               String        @default("blue")
   /// Предельно допустимые расходы, руб. (null — лимит не задан)
-  expenseLimit   Int?
-  archived       Boolean       @default(false)
+  expenseLimit        Int?
+  /// Доходы: с какой даты действуют цены «Середины» и «Финальной стадии»; null — период делится поровну
+  priceMidDate        DateTime?     @db.Date
+  priceFinalDate      DateTime?     @db.Date
+  /// Доходы: доля плановых продаж по этапам цен, %
+  shareStart          Int           @default(30)
+  shareMid            Int           @default(40)
+  shareFinal          Int           @default(30)
+  /// Доходы: плановые скидки, % от выручки
+  discountPersonalPct Float         @default(0)
+  discountPartnerPct  Float         @default(0)
+  archived            Boolean       @default(false)
   /// Возвращён из архива вручную — автоархив прошедших форумов его не трогает
-  keepActive     Boolean       @default(false)
-  reportDate     DateTime?     @db.Date
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  tasks          Task[]
-  charts         ReportChart[]
-  incomeItems    IncomeItem[]
+  keepActive          Boolean       @default(false)
+  reportDate          DateTime?     @db.Date
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  tasks               Task[]
+  charts              ReportChart[]
+  incomeItems         IncomeItem[]
 }
 
 /// Линия доходов: позиция (партнёрство или билет) — цена за единицу, план и факт продаж
 model IncomeItem {
-  id         Int     @id @default(autoincrement())
-  forumId    Int
-  forum      Forum   @relation(fields: [forumId], references: [id], onDelete: Cascade)
+  id               Int     @id @default(autoincrement())
+  forumId          Int
+  forum            Forum   @relation(fields: [forumId], references: [id], onDelete: Cascade)
   /// Ключ позиции из src/lib/income.ts
-  key        String
+  key              String
   /// Стоимость одной единицы, руб.
-  price      Int
+  price            Int
   /// Плановое количество, шт.
-  planQty    Int     @default(0)
-  /// Продано фактически, шт.
-  factQty    Int     @default(0)
+  planQty          Int     @default(0)
+  /// Цены «Середины» и «Финальной стадии», руб.; null — как на предыдущем этапе
+  priceMid         Int?
+  priceFinal       Int?
+  /// Продано фактически по ценам «Старта продаж», шт.
+  factQty          Int     @default(0)
+  /// Продано по ценам «Середины» и «Финальной стадии», шт.
+  factMid          Int     @default(0)
+  factFinal        Int     @default(0)
+  /// Фактические скидки по позиции, руб.: индивидуальные и партнёрские
+  discountPersonal Int     @default(0)
+  discountPartner  Int     @default(0)
   /// План задан вручную; иначе количество подбирается под цель автоматически
-  planManual Boolean @default(false)
+  planManual       Boolean @default(false)
   /// Название позиции (своё или переименованная позиция по умолчанию)
-  label      String?
+  label            String?
   /// Группа своей позиции: partners | tickets
-  group      String?
+  group            String?
   /// Позиция по умолчанию убрана из списка
-  removed    Boolean @default(false)
+  removed          Boolean @default(false)
 
   @@unique([forumId, key])
 }
