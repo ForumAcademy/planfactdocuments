@@ -1,5 +1,5 @@
 import { diffDays } from './dates';
-import { formatRub, pluralRu } from './utils';
+import { formatRubShort, pluralRu } from './utils';
 
 /**
  * Воронка продаж форума. Каждая сделка — компания, которая вошла в воронку: откуда пришла,
@@ -142,7 +142,7 @@ export function breakdown(list: DealValue[], key: (d: DealValue) => string): Bre
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 const deals = (n: number) => `${n} ${pluralRu(n, 'сделка', 'сделки', 'сделок')}`;
-const rub = formatRub;
+const rub = formatRubShort;
 
 export interface FunnelAdvice {
   /** Этап, к которому относится совет (для подсветки в воронке) */
@@ -155,13 +155,10 @@ export interface FunnelAdvice {
 /** Что мешает переходу с этапа на этап — подсказка по самому слабому переходу */
 const STEP_HINTS: Record<DealStageKey, string> = {
   qualification: '',
-  negotiation:
-    'Лиды не доходят до разговора: проверьте скорость первого контакта (лучше в день заявки), качество базы и скрипт квалификации. Холодные лиды без ЛПР стоит отсеивать сразу, чтобы не висели.',
-  agreement:
-    'После переговоров клиент не соглашается: обычно не хватает ценности (кто из спикеров и участников будет, какие встречи получит компания) или цена выше ожиданий. Предложите программу, кейсы прошлых участников, пакет на несколько билетов.',
-  invoice:
-    'Согласование затягивается на стороне клиента: выйдите на ЛПР, уточните процедуру закупки и документы, которые нужны для счёта, и договоритесь о дате решения.',
-  paid: 'Счета выставлены, но не оплачиваются: созвонитесь с бухгалтерией клиента, напомните дату повышения цены и сроки форума, предложите оплату частями.',
+  negotiation: 'Звоните в день заявки, отсеивайте лиды без ЛПР.',
+  agreement: 'Покажите ценность: программа, кейсы, пакет билетов.',
+  invoice: 'Выйдите на ЛПР и договоритесь о дате решения.',
+  paid: 'Созвонитесь с бухгалтерией, напомните о повышении цены.',
 };
 
 /**
@@ -189,8 +186,8 @@ export function funnelAdvice(
     out.push({
       stage: from.key,
       level: 'problem',
-      title: `Главная потеря: «${from.label}» → «${weakest.label}» — переходит ${pct(weakest.conversion ?? 0)}`,
-      text: `Из ${deals(from.reached)}, дошедших до этапа «${from.label}», дальше прошли ${weakest.reached}. ${STEP_HINTS[weakest.key]}`,
+      title: `«${from.label}» → «${weakest.label}»: проходит ${pct(weakest.conversion ?? 0)}`,
+      text: `${weakest.reached} из ${from.reached}. ${STEP_HINTS[weakest.key]}`,
     });
   }
 
@@ -203,19 +200,18 @@ export function funnelAdvice(
     out.push({
       stage: s.key,
       level: s.key === 'invoice' || s.stale >= 10 ? 'problem' : 'warning',
-      title: `«${s.label}»: ${deals(s.stale)} стоят дольше ${st.staleDays} дней`,
-      text:
-        (s.key === 'invoice'
-          ? `Неоплаченные счета на ${rub(sumAmount(here))}. `
-          : here.some((d) => d.amount)
-            ? `В них ${rub(sumAmount(here))}. `
-            : '') +
-        (byMgr && byMgr.count > 1 && byMgr.name !== 'Не указано'
-          ? `Больше всего у менеджера ${byMgr.name} (${byMgr.count}). `
-          : '') +
-        (s.key === 'qualification'
-          ? 'Разберите их: дозвониться и перевести в переговоры или закрыть отказом, чтобы воронка показывала реальную картину.'
-          : 'Назначьте следующий шаг и дату по каждой сделке.'),
+      title: `«${s.label}»: ${s.stale} зависли дольше ${st.staleDays} дн.`,
+      text: [
+        here.some((d) => d.amount) ? `На ${rub(sumAmount(here))}.` : '',
+        byMgr && byMgr.count > 1 && byMgr.name !== 'Не указано'
+          ? `Больше всего у ${byMgr.name} (${byMgr.count}).`
+          : '',
+        s.key === 'qualification'
+          ? 'Перевести в переговоры или закрыть.'
+          : 'Назначьте следующий шаг.',
+      ]
+        .filter(Boolean)
+        .join(' '),
     });
   }
 
@@ -239,8 +235,8 @@ export function funnelAdvice(
     out.push({
       stage: 'refused',
       level: 'warning',
-      title: `«${worst.name}» даёт больше всего отказов: ${worst.refused} из ${worst.done} закрытых`,
-      text: 'Проверьте, тот ли это сегмент и то ли предложение: возможно, нужен другой оффер, цена для этой аудитории или другой канал.',
+      title: `«${worst.name}»: ${worst.refused} отказов из ${worst.done}`,
+      text: 'Проверьте сегмент и оффер.',
     });
   }
   const best = closed
@@ -250,8 +246,8 @@ export function funnelAdvice(
     out.push({
       stage: 'paid',
       level: 'good',
-      title: `Лучше всего продаёт «${best.name}»: ${best.paid} из ${best.done} закрытых — оплата`,
-      text: 'Усильте этот канал: попросите рекомендации, повторите касание с похожими компаниями.',
+      title: `«${best.name}» продаёт лучше всех: ${best.paid} оплат из ${best.done}`,
+      text: 'Усильте канал, просите рекомендации.',
     });
   }
 
@@ -264,11 +260,8 @@ export function funnelAdvice(
     out.push({
       stage: null,
       level: gap > 0 ? 'problem' : 'good',
-      title:
-        gap > 0
-          ? `До плана не хватает ${rub(gap)} даже при закрытии всех сделок на согласовании и счетах`
-          : 'Сделок на согласовании и счетах хватает, чтобы закрыть план',
-      text: `До форума ${days} ${pluralRu(days, 'день', 'дня', 'дней')}. Оплачено ${rub(paid)} из плана ${rub(opts.planSum)} (${pct(paid / opts.planSum)}), на согласовании и счетах ${rub(late)}.${gap > 0 ? ' Нужны новые сделки на ранних этапах или сделки крупнее.' : ''}`,
+      title: gap > 0 ? `До плана не хватает ${rub(gap)}` : 'Сделок в работе хватает до плана',
+      text: `Оплачено ${pct(paid / opts.planSum)} плана, до форума ${days} ${pluralRu(days, 'день', 'дня', 'дней')}.${gap > 0 ? ' Нужны новые сделки.' : ''}`,
     });
   }
 
@@ -279,7 +272,7 @@ export function funnelAdvice(
       stage: null,
       level: 'warning',
       title: `${deals(orphan.length)} без ответственного`,
-      text: 'Назначьте, кто ведёт: без менеджера сделка не движется.',
+      text: 'Назначьте, кто ведёт.',
     });
   }
   const rank = { problem: 0, warning: 1, good: 2 };

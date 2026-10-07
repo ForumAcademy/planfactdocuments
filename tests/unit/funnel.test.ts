@@ -88,7 +88,7 @@ describe('funnelAdvice', () => {
     const a = funnelAdvice(deals, '2026-09-10', { forumStart: '2026-11-01', planSum: 1000 });
     const titles = a.map((x) => x.title).join('\n');
     expect(titles).toContain('«Переговоры» → «Согласование»');
-    expect(titles).toContain('«Аутрич» даёт больше всего отказов');
+    expect(titles).toContain('«Аутрич»: 10 отказов из 10');
     expect(titles).toContain('До плана не хватает');
     expect(a[0].level).toBe('problem');
   });
