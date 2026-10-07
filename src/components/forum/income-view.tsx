@@ -88,7 +88,7 @@ export function IncomeView({
   const view: View = sp.get('view') === 'fact' ? 'fact' : 'plan';
   const [items, setItems] = React.useState(initialItems);
   const [cfg, setCfg] = React.useState(initialConfig);
-  const [deals, setDeals] = React.useState(initialDeals);
+  const [deals] = React.useState(initialDeals);
   const [saving, setSaving] = React.useState(false);
   const dates = React.useMemo(
     () => stageDates(cfg, forum.salesStartDate, forum.startDate),
@@ -170,7 +170,6 @@ export function IncomeView({
   const planGap = target - planSum;
   const sumOf = (list: IncomeItemValue[], stage: number | null = null) =>
     incomeSum(list, view, stage);
-  const allTickets = planned.filter(hasStages);
   const rowProps = (it: IncomeItemValue) => ({
     item: it,
     view,
@@ -251,36 +250,12 @@ export function IncomeView({
           ))}
         </TabGroup>
         {saving && <Spinner className="text-xs" label="Сохраняем…" />}
+        {view === 'fact' && <DealsInFact forumId={forum.id} deals={deals} />}
       </div>
-
-      {view === 'fact' && (
-        <DealsInFact
-          forumId={forum.id}
-          deals={deals}
-          setDeals={setDeals}
-          items={items}
-          dates={dates}
-          today={today}
-        />
-      )}
-
-      {todayAdvice.length > 0 && (
-        <section
-          className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm"
-          data-testid="income-today-advice"
-        >
-          <h3 className="flex items-center gap-2 font-semibold text-amber-900">
-            <Lightbulb className="size-4" />
-            Рекомендация на сегодня, {formatDate(today)}
-          </h3>
-          <p className="mt-1 text-ink/80">{todayAdvice.join(' ')}</p>
-        </section>
-      )}
 
       {/* Партнёрства: без стадий продаж */}
       <SectionTitle
         group={gPartners}
-        note="Стадий продаж нет; скидка — индивидуальная для статьи"
         sum={sumOf(partners)}
         plan={view === 'fact' ? incomeSum(partners, 'plan') : undefined}
         actions={addActions(gPartners)}
@@ -308,7 +283,6 @@ export function IncomeView({
       {/* Билеты: у каждой статьи своя стадия продаж */}
       <SectionTitle
         group={gTickets}
-        note="У каждой статьи своя стадия продаж, цена и скидка"
         sum={sumOf(tickets)}
         plan={view === 'fact' ? incomeSum(tickets, 'plan') : undefined}
         actions={addActions(gTickets)}
@@ -373,60 +347,24 @@ export function IncomeView({
         </table>
       </div>
 
-      {/* Итог: партнёрства + билеты по стадиям */}
-      <div className="mt-6 flex items-baseline gap-3">
-        <h2 className="flex items-center gap-2 font-semibold">
-          <span className="h-4 w-1.5 rounded-sm bg-ink/70" />
-          Итого
-        </h2>
-        <span className="text-xs text-ink/50">Партнёрства и билеты по стадиям</span>
-      </div>
-      <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
+      {/* Итог: суммы разделов и стадий видны выше, цель — в шапке; здесь только общий итог */}
+      <div className="thin-scroll mt-6 overflow-x-auto rounded-lg border border-line bg-white">
         <table className={tableClass} data-testid="income-totals">
           <Cols view={view} />
           <tbody>
             <TotalRow
               view={view}
-              label="Партнёрства"
-              value={sumOf(partners)}
-              plan={view === 'fact' ? incomeSum(partners, 'plan') : undefined}
-            />
-            {PRICE_STAGES.map((st, k) => (
-              <TotalRow
-                view={view}
-                key={st.key}
-                label={`Билеты · ${st.label}`}
-                value={sumOf(allTickets, k)}
-                plan={view === 'fact' ? incomeSum(allTickets, 'plan', k) : undefined}
-                indent
-              />
-            ))}
-            <TotalRow
-              view={view}
-              label="Билеты, все стадии"
-              value={sumOf(allTickets)}
-              plan={view === 'fact' ? incomeSum(allTickets, 'plan') : undefined}
-            />
-            <TotalRow
-              view={view}
-              label={
-                view === 'plan' ? 'Итого план с учётом скидок' : 'Итого продано с учётом скидок'
-              }
+              label={view === 'plan' ? 'Итого план' : 'Итого продано'}
               value={view === 'plan' ? planSum : factSum}
               plan={view === 'fact' ? planSum : undefined}
               strong
               testId={view === 'plan' ? 'income-plan-net' : 'income-fact-net'}
             />
-            <TotalRow
-              view={view}
-              label={`Цель: ${expensesLabel} ${formatRub(expenses)} + ${Math.round(INCOME_MARGIN * 100)}%`}
-              value={target}
-              muted
-            />
             {view === 'plan' && target > 0 && (
               <tr className="border-t border-line">
-                <td className="px-3 py-2" colSpan={6}>
-                  {planGap > 0 ? 'До цели по плану не хватает' : 'План выше цели на'}
+                <td className="px-3 py-2 text-ink/70" colSpan={6}>
+                  {planGap > 0 ? 'До цели' : 'План выше цели'} {formatRub(target)}{' '}
+                  {planGap > 0 ? 'не хватает' : 'на'}
                 </td>
                 <td
                   className={cn(
@@ -443,19 +381,30 @@ export function IncomeView({
           </tbody>
         </table>
       </div>
+
+      {view === 'fact' && todayAdvice.length > 0 && (
+        <section
+          className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm"
+          data-testid="income-today-advice"
+        >
+          <h3 className="flex items-center gap-2 font-semibold text-amber-900">
+            <Lightbulb className="size-4" />
+            Рекомендация на сегодня, {formatDate(today)}
+          </h3>
+          <p className="mt-1 text-ink/80">{todayAdvice.join(' ')}</p>
+        </section>
+      )}
     </div>
   );
 }
 
 function SectionTitle({
   group,
-  note,
   sum,
   plan,
   actions,
 }: {
   group: IncomeGroup;
-  note: string;
   sum: number;
   plan?: number;
   /** Кнопки справа над таблицей */
@@ -473,7 +422,6 @@ function SectionTitle({
           из {formatRub(plan)} · {pctOf(sum, plan)}
         </span>
       )}
-      <span className="text-xs text-ink/50">{note}</span>
       {actions && <div className="ml-auto self-center">{actions}</div>}
     </div>
   );
@@ -485,8 +433,6 @@ function TotalRow({
   value,
   plan,
   strong,
-  muted,
-  indent,
   testId,
 }: {
   view: View;
@@ -495,21 +441,12 @@ function TotalRow({
   /** В факте — план для сравнения */
   plan?: number;
   strong?: boolean;
-  muted?: boolean;
-  indent?: boolean;
   testId?: string;
 }) {
   return (
-    <tr
-      className={cn(
-        'border-t border-line first:border-t-0',
-        strong && 'font-semibold',
-        muted && 'text-ink/70',
-        indent && 'text-ink/80',
-      )}
-    >
+    <tr className={cn('border-t border-line first:border-t-0', strong && 'font-semibold')}>
       {/* Сумма — в столбце «Сумма по плану» / «Выручка» таблиц статей выше */}
-      <td className={cn('px-3 py-2', indent && 'pl-8')} colSpan={6}>
+      <td className="px-3 py-2" colSpan={6}>
         {label}
       </td>
       <td className="px-2 py-2 text-right tabular-nums" data-testid={testId}>
