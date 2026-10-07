@@ -10,6 +10,7 @@ import { NumberCell } from '@/components/ui/number-cell';
 import { Spinner } from '@/components/ui/spinner';
 import { TabGroup, TabLink } from '@/components/ui/tab-links';
 import { formatDate } from '@/lib/dates';
+import type { DealValue } from '@/lib/funnel';
 import {
   INCOME_GROUPS,
   INCOME_ITEMS,
@@ -38,6 +39,7 @@ import {
   saveIncomeItems,
 } from '@/server/actions/income';
 import type { ActionResult } from '@/server/action-utils';
+import { DealProposals } from './deal-proposals';
 import { useForum } from './forum-context';
 
 type ItemPatch = {
@@ -108,15 +110,19 @@ function applyPatch(i: IncomeItemValue, p: ItemPatch): IncomeItemValue {
 export function IncomeView({
   initialItems,
   initialConfig,
+  initialDeals,
 }: {
   initialItems: IncomeItemValue[];
   initialConfig: IncomeConfig;
+  /** Оплаченные сделки воронки — предложения в факт */
+  initialDeals: DealValue[];
 }) {
   const { forum, tasks, today } = useForum();
   const sp = useSearchParams();
   const view = sp.get('view') === 'fact' ? 'fact' : 'plan';
   const [items, setItems] = React.useState(initialItems);
   const [cfg, setCfg] = React.useState(initialConfig);
+  const [deals, setDeals] = React.useState(initialDeals);
   const [saving, setSaving] = React.useState(false);
   const dates = stageDates(cfg, forum.salesStartDate, forum.startDate);
   const stageNow = currentStage(dates, today);
@@ -272,6 +278,18 @@ export function IncomeView({
         </TabGroup>
         {saving && <Spinner className="text-xs" label="Сохраняем…" />}
       </div>
+
+      {view === 'fact' && (
+        <DealProposals
+          forumId={forum.id}
+          deals={deals}
+          setDeals={setDeals}
+          items={items}
+          onItems={setItems}
+          dates={dates}
+          today={today}
+        />
+      )}
 
       {todayAdvice.length > 0 && (
         <section

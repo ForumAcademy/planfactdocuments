@@ -1,9 +1,10 @@
 import type { CalendarDayDTO } from '@/lib/work-calendar';
 import 'server-only';
-import type { Employee, Forum, Role, Task } from '@prisma/client';
+import type { Deal, Employee, Forum, Role, Task } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { dbToISO, isoToDb, todayMsk } from '@/lib/dates';
 import type { StatusCounts } from '@/lib/status';
+import { isDealStage, isDealStatus, type DealValue } from '@/lib/funnel';
 import type { DictsDTO, ForumDTO, TaskDTO } from '@/lib/types';
 import {
   DEFAULT_INCOME_CONFIG,
@@ -324,4 +325,35 @@ export async function getIncomeConfig(forumId: number): Promise<IncomeConfig> {
     finalDate: dbToISO(f.priceFinalDate),
     shares: [f.shareStart, f.shareMid, f.shareFinal],
   };
+}
+
+export function toDealValue(d: Deal): DealValue {
+  return {
+    id: d.id,
+    company: d.company,
+    source: d.source ?? '',
+    manager: d.manager ?? '',
+    enteredAt: dbToISO(d.enteredAt),
+    incomeKey: d.incomeKey,
+    qty: d.qty,
+    amount: d.amount,
+    status: isDealStatus(d.status) ? d.status : 'qualification',
+    lostStage: isDealStage(d.lostStage) ? d.lostStage : null,
+    stageChangedAt: dbToISO(d.stageChangedAt),
+    decisionDate: dbToISO(d.decisionDate),
+    paidDate: dbToISO(d.paidDate),
+    comment: d.comment ?? '',
+    incomeStatus:
+      d.incomeStatus === 'added' || d.incomeStatus === 'rejected' ? d.incomeStatus : null,
+    incomeItemKey: d.incomeItemKey,
+  };
+}
+
+/** Сделки воронки форума: по дате входа, новые внизу */
+export async function getDeals(forumId: number): Promise<DealValue[]> {
+  const rows = await prisma.deal.findMany({
+    where: { forumId },
+    orderBy: [{ enteredAt: { sort: 'asc', nulls: 'first' } }, { id: 'asc' }],
+  });
+  return rows.map(toDealValue);
 }

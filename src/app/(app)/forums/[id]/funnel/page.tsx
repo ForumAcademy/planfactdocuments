@@ -1,12 +1,13 @@
-import { Filter } from 'lucide-react';
-import { SectionPlaceholder } from '@/components/forum/section-placeholder';
+import { FunnelView } from '@/components/forum/funnel-view';
+import { getDeals, getIncomeConfig, getIncomeItems } from '@/server/queries';
 
-export default function FunnelPage() {
-  return (
-    <SectionPlaceholder
-      icon={Filter}
-      title="Воронка продаж"
-      description="Движение продаж по этапам: от заявок до оплат."
-    />
-  );
+export default async function FunnelPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const forumId = Number(id);
+  const [deals, items, config] = await Promise.all([
+    getDeals(forumId),
+    getIncomeItems(forumId),
+    getIncomeConfig(forumId),
+  ]);
+  return <FunnelView initialDeals={deals} items={items} config={config} />;
 }

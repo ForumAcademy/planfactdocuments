@@ -136,6 +136,7 @@ model Forum {
   tasks          Task[]
   charts         ReportChart[]
   incomeItems    IncomeItem[]
+  deals          Deal[]
 }
 
 /// Линия доходов: позиция (партнёрство или билет) — цена за единицу, план и факт продаж
@@ -177,6 +178,41 @@ model IncomeItem {
   factOnly      Boolean @default(false)
 
   @@unique([forumId, key])
+}
+
+/// Сделка воронки продаж
+model Deal {
+  id             Int       @id @default(autoincrement())
+  forumId        Int
+  forum          Forum     @relation(fields: [forumId], references: [id], onDelete: Cascade)
+  company        String
+  /// Откуда пришёл (кто привёл): источник лида
+  source         String?
+  /// Кто ведёт сделку
+  manager        String?
+  enteredAt      DateTime? @db.Date
+  /// Направление дохода: ключ позиции доходов (src/lib/income.ts)
+  incomeKey      String?
+  qty            Int       @default(0)
+  /// Сумма сделки, руб.
+  amount         Int       @default(0)
+  /// Этап из src/lib/funnel.ts: qualification … paid или refused
+  status         String    @default("qualification")
+  /// На каком этапе отказ
+  lostStage      String?
+  /// Когда сделка перешла на текущий этап
+  stageChangedAt DateTime? @db.Date
+  decisionDate   DateTime? @db.Date
+  paidDate       DateTime? @db.Date
+  comment        String?
+  /// Оплаченная сделка в факте доходов: null — ждёт решения, added | rejected
+  incomeStatus   String?
+  /// Куда добавлена: позиция доходов и этап продаж
+  incomeItemKey  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([forumId])
 }
 
 enum TaskStatus {
