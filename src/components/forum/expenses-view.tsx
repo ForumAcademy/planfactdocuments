@@ -128,6 +128,12 @@ export function ExpensesView() {
     }
   };
 
+  // Цветная линия по направлениям: в плане — доли плана, в факте — доли фактических расходов
+  const barTotal = view === 'plan' ? total : fact;
+  const barGroups = groups
+    .map((g) => ({ g, v: view === 'plan' ? g.total : g.fact }))
+    .filter((x) => x.v > 0);
+
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-4" data-testid="expenses-view">
       <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
@@ -240,28 +246,24 @@ export function ExpensesView() {
         </TabGroup>
       </div>
 
-      {view === 'plan' && total > 0 && (
-        <div className="mt-4">
+      {barTotal > 0 && (
+        <div className="mt-4" data-testid={`expenses-bar-${view}`}>
           <div className="flex h-3 w-full overflow-hidden rounded-full bg-surface">
-            {groups
-              .filter((g) => g.total > 0)
-              .map((g) => (
-                <div
-                  key={g.category.key}
-                  style={{ width: `${(g.total / total) * 100}%`, background: g.category.color }}
-                  title={`${g.category.label}: ${formatRub(g.total)} (${pct(g.total, total)})`}
-                />
-              ))}
+            {barGroups.map(({ g, v }) => (
+              <div
+                key={g.category.key}
+                style={{ width: `${(v / barTotal) * 100}%`, background: g.category.color }}
+                title={`${g.category.label}: ${formatRub(v)} (${pct(v, barTotal)})`}
+              />
+            ))}
           </div>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink/70">
-            {groups
-              .filter((g) => g.total > 0)
-              .map((g) => (
-                <span key={g.category.key} className="inline-flex items-center gap-1.5">
-                  <span className="size-2.5 rounded-sm" style={{ background: g.category.color }} />
-                  {g.category.label} · {pct(g.total, total)}
-                </span>
-              ))}
+            {barGroups.map(({ g, v }) => (
+              <span key={g.category.key} className="inline-flex items-center gap-1.5">
+                <span className="size-2.5 rounded-sm" style={{ background: g.category.color }} />
+                {g.category.label} · {pct(v, barTotal)}
+              </span>
+            ))}
           </div>
         </div>
       )}
