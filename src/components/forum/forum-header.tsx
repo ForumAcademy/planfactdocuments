@@ -18,8 +18,8 @@ import { PlanExportButton } from './plan-export-dialog';
 
 /** Подразделы вкладки «План» (страницы /tasks и /gantt) */
 const PLAN_SECTIONS = [
-  { key: 'tasks', label: 'Этапы и задачи', short: 'Задачи' },
   { key: 'gantt', label: 'Диаграмма Ганта', short: 'Гант' },
+  { key: 'tasks', label: 'Этапы и задачи', short: 'Задачи' },
 ] as const;
 
 type SubSection = { key: string; label: string; short: string };
@@ -204,10 +204,6 @@ export function ForumHeader({ forumOptions }: { forumOptions: { id: number; name
               <span className="text-[11px] text-ink/60">готовность</span>
             </div>
           </div>
-          <div className="ml-auto flex flex-wrap gap-2">
-            <PlanImportButton />
-            <PlanExportButton />
-          </div>
         </div>
         <TabGroup className="thin-scroll mt-3 flex gap-1 overflow-x-auto" role="tablist">
           {SECTIONS.map((s) => (
@@ -226,27 +222,33 @@ export function ForumHeader({ forumOptions }: { forumOptions: { id: number; name
           ))}
         </TabGroup>
         {current?.sub && (
-          <TabGroup
-            className="mb-3 mt-3 inline-flex rounded-lg border border-line bg-surface p-0.5"
-            role="tablist"
-            aria-label={current.label}
-            data-testid="plan-subtabs"
-          >
-            {current.sub.map((x) => (
-              <TabLink
-                key={x.key}
-                href={href(x.key)}
-                role="tab"
-                active={pathname.endsWith(`/${x.key}`)}
-                className="inline-flex items-center rounded-md px-4 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-                activeClassName="bg-white font-medium text-brand shadow-sm"
-                inactiveClassName="text-ink/70 hover:text-ink"
-              >
-                <span className="sm:hidden">{x.short}</span>
-                <span className="hidden sm:inline">{x.label}</span>
-              </TabLink>
-            ))}
-          </TabGroup>
+          <div className="mb-3 mt-3 flex flex-wrap items-center gap-2">
+            <TabGroup
+              className="inline-flex rounded-lg border border-line bg-surface p-0.5"
+              role="tablist"
+              aria-label={current.label}
+              data-testid="plan-subtabs"
+            >
+              {current.sub.map((x) => (
+                <TabLink
+                  key={x.key}
+                  href={href(x.key)}
+                  role="tab"
+                  active={pathname.endsWith(`/${x.key}`)}
+                  className="inline-flex items-center rounded-md px-4 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+                  activeClassName="bg-white font-medium text-brand shadow-sm"
+                  inactiveClassName="text-ink/70 hover:text-ink"
+                >
+                  <span className="sm:hidden">{x.short}</span>
+                  <span className="hidden sm:inline">{x.label}</span>
+                </TabLink>
+              ))}
+            </TabGroup>
+            <div className="ml-auto flex flex-wrap gap-2">
+              <PlanImportButton />
+              <PlanExportButton />
+            </div>
+          </div>
         )}
       </div>
       <ForumFormDialog
