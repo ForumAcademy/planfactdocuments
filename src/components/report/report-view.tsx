@@ -237,7 +237,7 @@ export function ReportView({
   );
 }
 
-function ChartCard({
+export function ChartCard({
   chart,
   count,
   onDragStart,
@@ -245,8 +245,8 @@ function ChartCard({
 }: {
   chart: ChartDTO;
   count: number;
-  onDragStart: () => void;
-  onDragEnd: () => void;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }) {
   const total = chartTotal(chart.items);
   const segments = computeSegments(chart.items, chart.palette);
@@ -254,7 +254,7 @@ function ChartCard({
   return (
     <Card className="flex flex-col p-4" data-testid="report-chart">
       <div className="flex items-center gap-2">
-        {count > 1 && (
+        {count > 1 && onDragStart && (
           <span
             draggable
             onDragStart={(e) => {
@@ -262,7 +262,7 @@ function ChartCard({
               // Перетаскиваем весь блок, а не только ручку
               const card = e.currentTarget.closest('[data-testid=report-chart]');
               if (card) e.dataTransfer.setDragImage(card, 24, 24);
-              onDragStart();
+              onDragStart?.();
             }}
             onDragEnd={onDragEnd}
             className="-ml-1 cursor-grab rounded p-1 text-ink/40 hover:bg-surface hover:text-ink active:cursor-grabbing"

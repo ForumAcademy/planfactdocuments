@@ -60,7 +60,7 @@ export async function buildPdf(d: ReportExportData): Promise<jsPDF> {
   doc.addFont('DejaVuSans.ttf', 'DejaVu', 'normal');
   doc.addFileToVFS('DejaVuSans-Bold.ttf', bold);
   doc.addFont('DejaVuSans-Bold.ttf', 'DejaVu', 'bold');
-  doc.setProperties({ title: `Отчёт — ${d.forum.name}`, creator: 'Статус форумы' });
+  doc.setProperties({ title: `${d.title ?? 'Отчёт'} — ${d.forum.name}`, creator: 'Статус форумы' });
 
   // Титульный лист
   doc.setFillColor(hex(BRAND));
@@ -70,7 +70,7 @@ export async function buildPdf(d: ReportExportData): Promise<jsPDF> {
   doc.setFont('DejaVu', 'normal');
   doc.setFontSize(18);
   doc.setTextColor('#D6D6F5');
-  doc.text('Отчёт', 58, 110);
+  doc.text(d.title ?? 'Отчёт', 58, 110);
   doc.setFont('DejaVu', 'bold');
   doc.setFontSize(40);
   doc.setTextColor('#FFFFFF');

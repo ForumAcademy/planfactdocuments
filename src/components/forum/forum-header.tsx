@@ -40,6 +40,7 @@ const SECTIONS: {
   { key: 'income', href: 'income', label: 'Доходы', short: 'Доходы' },
   { key: 'funnel', href: 'funnel', label: 'Воронка продаж', short: 'Воронка' },
   { key: 'report', href: 'report', label: 'Отчёт', short: 'Отчёт' },
+  { key: 'report-ae', href: 'report-ae', label: 'Отчёт для АЭ', short: 'АЭ' },
 ];
 
 function activeSection(pathname: string) {

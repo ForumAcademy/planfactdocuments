@@ -14,6 +14,8 @@ export interface ReportExportData {
   forum: ForumDTO;
   reportDate: ISODate;
   charts: ExportChart[];
+  /** Название отчёта на титуле и в имени файла; по умолчанию «Отчёт» */
+  title?: string;
 }
 
 export const BRAND = '0A0A9F';
@@ -29,5 +31,5 @@ export function forumDates(f: ForumDTO): string {
 
 export function exportFileName(d: ReportExportData, ext: string): string {
   const name = d.forum.name.replace(/[\\/:*?"<>|]+/g, ' ').trim();
-  return `${name} — отчёт ${formatDate(d.reportDate)}.${ext}`;
+  return `${name} — ${(d.title ?? 'Отчёт').toLowerCase()} ${formatDate(d.reportDate)}.${ext}`;
 }

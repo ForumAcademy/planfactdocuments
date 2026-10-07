@@ -66,14 +66,14 @@ export async function buildPptx(d: ReportExportData): Promise<PptxGenJS> {
   pptx.layout = 'LAYOUT_WIDE'; // 13,33 × 7,5 дюйма (16:9)
   pptx.author = 'Статус форумы';
   pptx.company = 'Статус форумы';
-  pptx.title = `Отчёт — ${d.forum.name}`;
+  pptx.title = `${d.title ?? 'Отчёт'} — ${d.forum.name}`;
 
   // Титульный слайд
   const title = pptx.addSlide();
   title.background = { color: 'FFFFFF' };
   title.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: W, h: 4.3, fill: { color: BRAND } });
   title.addShape(pptx.ShapeType.rect, { x: 0, y: 4.3, w: W, h: 0.12, fill: { color: BRAND_DARK } });
-  title.addText('Отчёт', {
+  title.addText(d.title ?? 'Отчёт', {
     x: 0.8,
     y: 1.0,
     w: 11,
