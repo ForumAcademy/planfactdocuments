@@ -145,8 +145,8 @@ export function ExpensesView() {
             label="Предельно допустимые расходы, ₽"
             onCommit={(v) => void saveLimit(v)}
             testId="expenses-limit"
-            className="-ml-1 block w-auto py-0 text-left text-2xl font-semibold leading-8"
-            inputClassName="h-8 w-48 text-left text-lg"
+            className="-ml-1 block w-auto py-0 text-left text-lg font-semibold leading-7"
+            inputClassName="h-7 w-48 text-left text-base"
           />
           <div
             className={cn('text-xs', overLimit ? 'text-status-red' : 'text-ink/60')}
@@ -166,7 +166,7 @@ export function ExpensesView() {
           <div className="text-xs text-ink/60">Фактические расходы</div>
           <div
             className={cn(
-              'text-2xl font-semibold tabular-nums leading-8',
+              'text-lg font-semibold tabular-nums leading-7',
               overFact && 'text-status-red',
             )}
             data-testid="expenses-fact-total"

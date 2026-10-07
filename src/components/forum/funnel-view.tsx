@@ -362,7 +362,7 @@ function Kpi({
       <div className="text-xs text-ink/60">{label}</div>
       <div
         className={cn(
-          'mt-0.5 text-2xl font-semibold tabular-nums',
+          'mt-0.5 text-lg font-semibold tabular-nums',
           tone === 'green' && 'text-status-green',
           tone === 'red' && 'text-status-red',
           tone === 'amber' && 'text-amber-600',

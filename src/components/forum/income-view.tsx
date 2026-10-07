@@ -778,7 +778,7 @@ function IncomeSummary({
       <div className="min-w-[220px]">
         <div className="text-xs text-ink/60">План продаж</div>
         <div
-          className="text-2xl font-semibold tabular-nums leading-8"
+          className="text-lg font-semibold tabular-nums leading-7"
           data-testid="income-plan-total"
         >
           {formatRub(plan)}
@@ -801,7 +801,7 @@ function IncomeSummary({
         <div className="text-xs text-ink/60">Фактические доходы</div>
         <div
           className={cn(
-            'text-2xl font-semibold tabular-nums leading-8',
+            'text-lg font-semibold tabular-nums leading-7',
             done && 'text-status-green',
           )}
           data-testid="income-fact-total"
