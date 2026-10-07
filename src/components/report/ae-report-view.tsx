@@ -1,26 +1,22 @@
 'use client';
 
 import * as React from 'react';
-import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { FileDown, Presentation } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DateInput } from '@/components/ui/date-input';
 import { Field } from '@/components/ui/input';
-import { TabGroup, TabLink } from '@/components/ui/tab-links';
 import { useForum } from '@/components/forum/forum-context';
 import { formatDate } from '@/lib/dates';
-import { buildAeCharts } from '@/lib/report/ae-report';
+import { buildAeChart } from '@/lib/report/ae-report';
 import type { TaskDTO } from '@/lib/types';
 import { ChartCard } from './report-view';
 
 const TITLE = 'Отчёт для АЭ';
 
-/** Вкладка «Отчёт для АЭ»: круговые диаграммы расходов форума (план или факт). */
+/** Вкладка «Отчёт для АЭ»: диаграмма фактических расходов по статьям из вкладки «Расходы». */
 export function AeReportView() {
   const { forum, tasks, lookups, today } = useForum();
-  const sp = useSearchParams();
-  const view = sp.get('view') === 'fact' ? 'fact' : 'plan';
   const [reportDate, setDate] = React.useState(today);
   const [busy, setBusy] = React.useState<'pptx' | 'pdf' | null>(null);
 
@@ -28,12 +24,8 @@ export function AeReportView() {
     (t: TaskDTO) => (t.blockId ? (lookups.block.get(t.blockId) ?? null) : null),
     [lookups],
   );
-  const cap = forum.expenseLimit ?? tasks.reduce((s, t) => s + t.cost, 0);
-  const charts = React.useMemo(
-    () => buildAeCharts(tasks, blockOf, view, cap),
-    [tasks, blockOf, view, cap],
-  );
-  const base = `/forums/${forum.id}/report-ae`;
+  const chart = React.useMemo(() => buildAeChart(tasks, blockOf), [tasks, blockOf]);
+  const charts = chart.items.length ? [chart] : [];
 
   const exportAs = async (kind: 'pptx' | 'pdf') => {
     setBusy(kind);
@@ -42,7 +34,7 @@ export function AeReportView() {
         forum,
         reportDate,
         charts,
-        title: `${TITLE}: ${view === 'plan' ? 'план' : 'факт'} расходов`,
+        title: TITLE,
       };
       if (kind === 'pptx') {
         const { exportPptx } = await import('@/lib/report/export-pptx');
@@ -71,32 +63,6 @@ export function AeReportView() {
             ariaLabel="Дата составления отчёта"
           />
         </Field>
-        <TabGroup
-          className="inline-flex rounded-lg border border-line bg-surface p-0.5"
-          role="tablist"
-        >
-          {(
-            [
-              ['plan', 'План', base],
-              ['fact', 'Факт', `${base}?view=fact`],
-            ] as const
-          ).map(([key, label, href]) => (
-            <TabLink
-              key={key}
-              href={href}
-              role="tab"
-              replace
-              scroll={false}
-              active={view === key}
-              className="inline-flex items-center rounded-md px-5 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-              activeClassName="bg-white font-medium text-brand shadow-sm"
-              inactiveClassName="text-ink/70 hover:text-ink"
-              data-testid={`ae-tab-${key}`}
-            >
-              {label}
-            </TabLink>
-          ))}
-        </TabGroup>
         <div className="ml-auto flex flex-wrap gap-2">
           <Button onClick={() => exportAs('pptx')} disabled={!!busy || !charts.length}>
             <Presentation /> {busy === 'pptx' ? 'Формируем…' : 'Скачать PPTX'}
@@ -112,8 +78,7 @@ export function AeReportView() {
           {TITLE}: {forum.name}
         </div>
         <div className="mt-1 text-sm text-white/80">
-          {view === 'plan' ? 'Плановые расходы' : 'Фактические расходы'} по данным вкладки «Расходы»
-          · Дата форума:{' '}
+          Фактические расходы по данным вкладки «Расходы» · Дата форума:{' '}
           {forum.endDate && forum.endDate !== forum.startDate
             ? `${formatDate(forum.startDate)} – ${formatDate(forum.endDate)}`
             : formatDate(forum.startDate)}{' '}
@@ -121,18 +86,16 @@ export function AeReportView() {
         </div>
       </div>
 
-      {/* По диаграмме в строке: в таблицах длинные названия задач */}
-      <div className="mt-4 grid grid-cols-1 gap-4">
+      {/* Как в «Отчёте»: на широком экране диаграмма занимает половину строки */}
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
         {charts.map((c) => (
           <div key={c.id} className="flex [&>*]:flex-1">
             <ChartCard chart={c} count={charts.length} />
           </div>
         ))}
         {charts.length === 0 && (
-          <div className="rounded-md border border-dashed border-line p-10 text-center text-status-gray">
-            {view === 'plan'
-              ? 'Плановых расходов пока нет: укажите стоимость задач во вкладке «Расходы».'
-              : 'Фактических расходов пока нет: внесите факт во вкладке «Расходы» → «Факт».'}
+          <div className="rounded-md border border-dashed border-line p-10 text-center text-status-gray xl:col-span-2">
+            Фактических расходов пока нет: внесите факт во вкладке «Расходы» → «Факт».
           </div>
         )}
       </div>
