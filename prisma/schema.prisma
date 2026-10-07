@@ -127,7 +127,7 @@ model Forum {
   /// Возвращён из архива вручную — автоархив прошедших форумов его не трогает
   keepActive     Boolean       @default(false)
   reportDate     DateTime?     @db.Date
-  /// «Отчёт для АЭ»: порядок статей в диаграмме — desc (по убыванию) или asc
+  /// Устарело: сортировка «Отчёта для АЭ» теперь у каждой его диаграммы (ReportChart.sort)
   aeReportSort   String        @default("desc")
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
@@ -276,7 +276,14 @@ model ReportChart {
   order   Int          @default(0)
   /// Порядок статей в диаграмме: desc — по убыванию, asc — по возрастанию
   sort    String       @default("desc")
+  /// Вкладка: main — «Отчёт», ae — «Отчёт для АЭ»
+  report  String       @default("main")
+  /// Автоматическая диаграмма: ключ из src/lib/report/auto-charts.ts, строки считаются
+  /// из «Расходов» и «Доходов»; null — строки вносятся вручную
+  source  String?
   items   ReportItem[]
+
+  @@index([forumId, report])
 }
 
 model ReportItem {

@@ -14,6 +14,7 @@ import {
   Pencil,
   Plus,
   Presentation,
+  RefreshCw,
   Trash2,
   X,
 } from 'lucide-react';
@@ -25,6 +26,7 @@ import { Field, Input, Select } from '@/components/ui/input';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { formatDate, todayMsk } from '@/lib/dates';
 import { chartTotal, computeSegments, formatPct, type SortDir } from '@/lib/report/donut-layout';
+import { AUTO_SOURCES, autoSource, type AutoSource } from '@/lib/report/auto-charts';
 import { PALETTES, type PaletteKey } from '@/lib/report/palette';
 import type { ForumDTO } from '@/lib/types';
 import { cn, formatAmount, parseAmount } from '@/lib/utils';
@@ -37,26 +39,44 @@ import {
   setChartSort,
   setReportDate,
 } from '@/server/actions/report';
-import type { ChartDTO } from '@/server/report-queries';
+import type { ChartDTO, ReportKind } from '@/server/report-queries';
 import { DonutChart } from './donut-chart';
 import { ReportExcelButtons } from './report-excel';
+import { useAutoCharts } from './use-auto-charts';
 
+const TITLES: Record<ReportKind, string> = { main: 'Отчёт', ae: 'Отчёт для АЭ' };
+
+/**
+ * «Отчёт» и «Отчёт для АЭ»: круговые диаграммы. Базовые строятся сами из «Расходов» и «Доходов»,
+ * их можно переименовать, перекрасить, удалить или перевести в ручные; можно добавлять свои.
+ */
 export function ReportView({
   forum,
+  kind = 'main',
   charts: initial,
   forumOptions,
 }: {
   forum: ForumDTO;
+  kind?: ReportKind;
+  /** Диаграммы обеих вкладок форума — сервер возвращает их вместе */
   charts: ChartDTO[];
   forumOptions: { id: number; name: string }[];
 }) {
-  const [charts, setCharts] = React.useState(initial);
+  const [all, setAll] = React.useState(initial);
+  const charts = React.useMemo(() => all.filter((c) => c.report === kind), [all, kind]);
+  const setCharts = (next: ChartDTO[] | ((list: ChartDTO[]) => ChartDTO[])) =>
+    setAll((list) => {
+      const mine = typeof next === 'function' ? next(list.filter((c) => c.report === kind)) : next;
+      return [...list.filter((c) => c.report !== kind), ...mine];
+    });
+  const shown = useAutoCharts(charts);
+  const title = TITLES[kind];
   const [reportDate, setDate] = React.useState(forum.reportDate ?? todayMsk());
   const [editing, setEditing] = React.useState(false);
   const [copyOpen, setCopyOpen] = React.useState(false);
   const [busy, setBusy] = React.useState<'pptx' | 'pdf' | null>(null);
 
-  React.useEffect(() => setCharts(initial), [initial]);
+  React.useEffect(() => setAll(initial), [initial]);
 
   const apply = (
     res: { ok: true; data: ChartDTO[] } | { ok: false; error: string },
@@ -67,7 +87,7 @@ export function ReportView({
       return false;
     }
     markCacheStale();
-    setCharts(res.data);
+    setAll(res.data);
     toast.success(msg, { id: 'saved' });
     return true;
   };
@@ -106,7 +126,7 @@ export function ReportView({
   const exportAs = async (kind: 'pptx' | 'pdf') => {
     setBusy(kind);
     try {
-      const data = { forum, reportDate, charts };
+      const data = { forum, reportDate, charts: shown, title };
       if (kind === 'pptx') {
         const { exportPptx } = await import('@/lib/report/export-pptx');
         await exportPptx(data);
@@ -143,18 +163,22 @@ export function ReportView({
             {editing ? <X /> : <Pencil />}{' '}
             {editing ? 'Завершить редактирование' : 'Редактировать отчёт'}
           </Button>
-          <Button variant="outline" onClick={() => setCopyOpen(true)}>
-            <Copy /> Скопировать из другого форума
-          </Button>
-          <ReportExcelButtons
-            forum={forum}
-            reportDate={reportDate}
-            charts={charts}
-            onImported={(c) => {
-              markCacheStale();
-              setCharts(c);
-            }}
-          />
+          {kind === 'main' && (
+            <>
+              <Button variant="outline" onClick={() => setCopyOpen(true)}>
+                <Copy /> Скопировать из другого форума
+              </Button>
+              <ReportExcelButtons
+                forum={forum}
+                reportDate={reportDate}
+                charts={shown}
+                onImported={(c) => {
+                  markCacheStale();
+                  setAll(c);
+                }}
+              />
+            </>
+          )}
           <Button
             onClick={() => exportAs('pptx')}
             disabled={!!busy || !charts.length}
@@ -173,7 +197,9 @@ export function ReportView({
       </div>
 
       <div className="mt-4 rounded-md bg-brand-dark px-5 py-4 text-white">
-        <div className="text-xl font-semibold">Отчёт: {forum.name}</div>
+        <div className="text-xl font-semibold">
+          {title}: {forum.name}
+        </div>
         <div className="mt-1 text-sm text-white/80">
           Дата форума:{' '}
           {forum.endDate && forum.endDate !== forum.startDate
@@ -183,11 +209,11 @@ export function ReportView({
         </div>
       </div>
 
-      {editing && <ChartsEditor forumId={forum.id} charts={charts} apply={apply} />}
+      {editing && <ChartsEditor forumId={forum.id} kind={kind} charts={shown} apply={apply} />}
 
       {/* На широком экране — по две диаграммы в строке */}
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
-        {charts.map((c, i) => (
+        {shown.map((c, i) => (
           <div
             key={c.id}
             className={cn(
@@ -231,15 +257,17 @@ export function ReportView({
         )}
       </div>
 
-      <CopyDialog
-        open={copyOpen}
-        onOpenChange={setCopyOpen}
-        forumOptions={forumOptions}
-        onCopy={async (sourceId, withAmounts) => {
-          const res = await copyReportFrom(forum.id, sourceId, withAmounts);
-          if (apply(res, 'Структура отчёта скопирована')) setCopyOpen(false);
-        }}
-      />
+      {kind === 'main' && (
+        <CopyDialog
+          open={copyOpen}
+          onOpenChange={setCopyOpen}
+          forumOptions={forumOptions}
+          onCopy={async (sourceId, withAmounts) => {
+            const res = await copyReportFrom(forum.id, sourceId, withAmounts);
+            if (apply(res, 'Структура отчёта скопирована')) setCopyOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -285,6 +313,7 @@ export function ChartCard({
           </span>
         )}
         <h2 className="text-lg font-semibold">{chart.title}</h2>
+        {chart.source && <AutoBadge source={chart.source} />}
         {onSort && <SortToggle value={sort} onChange={onSort} />}
       </div>
       {/* Диаграмма — по центру блока по вертикали, таблица — сверху */}
@@ -350,6 +379,19 @@ export function ChartCard({
   );
 }
 
+/** Метка автоматической диаграммы: откуда берутся строки */
+function AutoBadge({ source }: { source: AutoSource }) {
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-1 rounded bg-surface px-1.5 py-0.5 text-[11px] text-ink/60 print:hidden"
+      title={`${autoSource(source).hint}. Обновляется сама.`}
+      data-testid="chart-auto"
+    >
+      <RefreshCw className="size-3" /> Авто
+    </span>
+  );
+}
+
 /** Переключатель порядка статей: по убыванию / по возрастанию суммы */
 function SortToggle({ value, onChange }: { value: SortDir; onChange: (v: SortDir) => void }) {
   const opts = [
@@ -392,15 +434,43 @@ type Apply = (
 
 function ChartsEditor({
   forumId,
+  kind,
   charts,
   apply,
 }: {
   forumId: number;
+  kind: ReportKind;
   charts: ChartDTO[];
   apply: Apply;
 }) {
   const confirm = useConfirm();
   const [dragId, setDragId] = React.useState<number | null>(null);
+  const [adding, setAdding] = React.useState(false);
+  const menuRef = React.useRef<HTMLDivElement>(null);
+  // Меню «Добавить диаграмму» закрывается кликом мимо него
+  React.useEffect(() => {
+    if (!adding) return;
+    const close = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setAdding(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [adding]);
+
+  const add = async (source: AutoSource | null) => {
+    setAdding(false);
+    const a = source ? autoSource(source) : null;
+    apply(
+      await saveChart(forumId, {
+        title: a?.title ?? 'Новая диаграмма',
+        palette: a?.palette ?? 'BLUE',
+        unit: 'млн руб.',
+        report: kind,
+        source,
+      }),
+      'Диаграмма добавлена',
+    );
+  };
 
   const move = async (from: number, to: number) => {
     if (to < 0 || to >= charts.length) return;
@@ -417,25 +487,51 @@ function ChartsEditor({
     >
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h2 className="mr-auto font-semibold">Диаграммы отчёта</h2>
-        <Button
-          size="sm"
-          onClick={async () =>
-            apply(
-              await saveChart(forumId, {
-                title: 'Новая диаграмма',
-                palette: 'BLUE',
-                unit: 'млн руб.',
-              }),
-              'Диаграмма добавлена',
-            )
-          }
-        >
-          <Plus /> Добавить диаграмму
-        </Button>
+        <div className="relative" ref={menuRef}>
+          <Button size="sm" onClick={() => setAdding((a) => !a)} data-testid="chart-add">
+            <Plus /> Добавить диаграмму
+          </Button>
+          {adding && (
+            <div
+              className="absolute right-0 z-20 mt-1 w-80 rounded-md border border-line bg-white p-1 shadow-lg"
+              data-testid="chart-add-menu"
+            >
+              <button
+                type="button"
+                className="w-full rounded px-3 py-2 text-left text-sm hover:bg-surface"
+                onClick={() => add(null)}
+              >
+                <div className="font-medium">Пустая диаграмма</div>
+                <div className="text-xs text-ink/60">Строки и суммы вносятся вручную</div>
+              </button>
+              <div className="px-3 pb-1 pt-2 text-[11px] uppercase tracking-wide text-ink/50">
+                Из вкладок «Расходы» и «Доходы»
+              </div>
+              {AUTO_SOURCES.map((a) => (
+                <button
+                  key={a.key}
+                  type="button"
+                  className="flex w-full items-start gap-2 rounded px-3 py-2 text-left text-sm hover:bg-surface"
+                  onClick={() => add(a.key)}
+                >
+                  <span
+                    className="mt-1 size-2.5 shrink-0 rounded-sm"
+                    style={{ background: PALETTES[a.palette].dark }}
+                  />
+                  <span>
+                    <span className="block font-medium">{a.title}</span>
+                    <span className="block text-xs text-ink/60">{a.hint}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       <p className="mb-3 text-xs text-ink/70">
         Порядок диаграмм — это порядок слайдов в презентации. Перетащите карточку за значок ⋮⋮ или
-        используйте стрелки.
+        используйте стрелки. Диаграммы с меткой «Авто» строятся из вкладок «Расходы» и «Доходы» и
+        обновляются сами; их строки можно перевести в ручные.
       </p>
       <div className="space-y-3">
         {charts.map((c, i) => (
@@ -634,120 +730,145 @@ function ChartEditorRow({
           </Button>
         </div>
       </div>
-      <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[560px] text-sm">
-          <thead className="text-left text-xs text-ink/60">
-            <tr>
-              <th className="w-8" />
-              <th className="px-1 py-1">Статья</th>
-              <th className="w-32 px-1 py-1">Сумма ({chart.unit})</th>
-              <th className="w-36 px-1 py-1">Доп. единица</th>
-              <th className="w-28" />
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((it, k) => (
-              <tr key={it.key}>
-                <td className="text-xs text-ink/50">{k + 1}</td>
-                <td className="px-1 py-0.5">
-                  <Input
-                    value={it.name}
-                    onChange={(e) => update(k, { name: e.target.value })}
-                    aria-label="Статья"
-                    className="h-8"
-                  />
-                </td>
-                <td className="px-1 py-0.5">
-                  <Input
-                    value={it.amount}
-                    inputMode="decimal"
-                    onChange={(e) => update(k, { amount: e.target.value })}
-                    aria-label="Сумма"
-                    placeholder="0,00"
-                    className="h-8 text-right tabular-nums"
-                  />
-                </td>
-                <td className="px-1 py-0.5">
-                  <Input
-                    value={it.note}
-                    onChange={(e) => update(k, { note: e.target.value })}
-                    aria-label="Доп. единица"
-                    placeholder="напр. 6 шт."
-                    className="h-8"
-                  />
-                </td>
-                <td className="whitespace-nowrap px-1">
-                  <Button
-                    size="iconSm"
-                    variant="ghost"
-                    disabled={k === 0}
-                    onClick={() => {
-                      const l = [...items];
-                      [l[k - 1], l[k]] = [l[k], l[k - 1]];
-                      change(l);
-                    }}
-                    title="Выше"
-                  >
-                    <ArrowUp />
-                  </Button>
-                  <Button
-                    size="iconSm"
-                    variant="ghost"
-                    disabled={k === items.length - 1}
-                    onClick={() => {
-                      const l = [...items];
-                      [l[k + 1], l[k]] = [l[k], l[k + 1]];
-                      change(l);
-                    }}
-                    title="Ниже"
-                  >
-                    <ArrowDown />
-                  </Button>
-                  <Button
-                    size="iconSm"
-                    variant="ghost"
-                    onClick={() => change(items.filter((_, i) => i !== k))}
-                    title="Удалить строку"
-                  >
-                    <Trash2 />
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+      {chart.source ? (
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-md bg-surface px-3 py-2 text-sm">
+          <RefreshCw className="size-4 shrink-0 text-ink/50" />
+          <span className="mr-auto text-ink/70">
+            {autoSource(chart.source).hint}: строки обновляются сами
+            {chart.items.length ? '' : ' (пока данных нет)'}.
+          </span>
           <Button
             size="sm"
             variant="outline"
+            data-testid="chart-detach"
             onClick={() =>
-              change([...items, { key: `new-${++draftSeq}`, name: '', amount: '', note: '' }])
+              onSaveItems(
+                chart.items.map((i) => ({ name: i.name, amount: i.amount, note: i.note })),
+              )
             }
+            title="Зафиксировать текущие строки и править их вручную; обновляться сами они перестанут"
           >
-            <Plus /> Добавить строку
+            <Pencil /> Править строки вручную
           </Button>
-          <span className="text-sm font-semibold tabular-nums">Итого: {formatAmount(total)}</span>
-          <div className="ml-auto flex items-center gap-2">
-            {dirty && <span className="text-xs text-yellow-800">Есть несохранённые изменения</span>}
-            {dirty && (
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setDirty(false);
-                  setItems(toDraft());
-                  setError('');
-                }}
-              >
-                Отменить
-              </Button>
-            )}
-            <Button onClick={save} disabled={!dirty || saving} data-testid="save-items">
-              {saving ? 'Сохраняем…' : 'Сохранить строки'}
-            </Button>
-          </div>
         </div>
-        {error && <p className="mt-1 text-xs text-status-red">{error}</p>}
-      </div>
+      ) : (
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
+            <thead className="text-left text-xs text-ink/60">
+              <tr>
+                <th className="w-8" />
+                <th className="px-1 py-1">Статья</th>
+                <th className="w-32 px-1 py-1">Сумма ({chart.unit})</th>
+                <th className="w-36 px-1 py-1">Доп. единица</th>
+                <th className="w-28" />
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it, k) => (
+                <tr key={it.key}>
+                  <td className="text-xs text-ink/50">{k + 1}</td>
+                  <td className="px-1 py-0.5">
+                    <Input
+                      value={it.name}
+                      onChange={(e) => update(k, { name: e.target.value })}
+                      aria-label="Статья"
+                      className="h-8"
+                    />
+                  </td>
+                  <td className="px-1 py-0.5">
+                    <Input
+                      value={it.amount}
+                      inputMode="decimal"
+                      onChange={(e) => update(k, { amount: e.target.value })}
+                      aria-label="Сумма"
+                      placeholder="0,00"
+                      className="h-8 text-right tabular-nums"
+                    />
+                  </td>
+                  <td className="px-1 py-0.5">
+                    <Input
+                      value={it.note}
+                      onChange={(e) => update(k, { note: e.target.value })}
+                      aria-label="Доп. единица"
+                      placeholder="напр. 6 шт."
+                      className="h-8"
+                    />
+                  </td>
+                  <td className="whitespace-nowrap px-1">
+                    <Button
+                      size="iconSm"
+                      variant="ghost"
+                      disabled={k === 0}
+                      onClick={() => {
+                        const l = [...items];
+                        [l[k - 1], l[k]] = [l[k], l[k - 1]];
+                        change(l);
+                      }}
+                      title="Выше"
+                    >
+                      <ArrowUp />
+                    </Button>
+                    <Button
+                      size="iconSm"
+                      variant="ghost"
+                      disabled={k === items.length - 1}
+                      onClick={() => {
+                        const l = [...items];
+                        [l[k + 1], l[k]] = [l[k], l[k + 1]];
+                        change(l);
+                      }}
+                      title="Ниже"
+                    >
+                      <ArrowDown />
+                    </Button>
+                    <Button
+                      size="iconSm"
+                      variant="ghost"
+                      onClick={() => change(items.filter((_, i) => i !== k))}
+                      title="Удалить строку"
+                    >
+                      <Trash2 />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                change([...items, { key: `new-${++draftSeq}`, name: '', amount: '', note: '' }])
+              }
+            >
+              <Plus /> Добавить строку
+            </Button>
+            <span className="text-sm font-semibold tabular-nums">Итого: {formatAmount(total)}</span>
+            <div className="ml-auto flex items-center gap-2">
+              {dirty && (
+                <span className="text-xs text-yellow-800">Есть несохранённые изменения</span>
+              )}
+              {dirty && (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setDirty(false);
+                    setItems(toDraft());
+                    setError('');
+                  }}
+                >
+                  Отменить
+                </Button>
+              )}
+              <Button onClick={save} disabled={!dirty || saving} data-testid="save-items">
+                {saving ? 'Сохраняем…' : 'Сохранить строки'}
+              </Button>
+            </div>
+          </div>
+          {error && <p className="mt-1 text-xs text-status-red">{error}</p>}
+        </div>
+      )}
     </div>
   );
 }

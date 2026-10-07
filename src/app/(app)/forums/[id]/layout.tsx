@@ -40,17 +40,18 @@ export default async function ForumLayout({
     getDeals(forumId),
   ]);
   const templateGap = await getTemplateGap(tasks);
+  const income = {
+    items: incomeItems,
+    config: incomeConfig,
+    deals: deals.filter((d) => d.status === 'paid'),
+  };
   return (
-    <ForumProvider forum={forum} tasks={tasks} dicts={dicts} today={todayMsk()}>
+    <ForumProvider forum={forum} tasks={tasks} dicts={dicts} today={todayMsk()} income={income}>
       <ForumBreadcrumbs />
       <ForumHeader
         forumOptions={options.filter((o) => o.id !== forumId)}
         templateGap={templateGap}
-        income={{
-          items: incomeItems,
-          config: incomeConfig,
-          deals: deals.filter((d) => d.status === 'paid'),
-        }}
+        income={income}
       />
       {children}
       <TaskPanel />

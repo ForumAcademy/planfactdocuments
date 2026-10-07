@@ -2,6 +2,7 @@ import type { ChartPalette, PrismaClient } from '@prisma/client';
 import { parsePlanWorkbook } from '@/lib/excel/plan-excel';
 import { addDays, addMonths, isoToDb, todayMsk } from '@/lib/dates';
 import { STAGE_COLORS } from '@/lib/plan';
+import { baseChartRows } from '@/lib/report/auto-charts';
 import { stageNumberFromName } from '@/lib/term-parser';
 import { key } from './dictionaries';
 import { importPlanRows, type PlanRowInput } from './plan-service';
@@ -275,6 +276,13 @@ export async function runSeed(prisma: PrismaClient, masterPlan: Uint8Array): Pro
       });
     }
 
+    // Базовые автоматические диаграммы — первыми, дальше ручные из примера
+    await prisma.reportChart.createMany({
+      data: [
+        ...baseChartRows(forum.id, 'main').map((c) => ({ ...c, order: c.order - 3 })),
+        ...baseChartRows(forum.id, 'ae'),
+      ],
+    });
     for (const [i, chart] of DEFAULT_REPORT.entries()) {
       await prisma.reportChart.create({
         data: {

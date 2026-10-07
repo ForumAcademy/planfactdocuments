@@ -14,6 +14,8 @@ import {
   sortTasks,
   type Filters,
 } from '@/lib/filters';
+import type { DealValue } from '@/lib/funnel';
+import type { IncomeConfig, IncomeItemValue } from '@/lib/income';
 import type { DictsDTO, ForumDTO, TaskDTO } from '@/lib/types';
 import {
   bulkUpdateTasks,
@@ -32,8 +34,16 @@ interface Lookups {
   employee: Map<number, DictsDTO['employees'][number]>;
 }
 
+/** Доходы форума (как во вкладке «Доходы»): статьи, настройки стадий и оплаченные сделки */
+export interface ForumIncome {
+  items: IncomeItemValue[];
+  config: IncomeConfig;
+  deals: DealValue[];
+}
+
 interface ForumContextValue {
   forum: ForumDTO;
+  income: ForumIncome;
   today: ISODate;
   dicts: DictsDTO;
   lookups: Lookups;
@@ -71,8 +81,10 @@ export function ForumProvider({
   tasks: initialTasks,
   dicts,
   today,
+  income,
   children,
 }: {
+  income: ForumIncome;
   forum: ForumDTO;
   tasks: TaskDTO[];
   dicts: DictsDTO;
@@ -238,6 +250,7 @@ export function ForumProvider({
 
   const value: ForumContextValue = {
     forum,
+    income,
     today,
     dicts,
     lookups,

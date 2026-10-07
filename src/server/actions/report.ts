@@ -7,6 +7,7 @@ import { requireEditor } from '@/lib/auth';
 import { isoToDb } from '@/lib/dates';
 import { optionalIsoDate } from '@/lib/validation';
 import { run, UserError, type ActionResult } from '@/server/action-utils';
+import { AUTO_SOURCES } from '@/lib/report/auto-charts';
 import { getReportCharts, type ChartDTO } from '@/server/report-queries';
 
 const id = z.number().int().positive();
@@ -16,6 +17,7 @@ const palette = z.enum(['RED', 'GREEN', 'BLUE']);
 // Дата отчёта хранится в форуме (шапка страницы), её обновляем через пересборку.
 function refresh(forumId: number) {
   revalidatePath(`/forums/${forumId}/report`);
+  revalidatePath(`/forums/${forumId}/report-ae`);
 }
 
 export async function setReportDate(forumId: number, date: string | null): Promise<ActionResult> {
@@ -33,6 +35,12 @@ const chartSchema = z.object({
   title: z.string().trim().min(1, 'Укажите название диаграммы').max(200),
   palette,
   unit: z.string().trim().min(1, 'Укажите единицу измерения').max(50),
+  /** Только при создании: вкладка и источник автоматической диаграммы */
+  report: z.enum(['main', 'ae']).default('main'),
+  source: z
+    .enum(AUTO_SOURCES.map((a) => a.key) as [string, ...string[]])
+    .nullish()
+    .transform((v) => v ?? null),
 });
 
 export async function saveChart(
@@ -55,6 +63,8 @@ export async function saveChart(
           title: d.title,
           palette: d.palette,
           unit: d.unit,
+          report: d.report,
+          source: d.source,
           order: (agg._max.order ?? 0) + 1,
         },
       });
@@ -78,22 +88,6 @@ export async function setChartSort(
       data: { sort: sortDir.parse(sort) },
     });
     return getReportCharts(forumId);
-  });
-}
-
-/** Порядок статей в диаграмме «Отчёта для АЭ». */
-export async function setAeReportSort(
-  forumId: number,
-  sort: 'desc' | 'asc',
-): Promise<ActionResult> {
-  return run(async () => {
-    await requireEditor();
-    await prisma.forum.update({
-      where: { id: forumId },
-      data: { aeReportSort: sortDir.parse(sort) },
-    });
-    revalidatePath(`/forums/${forumId}`, 'layout');
-    return null;
   });
 }
 
@@ -139,7 +133,7 @@ const itemsSchema = z
   )
   .max(100);
 
-/** Заменяет строки диаграммы (порядок — как в списке). */
+/** Заменяет строки диаграммы (порядок — как в списке); автоматическая диаграмма становится ручной. */
 export async function saveChartItems(
   forumId: number,
   chartId: number,
@@ -151,6 +145,7 @@ export async function saveChartItems(
     const chart = await prisma.reportChart.findFirst({ where: { id: chartId, forumId } });
     if (!chart) throw new UserError('Диаграмма не найдена');
     await prisma.$transaction([
+      prisma.reportChart.update({ where: { id: chartId }, data: { source: null } }),
       prisma.reportItem.deleteMany({ where: { chartId } }),
       prisma.reportItem.createMany({
         data: list.map((i, k) => ({
@@ -176,13 +171,13 @@ export async function copyReportFrom(
     await requireEditor();
     if (forumId === sourceForumId) throw new UserError('Выберите другой форум');
     const src = await prisma.reportChart.findMany({
-      where: { forumId: sourceForumId },
+      where: { forumId: sourceForumId, report: 'main' },
       include: { items: { orderBy: { order: 'asc' } } },
       orderBy: { order: 'asc' },
     });
     if (!src.length) throw new UserError('В выбранном форуме нет диаграмм');
     await prisma.$transaction(async (tx) => {
-      await tx.reportChart.deleteMany({ where: { forumId } });
+      await tx.reportChart.deleteMany({ where: { forumId, report: 'main' } });
       for (const c of src) {
         await tx.reportChart.create({
           data: {
@@ -192,6 +187,7 @@ export async function copyReportFrom(
             unit: c.unit,
             sort: c.sort,
             order: c.order,
+            source: c.source,
             items: {
               create: c.items.map((i) => ({
                 name: i.name,
@@ -220,7 +216,7 @@ const importSchema = z
   .min(1, 'В файле нет диаграмм')
   .max(50);
 
-/** Загрузка отчёта из Excel: диаграммы форума заменяются диаграммами из файла. */
+/** Загрузка отчёта из Excel: диаграммы «Отчёта» заменяются диаграммами из файла. */
 export async function importReport(
   forumId: number,
   charts: z.input<typeof importSchema>,
@@ -229,7 +225,7 @@ export async function importReport(
     await requireEditor();
     const list = importSchema.parse(charts);
     await prisma.$transaction(async (tx) => {
-      await tx.reportChart.deleteMany({ where: { forumId } });
+      await tx.reportChart.deleteMany({ where: { forumId, report: 'main' } });
       for (const [k, c] of list.entries()) {
         await tx.reportChart.create({
           data: {

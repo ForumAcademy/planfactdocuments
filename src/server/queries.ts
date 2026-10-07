@@ -180,8 +180,9 @@ export async function getForumsForHome(archived: boolean): Promise<ForumCardData
       FROM "Task" t JOIN "Forum" f ON f.id = t."forumId"
       WHERE f.archived = ${archived}
       GROUP BY t."forumId"`,
+    // Деньги на плашке — из ручных диаграмм «Отчёта»: у автоматических строки в базе не хранятся
     prisma.reportChart.findMany({
-      where: { forum: { archived } },
+      where: { forum: { archived }, report: 'main', source: null },
       select: {
         forumId: true,
         title: true,

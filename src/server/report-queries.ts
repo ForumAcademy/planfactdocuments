@@ -1,7 +1,10 @@
 import 'server-only';
 import { prisma } from '@/lib/db';
 import { isSortDir, type SortDir } from '@/lib/report/donut-layout';
+import { isAutoSource, type AutoSource } from '@/lib/report/auto-charts';
 import type { PaletteKey } from '@/lib/report/palette';
+
+export type ReportKind = 'main' | 'ae';
 
 export interface ChartDTO {
   id: number;
@@ -10,6 +13,10 @@ export interface ChartDTO {
   unit: string;
   sort: SortDir;
   order: number;
+  /** Вкладка: «Отчёт» или «Отчёт для АЭ» */
+  report: ReportKind;
+  /** Автоматическая диаграмма (строки считаются из «Расходов» и «Доходов»); null — ручная */
+  source: AutoSource | null;
   items: { id: number; name: string; amount: number; note: string | null; order: number }[];
 }
 
@@ -26,6 +33,8 @@ export async function getReportCharts(forumId: number): Promise<ChartDTO[]> {
     unit: c.unit,
     sort: isSortDir(c.sort) ? c.sort : 'desc',
     order: c.order,
+    report: c.report === 'ae' ? 'ae' : 'main',
+    source: isAutoSource(c.source) ? c.source : null,
     items: c.items.map((i) => ({
       id: i.id,
       name: i.name,

@@ -8,6 +8,7 @@ import { addDays, dbToISO, diffDays, isoToDb } from '@/lib/dates';
 import { computeTaskDates, mergeNoteIntoComment } from '@/lib/plan';
 import { forumColorSchema, forumSchema, type ForumInput } from '@/lib/validation';
 import { DEFAULT_REPORT } from '@/server/seed';
+import { baseChartRows } from '@/lib/report/auto-charts';
 import { insertTasks } from '@/server/bulk-tasks';
 import type { Prisma, PrismaClient } from '@prisma/client';
 
@@ -24,14 +25,21 @@ const sourceSchema = z.discriminatedUnion('kind', [
 ]);
 export type PlanSource = z.input<typeof sourceSchema>;
 
+/** Отчёты нового форума: базовые автоматические диаграммы и ручные заготовки без строк */
 async function createDefaultReport(db: Db, forumId: number) {
+  const main = baseChartRows(forumId, 'main');
+  const manual = DEFAULT_REPORT.filter((c) => c.title !== 'Расходы' && c.title !== 'Доходы');
   await db.reportChart.createMany({
-    data: DEFAULT_REPORT.map((c, i) => ({
-      forumId,
-      title: c.title,
-      palette: c.palette,
-      order: i + 1,
-    })),
+    data: [
+      ...main,
+      ...manual.map((c, i) => ({
+        forumId,
+        title: c.title,
+        palette: c.palette,
+        order: main.length + i + 1,
+      })),
+      ...baseChartRows(forumId, 'ae'),
+    ],
   });
 }
 
@@ -317,6 +325,8 @@ export async function duplicateForum(id: number): Promise<ActionResult<{ id: num
             unit: c.unit,
             sort: c.sort,
             order: c.order,
+            report: c.report,
+            source: c.source,
             items: {
               create: c.items.map((i) => ({
                 name: i.name,
