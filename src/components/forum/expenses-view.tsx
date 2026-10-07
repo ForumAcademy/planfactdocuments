@@ -36,7 +36,7 @@ import {
   type ExpenseGroup,
 } from '@/lib/expenses';
 import type { TaskDTO } from '@/lib/types';
-import { cn, formatRub, formatRubShort, pluralRu } from '@/lib/utils';
+import { cn, formatRub, formatRubShort, markerLabels, pluralRu } from '@/lib/utils';
 import { setExpenseLimit } from '@/server/actions/forums';
 import { CostCell } from './cells';
 import { ExpensesImportDialog } from './expenses-import-dialog';
@@ -498,8 +498,8 @@ function CategoryMenu({ task: t }: { task: TaskDTO }) {
 }
 
 /**
- * Сводка над вкладками «План» / «Факт»: две полосы на одной шкале с отметкой лимита —
- * сразу видно, сколько уже потрачено из плана и укладывается ли план в лимит.
+ * Сводка над вкладками «План» / «Факт»: полоса фактических расходов с отметками
+ * «План» и «Лимит» — сразу видно, сколько потрачено из плана и не превышен ли лимит.
  */
 function ExpensesSummary({
   plan,
@@ -512,80 +512,78 @@ function ExpensesSummary({
 }) {
   const max = Math.max(plan, fact, limit ?? 0) * 1.05 || 1;
   const at = (v: number) => `${Math.min(100, (v / max) * 100)}%`;
-  const rows = [
-    {
-      key: 'plan',
-      label: 'План',
-      value: plan,
-      bad: limit != null && plan > limit,
-      note: limit ? `${pct(plan, limit)} лимита` : null,
-    },
-    {
-      key: 'fact',
-      label: 'Факт',
-      value: fact,
-      bad: fact > plan || (limit != null && fact > limit),
-      note: plan
-        ? fact > plan
-          ? `Больше плана на ${formatRub(fact - plan)}`
-          : `${pct(fact, plan)} от плана · остаток ${formatRub(plan - fact)}`
-        : null,
-    },
-  ];
+  const bad = fact > plan || (limit != null && fact > limit);
+  const [planShift, limitShift, twoRows] = markerLabels(plan, limit ?? 0, max);
+  const note = plan
+    ? fact > plan
+      ? `Больше плана на ${formatRub(fact - plan)}`
+      : `${pct(fact, plan)} от плана · остаток ${formatRub(plan - fact)}`
+    : null;
   return (
     <section
       className="mt-4 rounded-lg border border-line bg-white px-4 py-3"
       data-testid="expenses-summary"
     >
       <div className="grid grid-cols-[3rem_1fr] gap-x-3 gap-y-2 sm:grid-cols-[3rem_1fr_15rem]">
-        {rows.map((r) => (
-          <React.Fragment key={r.key}>
-            <div className="self-center text-sm font-medium">{r.label}</div>
-            <div className="relative self-center">
-              <div className="h-3 w-full overflow-hidden rounded-full bg-surface">
-                <div
-                  className={cn(
-                    'h-full',
-                    r.bad ? 'bg-status-red' : r.key === 'plan' ? 'bg-brand' : 'bg-status-green',
-                  )}
-                  style={{ width: at(r.value) }}
-                  title={`${r.label}: ${formatRub(r.value)}`}
-                />
-              </div>
-              {limit ? (
-                <div
-                  className="absolute -inset-y-1 w-0 border-l border-ink/70"
-                  style={{ left: at(limit) }}
-                />
-              ) : null}
-            </div>
-            <div className="col-start-2 sm:col-start-auto">
-              <div
-                className={cn('font-semibold tabular-nums', r.bad && 'text-status-red')}
-                data-testid={`expenses-${r.key}-total`}
-              >
-                {formatRub(r.value)}
-              </div>
-              {r.note && (
-                <div className={cn('text-xs', r.bad ? 'text-status-red' : 'text-ink/60')}>
-                  {r.note}
-                </div>
-              )}
-            </div>
-          </React.Fragment>
-        ))}
-        {limit ? (
-          <div className="relative col-start-2 h-4 text-[11px] text-ink/60">
-            <span
-              className="absolute -translate-x-1/2 whitespace-nowrap font-medium text-ink"
-              style={{ left: at(limit) }}
-            >
-              Лимит<span className="hidden sm:inline"> · {formatRubShort(limit)}</span>
-            </span>
+        <div className="self-center text-sm font-medium">Факт</div>
+        <div className="relative self-center">
+          <div className="h-3 w-full overflow-hidden rounded-full bg-surface">
+            <div
+              className={cn('h-full', bad ? 'bg-status-red' : 'bg-status-green')}
+              style={{ width: at(fact) }}
+              title={`Факт: ${formatRub(fact)}`}
+            />
           </div>
-        ) : null}
+          {plan > 0 && <SummaryMarker left={at(plan)} strong />}
+          {limit ? <SummaryMarker left={at(limit)} /> : null}
+        </div>
+        <div className="col-start-2 sm:col-start-auto">
+          <div
+            className={cn('font-semibold tabular-nums', bad && 'text-status-red')}
+            data-testid="expenses-fact-total"
+          >
+            {formatRub(fact)}
+          </div>
+          {note && (
+            <div className={cn('text-xs', bad ? 'text-status-red' : 'text-ink/60')}>{note}</div>
+          )}
+        </div>
+        {(plan > 0 || limit) && (
+          <div
+            className={cn('relative col-start-2 text-[11px] text-ink/60', twoRows ? 'h-8' : 'h-4')}
+          >
+            {plan > 0 && (
+              <span
+                className={cn('absolute whitespace-nowrap font-medium text-ink', planShift)}
+                style={{ left: at(plan) }}
+              >
+                План<span className="hidden sm:inline"> · {formatRubShort(plan)}</span>
+              </span>
+            )}
+            {limit ? (
+              <span
+                className={cn('absolute whitespace-nowrap', limitShift)}
+                style={{ left: at(limit) }}
+              >
+                Лимит<span className="hidden sm:inline"> · {formatRubShort(limit)}</span>
+              </span>
+            ) : null}
+          </div>
+        )}
       </div>
     </section>
+  );
+}
+
+function SummaryMarker({ left, strong }: { left: string; strong?: boolean }) {
+  return (
+    <div
+      className={cn(
+        'absolute -inset-y-1 w-0 border-l',
+        strong ? 'border-ink/70' : 'border-dashed border-ink/40',
+      )}
+      style={{ left }}
+    />
   );
 }
 

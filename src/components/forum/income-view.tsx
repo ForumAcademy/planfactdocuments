@@ -30,7 +30,7 @@ import {
   type IncomeLevel,
   type IncomeItemValue,
 } from '@/lib/income';
-import { cn, formatRub, formatRubShort } from '@/lib/utils';
+import { cn, formatRub, formatRubShort, markerLabels } from '@/lib/utils';
 import { addIncomeItem, removeIncomeItem, saveIncomeItems } from '@/server/actions/income';
 import type { ActionResult } from '@/server/action-utils';
 import { useForum } from './forum-context';
@@ -444,9 +444,8 @@ const LEVEL_TEXT: Record<IncomeLevel, string> = {
 };
 
 /**
- * Сводка доходов над вкладками «План» / «Факт»: две полосы (план и факт) на одной
- * шкале с отметками «Расходы» и «Цель» — сразу видно, покрывают ли продажи расходы
- * и достигнута ли цель.
+ * Сводка доходов над вкладками «План» / «Факт»: полоса факта продаж с отметками
+ * «Расходы» и «План» — сразу видно, покрывают ли продажи расходы и выполнен ли план.
  */
 function IncomeSummary({
   forumId,
@@ -461,24 +460,15 @@ function IncomeSummary({
   plan: number;
   fact: number;
 }) {
-  const max = Math.max(target * 1.15, plan, fact) || 1;
+  // План подбирается под цель; пока его нет — ориентир цель
+  const goal = plan || target;
+  const max = Math.max(goal * 1.15, expenses, fact) || 1;
   const at = (v: number) => `${Math.min(100, (v / max) * 100)}%`;
-  const rows = [
-    {
-      key: 'plan',
-      label: 'План',
-      value: plan,
-      note: target ? `${pctOf(plan, target)} от цели` : null,
-    },
-    {
-      key: 'fact',
-      label: 'Факт',
-      value: fact,
-      note: [target && `${pctOf(fact, target)} от цели`, plan && `${pctOf(fact, plan)} от плана`]
-        .filter(Boolean)
-        .join(' · '),
-    },
-  ];
+  const level = incomeLevel(fact, expenses, goal);
+  const [expShift, planShift, twoRows] = markerLabels(expenses, plan, max);
+  const note = [plan && `${pctOf(fact, plan)} от плана`, target && `${pctOf(fact, target)} от цели`]
+    .filter(Boolean)
+    .join(' · ');
   return (
     <section
       className="rounded-lg border border-line bg-white px-4 py-3"
@@ -502,60 +492,63 @@ function IncomeSummary({
             <span className="ml-2 text-xs">— заполните стоимость задач, чтобы появилась цель</span>
           )}
         </div>
+        <div className="text-sm text-ink/70">
+          План продаж{' '}
+          <span className="tabular-nums" data-testid="income-plan-total">
+            {formatRub(plan)}
+          </span>
+        </div>
       </div>
 
       <div className="mt-3 grid grid-cols-[3rem_1fr] gap-x-3 gap-y-2 sm:grid-cols-[3rem_1fr_13rem]">
-        {rows.map((r) => {
-          const level = incomeLevel(r.value, expenses, target);
-          return (
-            <React.Fragment key={r.key}>
-              <div className="self-center text-sm font-medium">{r.label}</div>
-              <div className="relative self-center">
-                <div className="h-3 w-full overflow-hidden rounded-full bg-surface">
-                  <div
-                    className={cn('h-full', LEVEL_BAR[level])}
-                    style={{ width: at(r.value) }}
-                    title={`${r.label}: ${formatRub(r.value)}`}
-                  />
-                </div>
-                {expenses > 0 && <Marker left={at(expenses)} />}
-                {target > 0 && <Marker left={at(target)} strong />}
-              </div>
-              <div className="col-start-2 sm:col-start-auto">
-                <div className="font-semibold tabular-nums" data-testid={`income-${r.key}-total`}>
-                  {formatRub(r.value)}
-                </div>
-                {r.note && (
-                  <div className={cn('text-xs', target ? LEVEL_TEXT[level] : 'text-ink/60')}>
-                    {r.note}
-                  </div>
-                )}
-              </div>
-            </React.Fragment>
-          );
-        })}
-        {target > 0 && (
-          <div className="relative col-start-2 h-4 text-[11px] text-ink/60">
-            <span
-              className="absolute -translate-x-1/2 whitespace-nowrap"
-              style={{ left: at(expenses) }}
-            >
-              Расходы<span className="hidden sm:inline"> · {formatRubShort(expenses)}</span>
-            </span>
-            <span
-              className="absolute -translate-x-1/2 whitespace-nowrap font-medium text-ink"
-              style={{ left: at(target) }}
-            >
-              Цель<span className="hidden sm:inline"> · {formatRubShort(target)}</span>
-            </span>
+        <div className="self-center text-sm font-medium">Факт</div>
+        <div className="relative self-center">
+          <div className="h-3 w-full overflow-hidden rounded-full bg-surface">
+            <div
+              className={cn('h-full', LEVEL_BAR[level])}
+              style={{ width: at(fact) }}
+              title={`Факт: ${formatRub(fact)}`}
+            />
+          </div>
+          {expenses > 0 && <Marker left={at(expenses)} />}
+          {plan > 0 && <Marker left={at(plan)} strong />}
+        </div>
+        <div className="col-start-2 sm:col-start-auto">
+          <div className="font-semibold tabular-nums" data-testid="income-fact-total">
+            {formatRub(fact)}
+          </div>
+          {note && (
+            <div className={cn('text-xs', goal ? LEVEL_TEXT[level] : 'text-ink/60')}>{note}</div>
+          )}
+        </div>
+        {(expenses > 0 || plan > 0) && (
+          <div
+            className={cn('relative col-start-2 text-[11px] text-ink/60', twoRows ? 'h-8' : 'h-4')}
+          >
+            {expenses > 0 && (
+              <span
+                className={cn('absolute whitespace-nowrap', expShift)}
+                style={{ left: at(expenses) }}
+              >
+                Расходы<span className="hidden sm:inline"> · {formatRubShort(expenses)}</span>
+              </span>
+            )}
+            {plan > 0 && (
+              <span
+                className={cn('absolute whitespace-nowrap font-medium text-ink', planShift)}
+                style={{ left: at(plan) }}
+              >
+                План<span className="hidden sm:inline"> · {formatRubShort(plan)}</span>
+              </span>
+            )}
           </div>
         )}
       </div>
-      {target > 0 && (
+      {goal > 0 && (
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink/70">
           <Legend className="bg-status-red" label="Не покрывает расходы" />
           <Legend className="bg-brand" label="Расходы покрыты" />
-          <Legend className="bg-status-green" label="Цель достигнута" />
+          <Legend className="bg-status-green" label="План выполнен" />
         </div>
       )}
     </section>
