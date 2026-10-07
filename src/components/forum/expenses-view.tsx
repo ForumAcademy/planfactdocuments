@@ -304,7 +304,12 @@ export function ExpensesView() {
             <thead className="bg-surface text-left text-xs text-ink/70">
               <tr>
                 <th className="px-3 py-2 font-medium">Направление / статья расходов</th>
-                <th className="w-14 px-2 py-2 font-medium">№</th>
+                <th
+                  className="w-20 px-2 py-2 font-medium"
+                  title="Номер задачи в плане: по нему расход связан с задачей и с файлом Excel"
+                >
+                  № задачи
+                </th>
                 <th className="w-48 px-2 py-2 font-medium">Этап</th>
                 <th className="w-32 px-2 py-2 font-medium">Статус</th>
                 <th className="w-36 px-2 py-2 text-right font-medium">Стоимость</th>
@@ -530,7 +535,12 @@ function FactTable({
         <thead className="bg-surface text-left text-xs text-ink/70">
           <tr>
             <th className="px-3 py-2 font-medium">Направление / статья расходов</th>
-            <th className="w-14 px-2 py-2 font-medium">№</th>
+            <th
+              className="w-20 px-2 py-2 font-medium"
+              title="Номер задачи в плане: по нему расход связан с задачей и с файлом Excel"
+            >
+              № задачи
+            </th>
             <th className="w-36 px-2 py-2 text-right font-medium">План</th>
             <th className="w-36 px-2 py-2 text-right font-medium">Факт</th>
             <th className="w-36 px-2 py-2 text-right font-medium">Остаток</th>

@@ -364,7 +364,14 @@ export function IncomeView({
       </div>
 
       {/* Итог: партнёрства + билеты за все этапы */}
-      <div className="mt-4 overflow-hidden rounded-lg border border-line bg-white">
+      <div className="mt-6 flex items-baseline gap-3">
+        <h2 className="flex items-center gap-2 font-semibold">
+          <span className="h-4 w-1.5 rounded-sm bg-ink/70" />
+          Итого
+        </h2>
+        <span className="text-xs text-ink/50">Партнёрства и билеты за все этапы</span>
+      </div>
+      <div className="mt-2 overflow-hidden rounded-lg border border-line bg-white">
         <table className="w-full text-sm" data-testid="income-totals">
           <tbody>
             <TotalRow label="Партнёрства" value={view === 'plan' ? partnersPlan : partnersFact} />
