@@ -348,11 +348,8 @@ export function toDealValue(d: Deal): DealValue {
   };
 }
 
-/** Сделки воронки форума: по дате входа, новые внизу */
+/** Сделки воронки форума: последние добавленные — сверху */
 export async function getDeals(forumId: number): Promise<DealValue[]> {
-  const rows = await prisma.deal.findMany({
-    where: { forumId },
-    orderBy: [{ enteredAt: { sort: 'asc', nulls: 'first' } }, { id: 'asc' }],
-  });
+  const rows = await prisma.deal.findMany({ where: { forumId }, orderBy: { id: 'desc' } });
   return rows.map(toDealValue);
 }

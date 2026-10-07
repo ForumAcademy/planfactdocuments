@@ -93,7 +93,8 @@ export function DealsTable({
   const [manager, setManager] = React.useState(() => param('manager'));
   const [saving, setSaving] = React.useState(false);
   const [adding, setAdding] = React.useState(false);
-  const [newCompany, setNewCompany] = React.useState('');
+  /** Только что добавленная сделка — подсвечивается в начале таблицы */
+  const [fresh, setFresh] = React.useState<number | null>(null);
   const [importOpen, setImportOpen] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
   const [parsed, setParsed] = React.useState<ParsedFunnel | null>(null);
@@ -142,23 +143,23 @@ export function DealsTable({
     }
   };
 
-  const add = async () => {
-    const company = newCompany.trim();
-    if (!company) return;
+  const add = async (input: NewDeal): Promise<boolean> => {
     setSaving(true);
-    const res = await createDeal(forum.id, {
-      company,
-      ...(source ? { source } : {}),
-      ...(manager ? { manager } : {}),
-      ...(status ? { status } : {}),
-    });
+    const res = await createDeal(forum.id, input);
     setSaving(false);
-    if (res.ok) {
-      setDeals((list) => [...list, res.data]);
-      setNewCompany('');
-      setAdding(false);
-      setQuery('');
-    } else toast.error(res.error);
+    if (!res.ok) {
+      toast.error(res.error);
+      return false;
+    }
+    // Новые сделки — сверху; сбрасываем фильтры, чтобы сделку было видно
+    setDeals((list) => [res.data, ...list]);
+    setQuery('');
+    setStatus('');
+    setSource('');
+    setManager('');
+    setFresh(res.data.id);
+    toast.success(`Сделка «${res.data.company}» добавлена`);
+    return true;
   };
 
   const remove = async (d: DealValue) => {
@@ -378,43 +379,16 @@ export function DealsTable({
             </tr>
           </thead>
           <tbody>
-            {adding && (
-              <tr className="border-t border-line bg-brand-light/40">
-                <td />
-                <td className="px-2 py-1.5" colSpan={12}>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      autoFocus
-                      value={newCompany}
-                      onChange={(e) => setNewCompany(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') void add();
-                        if (e.key === 'Escape') setAdding(false);
-                      }}
-                      placeholder="Название компании"
-                      className="h-8 w-80"
-                      data-testid="deals-new-company"
-                    />
-                    <Button size="sm" onClick={() => void add()} disabled={!newCompany.trim()}>
-                      Добавить
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>
-                      Отмена
-                    </Button>
-                    <span className="text-xs text-ink/50">
-                      Остальное заполните в строке: этап, сумму, источник
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            )}
             {shown.map((d, idx) => {
               const stale = isStale(d, today);
               const days = daysInStage(d, today);
               return (
                 <tr
                   key={d.id}
-                  className="group border-t border-line hover:bg-surface/50"
+                  className={cn(
+                    'group border-t border-line hover:bg-surface/50',
+                    d.id === fresh && 'bg-status-green/10',
+                  )}
                   data-testid="deal-row"
                 >
                   <td className="px-2 py-1 text-right text-xs text-ink/40">{idx + 1}</td>
@@ -563,6 +537,16 @@ export function DealsTable({
           <option key={s} value={s} />
         ))}
       </datalist>
+
+      <NewDealDialog
+        open={adding}
+        onOpenChange={setAdding}
+        onSave={add}
+        saving={saving}
+        today={today}
+        directions={directions}
+        defaults={{ source, manager, status: status || 'qualification' }}
+      />
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
         <DialogContent title="Загрузка воронки из Excel" className="max-w-lg">
@@ -725,5 +709,240 @@ function DateCell({
         !draft && 'text-transparent hover:text-status-gray focus:text-ink',
       )}
     />
+  );
+}
+
+type NewDeal = {
+  company: string;
+  source: string;
+  manager: string;
+  enteredAt: string | null;
+  incomeKey: string | null;
+  qty: number;
+  amount: number;
+  status: DealStatus;
+  lostStage: DealStageKey | null;
+  decisionDate: string | null;
+  paidDate: string | null;
+  comment: string;
+};
+
+/** Новая сделка: все поля сразу, сохраняется одной кнопкой */
+function NewDealDialog({
+  open,
+  onOpenChange,
+  onSave,
+  saving,
+  today,
+  directions,
+  defaults,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onSave: (d: NewDeal) => Promise<boolean>;
+  saving: boolean;
+  today: string;
+  directions: IncomeItemValue[];
+  defaults: { source: string; manager: string; status: DealStatus };
+}) {
+  const empty = (): NewDeal => ({
+    company: '',
+    source: defaults.source,
+    manager: defaults.manager,
+    enteredAt: today,
+    incomeKey:
+      directions.find((i) => i.key === 'participant')?.key ??
+      directions.find((i) => i.group === 'tickets')?.key ??
+      null,
+    qty: 1,
+    amount: 0,
+    status: defaults.status,
+    lostStage: null,
+    decisionDate: null,
+    paidDate: null,
+    comment: '',
+  });
+  const [d, setD] = React.useState<NewDeal>(empty);
+  const [error, setError] = React.useState('');
+  React.useEffect(() => {
+    if (open) {
+      setD(empty());
+      setError('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  const set = <K extends keyof NewDeal>(k: K, v: NewDeal[K]) => setD((x) => ({ ...x, [k]: v }));
+  const num = (v: string) => {
+    const n = Math.round(Number(v.replace(/[\s  ₽]/g, '').replace(',', '.')));
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!d.company.trim()) {
+      setError('Укажите компанию');
+      return;
+    }
+    if (d.status === 'paid' && !d.paidDate) {
+      setError('Для оплаченной сделки укажите дату оплаты');
+      return;
+    }
+    const ok = await onSave({
+      ...d,
+      company: d.company.trim(),
+      source: d.source.trim(),
+      manager: d.manager.trim(),
+      comment: d.comment.trim(),
+      lostStage: d.status === 'refused' ? d.lostStage : null,
+    });
+    if (ok) onOpenChange(false);
+  };
+
+  const label = 'mb-1 block text-xs font-medium text-ink/70';
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent title="Новая сделка" wide>
+        <form onSubmit={(e) => void submit(e)} className="space-y-4" data-testid="new-deal-form">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className={label}>Компания *</label>
+              <Input
+                autoFocus
+                value={d.company}
+                onChange={(e) => set('company', e.target.value)}
+                placeholder="Например, ООО «Ромашка»"
+                data-testid="new-deal-company"
+              />
+            </div>
+            <div>
+              <label className={label}>Откуда пришёл</label>
+              <Input
+                value={d.source}
+                list="deal-sources"
+                onChange={(e) => set('source', e.target.value)}
+                placeholder="Аутрич, Маркетинг, Участник…"
+              />
+            </div>
+            <div>
+              <label className={label}>Кто ведёт</label>
+              <Input
+                value={d.manager}
+                list="deal-managers"
+                onChange={(e) => set('manager', e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={label}>Дата входа в воронку</label>
+              <Input
+                type="date"
+                value={d.enteredAt ?? ''}
+                onChange={(e) => set('enteredAt', e.target.value || null)}
+              />
+            </div>
+            <div>
+              <label className={label}>Направление дохода</label>
+              <Select
+                value={d.incomeKey ?? ''}
+                onChange={(e) => set('incomeKey', e.target.value || null)}
+              >
+                <option value="">—</option>
+                {directions.map((i) => (
+                  <option key={i.key} value={i.key}>
+                    {i.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <label className={label}>Количество билетов, шт.</label>
+              <Input
+                inputMode="numeric"
+                value={d.qty || ''}
+                onChange={(e) => set('qty', num(e.target.value))}
+              />
+            </div>
+            <div>
+              <label className={label}>Сумма, ₽</label>
+              <Input
+                inputMode="numeric"
+                value={d.amount ? d.amount.toLocaleString('ru-RU') : ''}
+                onChange={(e) => set('amount', num(e.target.value))}
+                data-testid="new-deal-amount"
+              />
+            </div>
+            <div>
+              <label className={label}>Статус</label>
+              <Select
+                value={d.status}
+                onChange={(e) => {
+                  const st = e.target.value as DealStatus;
+                  setD((x) => ({
+                    ...x,
+                    status: st,
+                    paidDate: st === 'paid' && !x.paidDate ? today : x.paidDate,
+                  }));
+                }}
+                data-testid="new-deal-status"
+              >
+                {DEAL_STATUSES.map((st) => (
+                  <option key={st.key} value={st.key}>
+                    {st.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            {d.status === 'refused' ? (
+              <div>
+                <label className={label}>На каком этапе отказ</label>
+                <Select
+                  value={d.lostStage ?? ''}
+                  onChange={(e) =>
+                    set('lostStage', (e.target.value || null) as DealStageKey | null)
+                  }
+                >
+                  <option value="">Не знаю</option>
+                  {DEAL_STAGES.filter((st) => st.key !== 'paid').map((st) => (
+                    <option key={st.key} value={st.key}>
+                      {st.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ) : (
+              <div className="hidden sm:block" />
+            )}
+            <div>
+              <label className={label}>Дата решения</label>
+              <Input
+                type="date"
+                value={d.decisionDate ?? ''}
+                onChange={(e) => set('decisionDate', e.target.value || null)}
+              />
+            </div>
+            <div>
+              <label className={label}>Дата оплаты</label>
+              <Input
+                type="date"
+                value={d.paidDate ?? ''}
+                onChange={(e) => set('paidDate', e.target.value || null)}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className={label}>Комментарий</label>
+              <Input value={d.comment} onChange={(e) => set('comment', e.target.value)} />
+            </div>
+          </div>
+          {error && <p className="text-sm text-status-red">{error}</p>}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => onOpenChange(false)}>
+              Отмена
+            </Button>
+            <Button type="submit" disabled={saving} data-testid="new-deal-save">
+              {saving ? 'Сохраняем…' : 'Сохранить сделку'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
