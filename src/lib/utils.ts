@@ -48,15 +48,3 @@ export function pluralRu(n: number, one: string, few: string, many: string): str
 export function normalizeSpaces(s: string): string {
   return s.replace(/[\s ]+/g, ' ').trim();
 }
-
-/**
- * Подписи двух отметок на шкале: по центру отметки, а если отметки ближе 15% шкалы — в две
- * строки (вторая ниже), каждая прижата к своей отметке со стороны, где есть место.
- * Возвращает классы подписей и признак двух строк.
- */
-export function markerLabels(a: number, b: number, max: number): [string, string, boolean] {
-  const center = '-translate-x-1/2';
-  if (!max || Math.abs(a - b) / max >= 0.15) return [center, center, false];
-  const side = (v: number) => (v / max > 0.5 ? '-translate-x-full' : '');
-  return [`top-0 ${side(a)}`, `top-4 ${side(b)}`, true];
-}

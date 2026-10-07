@@ -27,7 +27,6 @@ import {
   autoPlan,
   currentStage,
   factTotals,
-  incomeLevel,
   incomeTarget,
   planAdvice,
   planTotals,
@@ -38,10 +37,9 @@ import {
   stagePrices,
   type IncomeConfig,
   type IncomeGroup,
-  type IncomeLevel,
   type IncomeItemValue,
 } from '@/lib/income';
-import { cn, formatRub, formatRubShort, markerLabels } from '@/lib/utils';
+import { cn, formatRub } from '@/lib/utils';
 import {
   addIncomeItem,
   removeIncomeItem,
@@ -820,20 +818,9 @@ function PriceStages({
   );
 }
 
-const LEVEL_BAR: Record<IncomeLevel, string> = {
-  loss: 'bg-status-red',
-  covered: 'bg-brand',
-  target: 'bg-status-green',
-};
-const LEVEL_TEXT: Record<IncomeLevel, string> = {
-  loss: 'text-status-red',
-  covered: 'text-brand',
-  target: 'text-status-green',
-};
-
 /**
- * Сводка доходов над вкладками «План» / «Факт»: полоса факта продаж с отметками
- * «Расходы» и «План» — сразу видно, покрывают ли продажи расходы и выполнен ли план.
+ * Шапка «Доходов» по образцу «Расходов»: план продаж и фактические доходы,
+ * под фактом — шкала выполнения плана, процент и сколько осталось продать.
  */
 function IncomeSummary({
   forumId,
@@ -848,121 +835,70 @@ function IncomeSummary({
   plan: number;
   fact: number;
 }) {
-  // План подбирается под цель; пока его нет — ориентир цель
-  const goal = plan || target;
-  const max = Math.max(goal * 1.15, expenses, fact) || 1;
-  const at = (v: number) => `${Math.min(100, (v / max) * 100)}%`;
-  const level = incomeLevel(fact, expenses, goal);
-  const [expShift, planShift, twoRows] = markerLabels(expenses, plan, max);
-  const note = [plan && `${pctOf(fact, plan)} от плана`, target && `${pctOf(fact, target)} от цели`]
-    .filter(Boolean)
-    .join(' · ');
+  const done = plan > 0 && fact >= plan;
+  const covered = expenses > 0 && fact >= expenses;
   return (
-    <section
-      className="rounded-lg border border-line bg-white px-4 py-3"
-      data-testid="income-summary"
-    >
-      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
-        <div>
-          <span className="text-xs text-ink/60">
-            Цель по доходу (расходы + {Math.round(INCOME_MARGIN * 100)}%)
-          </span>
-          <div className="text-xl font-semibold tabular-nums" data-testid="income-target">
-            {formatRub(target)}
-          </div>
+    <div className="flex flex-wrap items-start gap-x-8 gap-y-3" data-testid="income-summary">
+      <div className="min-w-[220px]">
+        <div className="text-xs text-ink/60">План продаж</div>
+        <div
+          className="text-2xl font-semibold tabular-nums leading-8"
+          data-testid="income-plan-total"
+        >
+          {formatRub(plan)}
         </div>
-        <div className="text-sm text-ink/70">
-          Расходы{' '}
-          <Link href={`/forums/${forumId}/expenses`} className="text-brand hover:underline">
-            {formatRub(expenses)}
-          </Link>
-          {!expenses && (
-            <span className="ml-2 text-xs">— заполните стоимость задач, чтобы появилась цель</span>
+        <div className="text-xs text-ink/60" data-testid="income-target">
+          {expenses ? (
+            <>
+              Цель {formatRub(target)}: расходы{' '}
+              <Link href={`/forums/${forumId}/expenses`} className="text-brand hover:underline">
+                {formatRub(expenses)}
+              </Link>{' '}
+              + {Math.round(INCOME_MARGIN * 100)}%
+            </>
+          ) : (
+            'Заполните стоимость задач в «Расходах», чтобы появилась цель'
           )}
-        </div>
-        <div className="text-sm text-ink/70">
-          План продаж{' '}
-          <span className="tabular-nums" data-testid="income-plan-total">
-            {formatRub(plan)}
-          </span>
         </div>
       </div>
-
-      <div className="mt-3 grid grid-cols-[3rem_1fr] gap-x-3 gap-y-2 sm:grid-cols-[3rem_1fr_13rem]">
-        <div className="self-center text-sm font-medium">Факт</div>
-        <div className="relative self-center">
-          <div className="h-3 w-full overflow-hidden rounded-full bg-surface">
-            <div
-              className={cn('h-full', LEVEL_BAR[level])}
-              style={{ width: at(fact) }}
-              title={`Факт: ${formatRub(fact)}`}
-            />
-          </div>
-          {expenses > 0 && <Marker left={at(expenses)} />}
-          {plan > 0 && <Marker left={at(plan)} strong />}
-        </div>
-        <div className="col-start-2 sm:col-start-auto">
-          <div className="font-semibold tabular-nums" data-testid="income-fact-total">
-            {formatRub(fact)}
-          </div>
-          {note && (
-            <div className={cn('text-xs', goal ? LEVEL_TEXT[level] : 'text-ink/60')}>{note}</div>
+      <div className="min-w-[260px]">
+        <div className="text-xs text-ink/60">Фактические доходы</div>
+        <div
+          className={cn(
+            'text-2xl font-semibold tabular-nums leading-8',
+            done && 'text-status-green',
           )}
+          data-testid="income-fact-total"
+        >
+          {formatRub(fact)}
         </div>
-        {(expenses > 0 || plan > 0) && (
-          <div
-            className={cn('relative col-start-2 text-[11px] text-ink/60', twoRows ? 'h-8' : 'h-4')}
-          >
+        {plan > 0 && (
+          <>
+            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface">
+              <div
+                className={cn('h-full', done ? 'bg-status-green' : 'bg-brand')}
+                style={{ width: `${Math.min(100, (fact / plan) * 100)}%` }}
+              />
+            </div>
+            <div className={cn('mt-0.5 text-xs', done ? 'text-status-green' : 'text-ink/60')}>
+              {done
+                ? `План выполнен${fact > plan ? `, сверх плана ${formatRub(fact - plan)}` : ''}`
+                : `Осталось ${formatRub(plan - fact)} · ${pctOne(fact, plan)} от плана`}
+            </div>
             {expenses > 0 && (
-              <span
-                className={cn('absolute whitespace-nowrap', expShift)}
-                style={{ left: at(expenses) }}
-              >
-                Расходы<span className="hidden sm:inline"> · {formatRubShort(expenses)}</span>
-              </span>
+              <div className={cn('text-xs', covered ? 'text-ink/60' : 'text-status-red')}>
+                {covered ? 'Расходы покрыты' : `До покрытия расходов ${formatRub(expenses - fact)}`}
+              </div>
             )}
-            {plan > 0 && (
-              <span
-                className={cn('absolute whitespace-nowrap font-medium text-ink', planShift)}
-                style={{ left: at(plan) }}
-              >
-                План<span className="hidden sm:inline"> · {formatRubShort(plan)}</span>
-              </span>
-            )}
-          </div>
+          </>
         )}
       </div>
-      {goal > 0 && (
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink/70">
-          <Legend className="bg-status-red" label="Не покрывает расходы" />
-          <Legend className="bg-brand" label="Расходы покрыты" />
-          <Legend className="bg-status-green" label="План выполнен" />
-        </div>
-      )}
-    </section>
+    </div>
   );
 }
 
-function Marker({ left, strong }: { left: string; strong?: boolean }) {
-  return (
-    <div
-      className={cn(
-        'absolute -inset-y-1 w-0 border-l',
-        strong ? 'border-ink/70' : 'border-dashed border-ink/40',
-      )}
-      style={{ left }}
-    />
-  );
-}
-
-function Legend({ className, label }: { className: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={cn('size-2.5 rounded-sm', className)} />
-      {label}
-    </span>
-  );
-}
+const pctOne = (part: number, total: number) =>
+  `${((part / total) * 100).toLocaleString('ru-RU', { maximumFractionDigits: 1 })}%`;
 
 function GroupRow({
   group: g,
