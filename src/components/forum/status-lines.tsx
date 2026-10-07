@@ -15,8 +15,8 @@ import type { IncomeConfig, IncomeItemValue } from '@/lib/income';
 import { cn } from '@/lib/utils';
 import { useForum } from './forum-context';
 
-/** Цвет — только сигнал: точка и короткая метка, без заливки строки */
-const DOT: Record<Health, string> = {
+/** Цвет статуса — у линии и короткой метки, строка без заливки */
+const BAR: Record<Health, string> = {
   green: 'bg-status-green',
   yellow: 'bg-status-yellow',
   red: 'bg-status-red',
@@ -100,13 +100,12 @@ function Line({
       data-health={line.health}
     >
       <span className="flex items-center gap-2 text-sm font-medium group-hover:text-brand">
-        <span className={cn('size-2 shrink-0 rounded-full', DOT[line.health])} />
         {title}
       </span>
       <span className="col-span-2 row-start-2 flex items-center gap-3 sm:contents">
         <span className="relative h-1.5 min-w-0 flex-1 rounded-full bg-surface sm:col-start-2 sm:row-start-1">
           <span
-            className="block h-full rounded-full bg-brand/50"
+            className={cn('block h-full rounded-full', BAR[line.health])}
             style={{ width: `${line.fill * 100}%` }}
           />
           {line.mark !== null && (
