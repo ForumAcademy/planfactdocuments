@@ -854,7 +854,7 @@ function NewDealDialog({
               </Select>
             </div>
             <div>
-              <label className={label}>Количество билетов, шт.</label>
+              <label className={label}>Количество, шт.</label>
               <Input
                 inputMode="numeric"
                 value={d.qty || ''}
