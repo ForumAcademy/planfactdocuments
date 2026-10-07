@@ -28,8 +28,12 @@ const patchSchema = z.object({
   factQty: qty.optional(),
   factMid: qty.optional(),
   factFinal: qty.optional(),
-  discountPersonal: amount.optional(),
-  discountPartner: amount.optional(),
+  planMid: qty.optional(),
+  planFinal: qty.optional(),
+  /** Индивидуальная скидка, %; для «Середины» и «Финала» null — как на предыдущем этапе */
+  discount: z.number().min(0).max(100).optional(),
+  discountMid: z.number().min(0).max(100).nullable().optional(),
+  discountFinal: z.number().min(0).max(100).nullable().optional(),
   planManual: z.boolean().optional(),
   label: label.optional(),
   /** Вернуть убранную позицию по умолчанию */
@@ -48,12 +52,10 @@ const configSchema = z
     midDate: isoDate.nullable(),
     finalDate: isoDate.nullable(),
     shares: z.tuple([pct, pct, pct]),
-    discountPersonal: pct,
-    discountPartner: pct,
   })
   .partial();
 
-/** Настройки доходов форума: даты этапов цен, структура плана по этапам, плановые скидки. */
+/** Настройки доходов форума: даты этапов продаж билетов и доли этапов для автоподбора. */
 export async function saveIncomeConfig(
   forumId: number,
   patch: z.input<typeof configSchema>,
@@ -74,8 +76,6 @@ export async function saveIncomeConfig(
               shareFinal: Math.round(p.shares[2]),
             }
           : {}),
-        ...(p.discountPersonal !== undefined ? { discountPersonalPct: p.discountPersonal } : {}),
-        ...(p.discountPartner !== undefined ? { discountPartnerPct: p.discountPartner } : {}),
       },
     });
     return getIncomeConfig(forumId);

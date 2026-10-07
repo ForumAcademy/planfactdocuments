@@ -5,8 +5,6 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
-  ChevronDown,
-  ChevronRight,
   Lightbulb,
   Pencil,
   Plus,
@@ -19,25 +17,23 @@ import { Spinner } from '@/components/ui/spinner';
 import { TabGroup, TabLink } from '@/components/ui/tab-links';
 import { formatDate } from '@/lib/dates';
 import {
-  DISCOUNTS,
   INCOME_GROUPS,
   INCOME_ITEMS,
   INCOME_MARGIN,
   PRICE_STAGES,
   autoPlan,
   currentStage,
-  factTotals,
+  hasStages,
+  incomeSum,
   incomeTarget,
+  itemSum,
+  netPrice,
   planAdvice,
-  planTotals,
-  planUnitGross,
-  planUnitNet,
-  soldQty,
   stageDates,
-  stagePrices,
   type IncomeConfig,
   type IncomeGroup,
   type IncomeItemValue,
+  type Triple,
 } from '@/lib/income';
 import { cn, formatRub } from '@/lib/utils';
 import {
@@ -55,37 +51,62 @@ type ItemPatch = {
   price?: number;
   priceMid?: number | null;
   priceFinal?: number | null;
+  discount?: number;
+  discountMid?: number | null;
+  discountFinal?: number | null;
   planQty?: number;
+  planMid?: number;
+  planFinal?: number;
   planManual?: boolean;
   factQty?: number;
   factMid?: number;
   factFinal?: number;
-  discountPersonal?: number;
-  discountPartner?: number;
   removed?: false;
 };
+
+/** Поля этапа: старт / середина / финал */
+const PRICE_FIELD = ['price', 'priceMid', 'priceFinal'] as const;
+const DISCOUNT_FIELD = ['discount', 'discountMid', 'discountFinal'] as const;
+const PLAN_FIELD = ['planQty', 'planMid', 'planFinal'] as const;
+const FACT_FIELD = ['factQty', 'factMid', 'factFinal'] as const;
 
 const pctOf = (part: number, total: number) =>
   total ? `${Math.round((part / total) * 100).toLocaleString('ru-RU')}%` : '—';
 const formatQty = (n: number) => `${n.toLocaleString('ru-RU').replace(/ | /g, ' ')} шт.`;
 const formatPct = (n: number) => `${n.toLocaleString('ru-RU')}%`;
+const sumOf = (t: Triple) => t[0] + t[1] + t[2];
 
-/** Оптимистичное применение правки: цены этапов без своего значения идут за предыдущим этапом */
+/** Оптимистичное применение правки; незаданные цена и скидка этапа идут за предыдущим этапом */
 function applyPatch(i: IncomeItemValue, p: ItemPatch): IncomeItemValue {
-  const n: IncomeItemValue = { ...i };
+  const n: IncomeItemValue = {
+    ...i,
+    prices: [...i.prices],
+    discounts: [...i.discounts],
+    priceSet: [...i.priceSet],
+    discountSet: [...i.discountSet],
+    plan: [...i.plan],
+    fact: [...i.fact],
+  };
   if (p.label !== undefined) n.label = p.label;
-  if (p.planQty !== undefined) n.planQty = p.planQty;
   if (p.planManual !== undefined) n.planManual = p.planManual;
-  if (p.factQty !== undefined) n.factQty = p.factQty;
-  if (p.factMid !== undefined) n.factMid = p.factMid;
-  if (p.factFinal !== undefined) n.factFinal = p.factFinal;
-  if (p.discountPersonal !== undefined) n.discountPersonal = p.discountPersonal;
-  if (p.discountPartner !== undefined) n.discountPartner = p.discountPartner;
-  if (p.price !== undefined) n.price = p.price;
-  if (p.priceMid !== undefined) n.priceMidSet = p.priceMid !== null;
-  if (p.priceFinal !== undefined) n.priceFinalSet = p.priceFinal !== null;
-  n.priceMid = n.priceMidSet ? (p.priceMid ?? i.priceMid) : n.price;
-  n.priceFinal = n.priceFinalSet ? (p.priceFinal ?? i.priceFinal) : n.priceMid;
+  for (let k = 0; k < 3; k++) {
+    const price = p[PRICE_FIELD[k]];
+    if (price !== undefined) {
+      n.priceSet[k] = k === 0 || price !== null;
+      if (price !== null) n.prices[k] = price;
+    }
+    const disc = p[DISCOUNT_FIELD[k]];
+    if (disc !== undefined) {
+      n.discountSet[k] = k === 0 || disc !== null;
+      if (disc !== null) n.discounts[k] = disc;
+    }
+    if (k > 0 && !n.priceSet[k]) n.prices[k] = n.prices[k - 1];
+    if (k > 0 && !n.discountSet[k]) n.discounts[k] = n.discounts[k - 1];
+    const plan = p[PLAN_FIELD[k]];
+    if (plan !== undefined) n.plan[k] = plan;
+    const fact = p[FACT_FIELD[k]];
+    if (fact !== undefined) n.fact[k] = fact;
+  }
   return n;
 }
 
@@ -102,21 +123,22 @@ export function IncomeView({
   const [items, setItems] = React.useState(initialItems);
   const [cfg, setCfg] = React.useState(initialConfig);
   const [saving, setSaving] = React.useState(false);
-  const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set());
+  const dates = stageDates(cfg, forum.salesStartDate, forum.startDate);
+  const stageNow = currentStage(dates, today);
+  /** Выбранный этап продаж билетов; null — все этапы вместе */
+  const [stage, setStage] = React.useState<number | null>(stageNow);
 
   const expenses = tasks.reduce((s, t) => s + t.cost, 0);
   const target = incomeTarget(expenses);
   // План с автоподбором под цель: ручные позиции как есть, остальные добирают до цели
   const planned = React.useMemo(() => autoPlan(items, target, cfg), [items, target, cfg]);
-  const plan = planTotals(planned, cfg);
-  const fact = factTotals(planned);
-  const planSum = plan.net;
-  const factSum = fact.net;
+  const partners = planned.filter((i) => !hasStages(i));
+  const tickets = planned.filter(hasStages);
+  const planSum = incomeSum(planned, 'plan');
+  const factSum = incomeSum(planned, 'fact');
   const confirm = useConfirm();
   const removedDefaults = INCOME_ITEMS.filter((d) => !items.some((i) => i.key === d.key));
-  const advice = planAdvice(planned, target, cfg);
-  const dates = stageDates(cfg, forum.salesStartDate, forum.startDate);
-  const stageNow = currentStage(dates, today);
+  const advice = planAdvice(planned, target);
 
   const save = async (patches: ItemPatch[]) => {
     const prev = items;
@@ -168,21 +190,32 @@ export function IncomeView({
     if (ok) await apply(() => removeIncomeItem(forum.id, it.key));
   };
 
-  const toggle = (key: string) =>
-    setCollapsed((s) => {
-      const n = new Set(s);
-      if (n.has(key)) n.delete(key);
-      else n.add(key);
-      return n;
-    });
+  /** Ручной план этапа: остальные этапы фиксируются такими, как сейчас */
+  const savePlan = (it: IncomeItemValue, k: number, v: number) => {
+    const plan = [...it.plan] as Triple;
+    plan[k] = v;
+    void save([
+      { key: it.key, planQty: plan[0], planMid: plan[1], planFinal: plan[2], planManual: true },
+    ]);
+  };
+  const resetAuto = (it: IncomeItemValue) => save([{ key: it.key, planManual: false }]);
 
   const base = `/forums/${forum.id}/income`;
   const planGap = target - planSum;
-  const unitGross = (i: IncomeItemValue) => planUnitGross(i, cfg);
-  const groupGross = (list: IncomeItemValue[]) =>
-    Math.round(list.reduce((s, i) => s + unitGross(i) * i.planQty, 0));
-  const itemPlanNet = (i: IncomeItemValue) => Math.round(planUnitNet(i, cfg) * i.planQty);
-  const itemFactNet = (i: IncomeItemValue) => factTotals([i]).net;
+  const partnersPlan = incomeSum(partners, 'plan');
+  const ticketsPlan = incomeSum(tickets, 'plan');
+  const ticketsFact = incomeSum(tickets, 'fact');
+  const partnersFact = incomeSum(partners, 'fact');
+  const addRow = (g: IncomeGroup, colSpan: number) => (
+    <AddItemRow
+      group={g}
+      colSpan={colSpan}
+      restore={removedDefaults.filter((x) => x.group === g.key)}
+      onRestore={(key) => save([{ key, removed: false }])}
+      onAdd={(label, price) => apply(() => addIncomeItem(forum.id, { group: g.key, label, price }))}
+    />
+  );
+  const [gPartners, gTickets] = INCOME_GROUPS;
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-4" data-testid="income-view">
@@ -192,14 +225,6 @@ export function IncomeView({
         target={target}
         plan={planSum}
         fact={factSum}
-      />
-
-      <PriceStages
-        cfg={cfg}
-        dates={dates}
-        current={stageNow}
-        forumStart={forum.startDate}
-        onSave={saveConfig}
       />
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -232,589 +257,662 @@ export function IncomeView({
         {saving && <Spinner className="text-xs" label="Сохраняем…" />}
       </div>
 
-      {view === 'plan' ? (
-        <>
-          <div className="mt-4">
-            <h2 className="font-semibold">План продаж</h2>
-            <p className="max-w-4xl text-xs text-ink/60">
-              Цена задаётся на каждом этапе; пустая цена этапа (серым) равна цене предыдущего. Сумма
-              считается по долям продаж на этапах, скидки вычитаются в итоге. Количество подбирается
-              автоматически под цель (расходы + {Math.round(INCOME_MARGIN * 100)}%); любое
-              количество можно изменить вручную — остальные позиции пересчитаются.
-            </p>
-          </div>
-          <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
-            <table className="w-full min-w-[1040px] text-sm">
-              <thead className="bg-surface text-left text-xs text-ink/70">
-                <tr>
-                  <th className="px-3 py-2 font-medium" rowSpan={2}>
-                    Позиция
-                  </th>
-                  <th className="px-2 pt-2 text-center font-medium" colSpan={3}>
-                    Цена 1 ед. по этапам
-                  </th>
-                  <th className="w-28 px-2 py-2 text-right font-medium" rowSpan={2}>
-                    План, шт.
-                  </th>
-                  <th
-                    className="w-40 px-2 py-2 text-right font-medium"
-                    rowSpan={2}
-                    title="Количество × средняя цена по долям этапов, до скидок"
-                  >
-                    Сумма по плану
-                  </th>
-                  <th className="w-20 px-3 py-2 text-right font-medium" rowSpan={2}>
-                    Доля
-                  </th>
-                </tr>
-                <tr>
-                  {PRICE_STAGES.map((st, k) => (
-                    <StageTh
-                      key={st.key}
-                      label={st.short}
-                      share={cfg.shares[k]}
-                      now={k === stageNow}
-                    />
-                  ))}
-                </tr>
-              </thead>
-              {INCOME_GROUPS.map((g) => {
-                const list = planned.filter((i) => i.group === g.key);
-                const open = !collapsed.has(g.key);
-                const sum = groupGross(list);
-                return (
-                  <tbody key={g.key} data-testid={`income-group-${g.key}`}>
-                    <GroupRow
-                      group={g}
-                      open={open}
-                      onToggle={() => toggle(g.key)}
-                      cells={[
-                        null,
-                        null,
-                        null,
-                        formatQty(list.reduce((s, i) => s + i.planQty, 0)),
-                        formatRub(sum),
-                        <span key="share" className="font-normal text-ink/70">
-                          {pctOf(sum, plan.gross)}
-                        </span>,
-                      ]}
-                    />
-                    {open &&
-                      list.map((it) => (
-                        <tr
-                          key={it.key}
-                          className="border-t border-line/60"
-                          data-testid="income-row"
-                        >
-                          <td className="py-1 pl-10 pr-3">
-                            <LabelCell
-                              item={it}
-                              onRename={(label) => save([{ key: it.key, label }])}
-                              onRemove={() => void remove(it)}
-                            />
-                          </td>
-                          <td className="px-1 py-1">
-                            <NumberCell
-                              value={it.price}
-                              format={formatRub}
-                              label={`Цена «Старт продаж»: ${it.label}`}
-                              onCommit={(price) => save([{ key: it.key, price }])}
-                              testId={`income-price-${it.key}`}
-                            />
-                          </td>
-                          <StagePriceCell
-                            item={it}
-                            field="priceMid"
-                            stage="Середина"
-                            onSave={(v) => save([{ key: it.key, priceMid: v }])}
-                          />
-                          <StagePriceCell
-                            item={it}
-                            field="priceFinal"
-                            stage="Финальная стадия"
-                            onSave={(v) => save([{ key: it.key, priceFinal: v }])}
-                          />
-                          <td className="px-1 py-1">
-                            <div className="flex items-center justify-end gap-1">
-                              {it.planManual ? (
-                                <button
-                                  type="button"
-                                  className="rounded p-1 text-ink/50 hover:bg-surface hover:text-brand"
-                                  title="Вернуть автоматический подбор"
-                                  aria-label={`Вернуть автоматический подбор: ${it.label}`}
-                                  onClick={() => save([{ key: it.key, planManual: false }])}
-                                  data-testid={`income-plan-auto-${it.key}`}
-                                >
-                                  <RotateCcw className="size-3.5" />
-                                </button>
-                              ) : (
-                                <span
-                                  className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-ink/50"
-                                  title="Подобрано автоматически под цель"
-                                >
-                                  авто
-                                </span>
-                              )}
-                              <NumberCell
-                                value={it.planQty}
-                                format={formatQty}
-                                label={`План, шт.: ${it.label}`}
-                                onCommit={(planQty) =>
-                                  save([{ key: it.key, planQty, planManual: true }])
-                                }
-                                testId={`income-plan-${it.key}`}
-                                className={cn('min-w-0 flex-1', !it.planManual && 'text-ink/60')}
-                              />
-                            </div>
-                          </td>
-                          <td className="px-2 py-1.5 text-right tabular-nums">
-                            {formatRub(Math.round(unitGross(it) * it.planQty))}
-                          </td>
-                          <td className="px-3 py-1.5 text-right text-xs tabular-nums text-ink/60">
-                            {it.planQty ? pctOf(unitGross(it) * it.planQty, plan.gross) : ''}
-                          </td>
-                        </tr>
-                      ))}
-                    {open && (
-                      <AddItemRow
-                        group={g}
-                        colSpan={7}
-                        restore={removedDefaults.filter((x) => x.group === g.key)}
-                        onRestore={(key) => save([{ key, removed: false }])}
-                        onAdd={(label, price) =>
-                          apply(() => addIncomeItem(forum.id, { group: g.key, label, price }))
-                        }
-                      />
-                    )}
-                  </tbody>
-                );
-              })}
-              <tfoot>
-                <tr className="border-t-2 border-brand/40 font-semibold">
-                  <td className="px-3 py-2.5" colSpan={5}>
-                    Сумма по ценам этапов
-                  </td>
-                  <td className="px-2 py-2.5 text-right tabular-nums">{formatRub(plan.gross)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">
-                    {plan.gross ? '100%' : '—'}
-                  </td>
-                </tr>
-                {DISCOUNTS.map((d) => {
-                  const rate = d.key === 'personal' ? cfg.discountPersonal : cfg.discountPartner;
-                  const value = d.key === 'personal' ? plan.personal : plan.partner;
-                  return (
-                    <tr key={d.key} className="border-t border-line text-ink/70">
-                      <td className="px-3 py-2" colSpan={5}>
-                        {d.label}, {formatPct(rate)} выручки
-                      </td>
-                      <td className="px-2 py-2 text-right tabular-nums">
-                        {value ? `−${formatRub(value)}` : formatRub(0)}
-                      </td>
-                      <td />
-                    </tr>
-                  );
-                })}
-                <tr className="border-t border-line font-semibold">
-                  <td className="px-3 py-2.5" colSpan={5}>
-                    Итого план с учётом скидок
-                  </td>
-                  <td className="px-2 py-2.5 text-right tabular-nums" data-testid="income-plan-net">
-                    {formatRub(planSum)}
-                  </td>
-                  <td />
-                </tr>
-                <tr className="border-t border-line text-ink/70">
-                  <td className="px-3 py-2" colSpan={5}>
-                    Цель: расходы {formatRub(expenses)} + {Math.round(INCOME_MARGIN * 100)}%
-                  </td>
-                  <td className="px-2 py-2 text-right tabular-nums">{formatRub(target)}</td>
-                  <td />
-                </tr>
-                {target > 0 && (
-                  <tr className="border-t border-line">
-                    <td className="px-3 py-2" colSpan={5}>
-                      {planGap > 0 ? 'До цели по плану не хватает' : 'План выше цели на'}
-                    </td>
-                    <td
-                      className={cn(
-                        'px-2 py-2 text-right font-medium tabular-nums',
-                        planGap > 0 ? 'text-status-red' : 'text-status-green',
-                      )}
-                      data-testid="income-plan-gap"
-                    >
-                      {formatRub(Math.abs(planGap))}
-                    </td>
-                    <td />
-                  </tr>
-                )}
-              </tfoot>
-            </table>
-          </div>
-          {advice.length > 0 && (
-            <section
-              className="mt-3 rounded-lg border border-brand/20 bg-brand/5 px-4 py-3 text-sm"
-              data-testid="income-advice"
-            >
-              <h3 className="flex items-center gap-2 font-semibold text-brand">
-                <Lightbulb className="size-4" />
-                Рекомендация по плану продаж
-              </h3>
-              <ul className="mt-1.5 list-disc space-y-1 pl-6 text-ink/80">
-                {advice.map((a) => (
-                  <li key={a}>{a}</li>
-                ))}
-              </ul>
-            </section>
+      {/* Партнёрства: без этапов продаж */}
+      <SectionTitle
+        group={gPartners}
+        note="Одна цена на весь период продаж; скидка — индивидуальная для позиции"
+        sum={view === 'plan' ? partnersPlan : partnersFact}
+        plan={view === 'fact' ? partnersPlan : undefined}
+      />
+      <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
+        <table className="w-full min-w-[900px] text-sm" data-testid="income-group-partners">
+          {view === 'plan' ? <PlanHead /> : <FactHead />}
+          <tbody>
+            {partners.map((it) =>
+              view === 'plan' ? (
+                <PlanRow
+                  key={it.key}
+                  item={it}
+                  stage={0}
+                  total={planSum}
+                  onSave={save}
+                  onPlan={(v) => savePlan(it, 0, v)}
+                  onAuto={() => resetAuto(it)}
+                  onRemove={() => void remove(it)}
+                />
+              ) : (
+                <FactRow key={it.key} item={it} stage={0} onSave={save} />
+              ),
+            )}
+            {view === 'plan' && addRow(gPartners, 7)}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Билеты: три этапа продаж */}
+      <SectionTitle
+        group={gTickets}
+        note="Цена, скидка и план — свои на каждом этапе; итог складывается из всех этапов"
+        sum={view === 'plan' ? ticketsPlan : ticketsFact}
+        plan={view === 'fact' ? ticketsPlan : undefined}
+      />
+      <StageSwitch
+        cfg={cfg}
+        dates={dates}
+        current={stageNow}
+        selected={stage}
+        onSelect={setStage}
+        forumStart={forum.startDate}
+        sums={[0, 1, 2].map((k) => ({
+          plan: incomeSum(tickets, 'plan', k),
+          fact: incomeSum(tickets, 'fact', k),
+        }))}
+        view={view}
+        onSave={saveConfig}
+      />
+      <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
+        <table className="w-full min-w-[900px] text-sm" data-testid="income-group-tickets">
+          {stage === null ? (
+            <AllStagesHead view={view} />
+          ) : view === 'plan' ? (
+            <PlanHead stage={stage} />
+          ) : (
+            <FactHead stage={stage} />
           )}
-        </>
-      ) : (
-        <>
-          <div className="mt-5">
-            <h2 className="font-semibold">Фактические продажи</h2>
-            <p className="max-w-4xl text-xs text-ink/60">
-              Укажите, сколько продано по ценам каждого этапа, и суммы скидок, которые дали
-              покупателям. Выручка = продажи по ценам этапов − скидки. Цены задаются во вкладке
-              «План».
-            </p>
-          </div>
-          <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
-            <table className="w-full min-w-[1240px] text-sm">
-              <thead className="bg-surface text-left text-xs text-ink/70">
-                <tr>
-                  <th className="px-3 py-2 font-medium" rowSpan={2}>
-                    Позиция
-                  </th>
-                  <th className="px-2 pt-2 text-center font-medium" colSpan={3}>
-                    Продано по этапам, шт.
-                  </th>
-                  <th className="px-2 pt-2 text-center font-medium" colSpan={2}>
-                    Скидки, ₽
-                  </th>
-                  <th className="w-36 px-2 py-2 text-right font-medium" rowSpan={2}>
-                    Выручка
-                  </th>
-                  <th className="w-36 px-2 py-2 text-right font-medium" rowSpan={2}>
-                    План
-                  </th>
-                  <th
-                    className="w-40 px-3 py-2 text-right font-medium"
-                    rowSpan={2}
-                    title="Доля выручки от плана"
-                  >
-                    Выполнение плана
-                  </th>
-                </tr>
-                <tr>
-                  {PRICE_STAGES.map((st, k) => (
-                    <StageTh key={st.key} label={st.short} now={k === stageNow} />
-                  ))}
-                  <th className="w-32 px-2 pb-2 text-right font-normal">Индивидуальные</th>
-                  <th className="w-32 px-2 pb-2 text-right font-normal">Партнёрские</th>
-                </tr>
-              </thead>
-              {INCOME_GROUPS.map((g) => {
-                const list = planned.filter((i) => i.group === g.key);
-                const open = !collapsed.has(g.key);
-                const gf = factTotals(list);
-                const gp = list.reduce((s, i) => s + itemPlanNet(i), 0);
-                return (
-                  <tbody key={g.key} data-testid={`income-group-${g.key}`}>
-                    <GroupRow
-                      group={g}
-                      open={open}
-                      onToggle={() => toggle(g.key)}
-                      cells={[
-                        formatQty(list.reduce((s, i) => s + i.factQty, 0)),
-                        formatQty(list.reduce((s, i) => s + i.factMid, 0)),
-                        formatQty(list.reduce((s, i) => s + i.factFinal, 0)),
-                        gf.personal ? `−${formatRub(gf.personal)}` : formatRub(0),
-                        gf.partner ? `−${formatRub(gf.partner)}` : formatRub(0),
-                        formatRub(gf.net),
-                        formatRub(gp),
-                        <Progress key="p" part={gf.net} total={gp} />,
-                      ]}
-                    />
-                    {open &&
-                      list.map((it) => (
-                        <tr
-                          key={it.key}
-                          className="border-t border-line/60"
-                          data-testid="income-row"
-                        >
-                          <td className="py-1.5 pl-12 pr-3">
-                            {it.label}
-                            <div className="text-xs text-ink/50">
-                              {soldQty(it) ? `всего ${formatQty(soldQty(it))}` : ''}
-                            </div>
-                          </td>
-                          {(['factQty', 'factMid', 'factFinal'] as const).map((f, k) => (
-                            <td key={f} className={cn('px-1 py-1', k === stageNow && 'bg-brand/5')}>
-                              <NumberCell
-                                value={it[f]}
-                                format={formatQty}
-                                label={`Продано по цене «${PRICE_STAGES[k].label}»: ${it.label}`}
-                                onCommit={(v) => save([{ key: it.key, [f]: v }])}
-                                testId={`income-fact-${PRICE_STAGES[k].key}-${it.key}`}
-                              />
-                              <div className="pr-1.5 text-right text-[11px] text-ink/40">
-                                по {formatRub(stagePrices(it)[k])}
-                              </div>
-                            </td>
-                          ))}
-                          {(['discountPersonal', 'discountPartner'] as const).map((f) => (
-                            <td key={f} className="px-1 py-1 align-top">
-                              <NumberCell
-                                value={it[f]}
-                                format={(v) => (v ? `−${formatRub(v)}` : formatRub(0))}
-                                label={`${f === 'discountPersonal' ? 'Индивидуальные' : 'Партнёрские'} скидки, ₽: ${it.label}`}
-                                onCommit={(v) => save([{ key: it.key, [f]: v }])}
-                                testId={`income-${f}-${it.key}`}
-                                className={cn(!it[f] && 'text-ink/40')}
-                              />
-                            </td>
-                          ))}
-                          <td className="px-2 py-1.5 text-right align-top tabular-nums">
-                            {formatRub(itemFactNet(it))}
-                          </td>
-                          <td className="px-2 py-1.5 text-right align-top tabular-nums text-ink/70">
-                            {formatRub(itemPlanNet(it))}
-                          </td>
-                          <td className="px-3 py-1.5 align-top">
-                            <Progress part={itemFactNet(it)} total={itemPlanNet(it)} />
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                );
-              })}
-              <tfoot>
-                <tr className="border-t-2 border-brand/40 font-semibold">
-                  <td className="px-3 py-2.5">Итого</td>
-                  {(['factQty', 'factMid', 'factFinal'] as const).map((f) => (
-                    <td key={f} className="px-2 py-2.5 text-right tabular-nums">
-                      {formatQty(planned.reduce((s, i) => s + i[f], 0))}
-                    </td>
-                  ))}
-                  <td className="px-2 py-2.5 text-right tabular-nums">
-                    {fact.personal ? `−${formatRub(fact.personal)}` : formatRub(0)}
-                  </td>
-                  <td className="px-2 py-2.5 text-right tabular-nums">
-                    {fact.partner ? `−${formatRub(fact.partner)}` : formatRub(0)}
-                  </td>
-                  <td className="px-2 py-2.5 text-right tabular-nums" data-testid="income-fact-net">
-                    {formatRub(factSum)}
-                  </td>
-                  <td className="px-2 py-2.5 text-right tabular-nums text-ink/70">
-                    {formatRub(planSum)}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <Progress part={factSum} total={planSum} />
-                  </td>
-                </tr>
-                <tr className="border-t border-line text-ink/70">
-                  <td className="px-3 py-2" colSpan={6}>
-                    Продажи по ценам этапов {formatRub(fact.gross)} − скидки{' '}
-                    {formatRub(fact.personal + fact.partner)}. Цель: расходы {formatRub(expenses)} +{' '}
-                    {Math.round(INCOME_MARGIN * 100)}%
-                  </td>
-                  <td className="px-2 py-2 text-right tabular-nums">{formatRub(target)}</td>
-                  <td />
-                  <td className="px-3 py-2">
-                    <Progress part={factSum} total={target} />
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </>
+          <tbody>
+            {tickets.map((it) =>
+              stage === null ? (
+                <AllStagesRow
+                  key={it.key}
+                  item={it}
+                  view={view}
+                  onAuto={() => resetAuto(it)}
+                  onRemove={() => void remove(it)}
+                  onRename={(label) => save([{ key: it.key, label }])}
+                />
+              ) : view === 'plan' ? (
+                <PlanRow
+                  key={it.key}
+                  item={it}
+                  stage={stage}
+                  total={planSum}
+                  onSave={save}
+                  onPlan={(v) => savePlan(it, stage, v)}
+                  onAuto={() => resetAuto(it)}
+                  onRemove={() => void remove(it)}
+                />
+              ) : (
+                <FactRow key={it.key} item={it} stage={stage} onSave={save} />
+              ),
+            )}
+            {view === 'plan' && addRow(gTickets, 7)}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Итог: партнёрства + билеты за все этапы */}
+      <div className="mt-4 overflow-hidden rounded-lg border border-line bg-white">
+        <table className="w-full text-sm" data-testid="income-totals">
+          <tbody>
+            <TotalRow label="Партнёрства" value={view === 'plan' ? partnersPlan : partnersFact} />
+            <TotalRow
+              label="Билеты, все этапы"
+              value={view === 'plan' ? ticketsPlan : ticketsFact}
+            />
+            <TotalRow
+              label={
+                view === 'plan' ? 'Итого план с учётом скидок' : 'Итого продано с учётом скидок'
+              }
+              value={view === 'plan' ? planSum : factSum}
+              strong
+              testId={view === 'plan' ? 'income-plan-net' : 'income-fact-net'}
+              extra={view === 'fact' ? <Progress part={factSum} total={planSum} /> : null}
+            />
+            {view === 'fact' && <TotalRow label="План" value={planSum} muted />}
+            <TotalRow
+              label={`Цель: расходы ${formatRub(expenses)} + ${Math.round(INCOME_MARGIN * 100)}%`}
+              value={target}
+              muted
+            />
+            {view === 'plan' && target > 0 && (
+              <tr className="border-t border-line">
+                <td className="px-3 py-2">
+                  {planGap > 0 ? 'До цели по плану не хватает' : 'План выше цели на'}
+                </td>
+                <td
+                  className={cn(
+                    'w-48 px-3 py-2 text-right font-medium tabular-nums',
+                    planGap > 0 ? 'text-status-red' : 'text-status-green',
+                  )}
+                  data-testid="income-plan-gap"
+                >
+                  {formatRub(Math.abs(planGap))}
+                </td>
+                <td className="w-48" />
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {view === 'plan' && advice.length > 0 && (
+        <section
+          className="mt-3 rounded-lg border border-brand/20 bg-brand/5 px-4 py-3 text-sm"
+          data-testid="income-advice"
+        >
+          <h3 className="flex items-center gap-2 font-semibold text-brand">
+            <Lightbulb className="size-4" />
+            Рекомендация по плану продаж
+          </h3>
+          <ul className="mt-1.5 list-disc space-y-1 pl-6 text-ink/80">
+            {advice.map((a) => (
+              <li key={a}>{a}</li>
+            ))}
+          </ul>
+        </section>
       )}
     </div>
   );
 }
 
-/** Заголовок столбца этапа: название, доля в плане и отметка текущего этапа */
-function StageTh({ label, share, now }: { label: string; share?: number; now: boolean }) {
+function SectionTitle({
+  group,
+  note,
+  sum,
+  plan,
+}: {
+  group: IncomeGroup;
+  note: string;
+  sum: number;
+  plan?: number;
+}) {
   return (
-    <th
-      className={cn('w-36 px-2 pb-2 text-right font-normal', now && 'bg-brand/5 text-brand')}
-      title={now ? 'Текущий этап цен' : undefined}
-    >
-      {now && <span className="mr-1 inline-block size-1.5 rounded-full bg-brand align-middle" />}
-      {label}
-      {share !== undefined && <span className="ml-1 text-ink/40">{share}%</span>}
-    </th>
+    <div className="mt-5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <h2 className="flex items-center gap-2 font-semibold">
+        <span className="h-4 w-1.5 rounded-sm" style={{ background: group.color }} />
+        {group.label}
+      </h2>
+      <span className="font-semibold tabular-nums">{formatRub(sum)}</span>
+      {plan !== undefined && (
+        <span className="text-sm text-ink/60">
+          из {formatRub(plan)} · {pctOf(sum, plan)}
+        </span>
+      )}
+      <span className="text-xs text-ink/50">{note}</span>
+    </div>
   );
 }
 
-/** Цена «Середины» / «Финала»: своя или (серым) как на предыдущем этапе */
-function StagePriceCell({
-  item,
-  field,
-  stage,
+function TotalRow({
+  label,
+  value,
+  strong,
+  muted,
+  testId,
+  extra,
+}: {
+  label: string;
+  value: number;
+  strong?: boolean;
+  muted?: boolean;
+  testId?: string;
+  extra?: React.ReactNode;
+}) {
+  return (
+    <tr
+      className={cn(
+        'border-t border-line first:border-t-0',
+        strong && 'font-semibold',
+        muted && 'text-ink/70',
+      )}
+    >
+      <td className="px-3 py-2">{label}</td>
+      <td className="w-48 px-3 py-2 text-right tabular-nums" data-testid={testId}>
+        {formatRub(value)}
+      </td>
+      <td className="w-48 px-3 py-2">{extra}</td>
+    </tr>
+  );
+}
+
+const th = 'px-2 py-2 text-right font-medium';
+
+function PlanHead({ stage }: { stage?: number }) {
+  return (
+    <thead className="bg-surface text-left text-xs text-ink/70">
+      <tr>
+        <th className="px-3 py-2 font-medium">
+          Позиция
+          {stage !== undefined && (
+            <span className="ml-1 font-normal text-ink/50">· {PRICE_STAGES[stage].label}</span>
+          )}
+        </th>
+        <th className={cn(th, 'w-36')}>Цена 1 ед.</th>
+        <th className={cn(th, 'w-24')}>Скидка</th>
+        <th className={cn(th, 'w-36')}>Цена со скидкой</th>
+        <th className={cn(th, 'w-32')}>План, шт.</th>
+        <th className={cn(th, 'w-40')}>Сумма по плану</th>
+        <th className={cn(th, 'w-20 px-3')}>Доля</th>
+      </tr>
+    </thead>
+  );
+}
+
+function FactHead({ stage }: { stage?: number }) {
+  return (
+    <thead className="bg-surface text-left text-xs text-ink/70">
+      <tr>
+        <th className="px-3 py-2 font-medium">
+          Позиция
+          {stage !== undefined && (
+            <span className="ml-1 font-normal text-ink/50">· {PRICE_STAGES[stage].label}</span>
+          )}
+        </th>
+        <th className={cn(th, 'w-36')}>Цена со скидкой</th>
+        <th className={cn(th, 'w-32')}>Продано, шт.</th>
+        <th className={cn(th, 'w-40')}>Выручка</th>
+        <th className={cn(th, 'w-32')}>План, шт.</th>
+        <th className={cn(th, 'w-40')}>План, ₽</th>
+        <th className={cn(th, 'w-44 px-3')}>Выполнение плана</th>
+      </tr>
+    </thead>
+  );
+}
+
+function AllStagesHead({ view }: { view: 'plan' | 'fact' }) {
+  return (
+    <thead className="bg-surface text-left text-xs text-ink/70">
+      <tr>
+        <th className="px-3 py-2 font-medium">
+          Позиция <span className="ml-1 font-normal text-ink/50">· все этапы</span>
+        </th>
+        {PRICE_STAGES.map((st) => (
+          <th key={st.key} className={cn(th, 'w-32')}>
+            {st.short}, шт.
+          </th>
+        ))}
+        <th className={cn(th, 'w-32')}>{view === 'plan' ? 'План, шт.' : 'Продано, шт.'}</th>
+        <th className={cn(th, 'w-40')}>{view === 'plan' ? 'Сумма по плану' : 'Выручка'}</th>
+        <th className={cn(th, 'w-44 px-3')}>{view === 'plan' ? '' : 'Выполнение плана'}</th>
+      </tr>
+    </thead>
+  );
+}
+
+/** Строка плана: условия этапа (цена, скидка), количество и сумма */
+function PlanRow({
+  item: it,
+  stage: k,
+  total,
+  onSave,
+  onPlan,
+  onAuto,
+  onRemove,
+}: {
+  item: IncomeItemValue;
+  stage: number;
+  total: number;
+  onSave: (p: ItemPatch[]) => void;
+  onPlan: (v: number) => void;
+  onAuto: () => void;
+  onRemove: () => void;
+}) {
+  const sum = itemSum(it, 'plan', k);
+  const priceInherited = k > 0 && !it.priceSet[k];
+  const discInherited = k > 0 && !it.discountSet[k];
+  return (
+    <tr className="border-t border-line/60" data-testid="income-row">
+      <td className="py-1 pl-4 pr-3">
+        <LabelCell
+          item={it}
+          onRename={(label) => onSave([{ key: it.key, label }])}
+          onRemove={onRemove}
+        />
+      </td>
+      <td className="px-1 py-1">
+        <InheritCell
+          value={it.prices[k]}
+          inherited={priceInherited}
+          canReset={k > 0 && it.priceSet[k]}
+          format={formatRub}
+          label={`Цена 1 ед.${k > 0 ? ` («${PRICE_STAGES[k].label}»)` : ''}: ${it.label}`}
+          testId={`income-price-${k}-${it.key}`}
+          onCommit={(v) => onSave([{ key: it.key, [PRICE_FIELD[k]]: v }])}
+          onReset={() => onSave([{ key: it.key, [PRICE_FIELD[k]]: null }])}
+        />
+      </td>
+      <td className="px-1 py-1">
+        <InheritCell
+          value={it.discounts[k]}
+          inherited={discInherited}
+          canReset={k > 0 && it.discountSet[k]}
+          format={(v) => (v ? formatPct(v) : '—')}
+          label={`Скидка, %: ${it.label}`}
+          testId={`income-discount-${k}-${it.key}`}
+          onCommit={(v) => onSave([{ key: it.key, [DISCOUNT_FIELD[k]]: Math.min(100, v) }])}
+          onReset={() => onSave([{ key: it.key, [DISCOUNT_FIELD[k]]: null }])}
+        />
+      </td>
+      <td
+        className={cn(
+          'px-2 py-1.5 text-right tabular-nums',
+          it.discounts[k] ? 'text-ink' : 'text-ink/50',
+        )}
+      >
+        {formatRub(Math.round(netPrice(it, k)))}
+      </td>
+      <td className="px-1 py-1">
+        <div className="flex items-center justify-end gap-1">
+          <AutoBadge item={it} onAuto={onAuto} />
+          <NumberCell
+            value={it.plan[k]}
+            format={formatQty}
+            label={`План, шт.: ${it.label}`}
+            onCommit={onPlan}
+            testId={`income-plan-${k}-${it.key}`}
+            className={cn('min-w-0 flex-1', !it.planManual && 'text-ink/60')}
+          />
+        </div>
+      </td>
+      <td className="px-2 py-1.5 text-right tabular-nums">{formatRub(sum)}</td>
+      <td className="px-3 py-1.5 text-right text-xs tabular-nums text-ink/60">
+        {sum ? pctOf(sum, total) : ''}
+      </td>
+    </tr>
+  );
+}
+
+/** Строка факта на этапе: продано, выручка со скидкой и выполнение плана этапа */
+function FactRow({
+  item: it,
+  stage: k,
   onSave,
 }: {
   item: IncomeItemValue;
-  field: 'priceMid' | 'priceFinal';
-  stage: string;
-  onSave: (v: number | null) => void;
+  stage: number;
+  onSave: (p: ItemPatch[]) => void;
 }) {
-  const set = field === 'priceMid' ? item.priceMidSet : item.priceFinalSet;
+  const fact = itemSum(it, 'fact', k);
+  const plan = itemSum(it, 'plan', k);
   return (
-    <td className="px-1 py-1">
-      <div className="group flex items-center justify-end gap-0.5">
-        <NumberCell
-          value={item[field]}
-          format={formatRub}
-          label={`Цена «${stage}»: ${item.label}`}
-          onCommit={(v) => onSave(v)}
-          testId={`income-${field}-${item.key}`}
-          className={cn('min-w-0 flex-1', !set && 'text-ink/40')}
-        />
-        {set && (
-          <button
-            type="button"
-            className="rounded p-1 text-ink/40 opacity-0 hover:bg-surface hover:text-brand focus-visible:opacity-100 group-hover:opacity-100"
-            title="Как на предыдущем этапе"
-            aria-label={`Цена «${stage}» как на предыдущем этапе: ${item.label}`}
-            onClick={() => onSave(null)}
-          >
-            <RotateCcw className="size-3" />
-          </button>
+    <tr className="border-t border-line/60" data-testid="income-row">
+      <td className="py-1.5 pl-6 pr-3">{it.label}</td>
+      <td className="px-2 py-1.5 text-right tabular-nums text-ink/70">
+        {formatRub(Math.round(netPrice(it, k)))}
+        {it.discounts[k] > 0 && (
+          <span className="ml-1 text-xs text-ink/50">−{formatPct(it.discounts[k])}</span>
         )}
-      </div>
-    </td>
+      </td>
+      <td className="px-1 py-1">
+        <NumberCell
+          value={it.fact[k]}
+          format={formatQty}
+          label={`Продано, шт.: ${it.label}`}
+          onCommit={(v) => onSave([{ key: it.key, [FACT_FIELD[k]]: v }])}
+          testId={`income-fact-${k}-${it.key}`}
+        />
+      </td>
+      <td className="px-2 py-1.5 text-right tabular-nums">{formatRub(fact)}</td>
+      <td className="px-2 py-1.5 text-right tabular-nums text-ink/70">{formatQty(it.plan[k])}</td>
+      <td className="px-2 py-1.5 text-right tabular-nums text-ink/70">{formatRub(plan)}</td>
+      <td className="px-3 py-1.5">
+        <Progress part={fact} total={plan} />
+      </td>
+    </tr>
+  );
+}
+
+/** Билет за все этапы: количество по этапам и накопленный итог */
+function AllStagesRow({
+  item: it,
+  view,
+  onAuto,
+  onRemove,
+  onRename,
+}: {
+  item: IncomeItemValue;
+  view: 'plan' | 'fact';
+  onAuto: () => void;
+  onRemove: () => void;
+  onRename: (label: string) => void;
+}) {
+  const q = view === 'plan' ? it.plan : it.fact;
+  const sum = itemSum(it, view, null);
+  const plan = itemSum(it, 'plan', null);
+  return (
+    <tr className="border-t border-line/60" data-testid="income-row">
+      <td className="py-1 pl-4 pr-3">
+        {view === 'plan' ? (
+          <LabelCell item={it} onRename={onRename} onRemove={onRemove} />
+        ) : (
+          <span className="pl-2">{it.label}</span>
+        )}
+      </td>
+      {q.map((n, k) => (
+        <td key={k} className="px-2 py-1.5 text-right tabular-nums text-ink/70">
+          {formatQty(n)}
+        </td>
+      ))}
+      <td className="px-2 py-1.5 text-right tabular-nums">
+        <div className="flex items-center justify-end gap-1">
+          {view === 'plan' && <AutoBadge item={it} onAuto={onAuto} />}
+          {formatQty(sumOf(q))}
+        </div>
+      </td>
+      <td className="px-2 py-1.5 text-right tabular-nums">{formatRub(sum)}</td>
+      <td className="px-3 py-1.5">{view === 'fact' && <Progress part={sum} total={plan} />}</td>
+    </tr>
+  );
+}
+
+function AutoBadge({ item: it, onAuto }: { item: IncomeItemValue; onAuto: () => void }) {
+  return it.planManual ? (
+    <button
+      type="button"
+      className="rounded p-1 text-ink/50 hover:bg-surface hover:text-brand"
+      title="Вернуть автоматический подбор"
+      aria-label={`Вернуть автоматический подбор: ${it.label}`}
+      onClick={onAuto}
+      data-testid={`income-plan-auto-${it.key}`}
+    >
+      <RotateCcw className="size-3.5" />
+    </button>
+  ) : (
+    <span
+      className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-ink/50"
+      title="Подобрано автоматически под цель"
+    >
+      авто
+    </span>
+  );
+}
+
+/** Значение этапа: своё или (серым) как на предыдущем этапе; ↺ возвращает к предыдущему */
+function InheritCell({
+  value,
+  inherited,
+  canReset,
+  format,
+  label,
+  testId,
+  onCommit,
+  onReset,
+}: {
+  value: number;
+  inherited: boolean;
+  canReset: boolean;
+  format: (n: number) => string;
+  label: string;
+  testId: string;
+  onCommit: (v: number) => void;
+  onReset: () => void;
+}) {
+  return (
+    <div
+      className="group flex items-center justify-end gap-0.5"
+      title={inherited ? 'Как на предыдущем этапе — нажмите, чтобы задать своё' : undefined}
+    >
+      <NumberCell
+        value={value}
+        format={format}
+        label={label}
+        onCommit={onCommit}
+        testId={testId}
+        className={cn('min-w-0 flex-1', inherited && 'text-ink/40')}
+      />
+      {canReset && (
+        <button
+          type="button"
+          className="rounded p-1 text-ink/40 opacity-0 hover:bg-surface hover:text-brand focus-visible:opacity-100 group-hover:opacity-100"
+          title="Как на предыдущем этапе"
+          aria-label={`${label}: как на предыдущем этапе`}
+          onClick={onReset}
+        >
+          <RotateCcw className="size-3" />
+        </button>
+      )}
+    </div>
   );
 }
 
 /**
- * Этапы цен на одной линии от старта продаж до форума: даты смены цен, доля плана на каждом
- * этапе, текущий этап; рядом — плановые скидки.
+ * Переключатель этапов продаж билетов: карточки «Старт продаж», «Середина», «Финальная
+ * стадия» с датами, долей автоподбора и суммой этапа, плюс «Все этапы» — накопленный итог.
  */
-function PriceStages({
+function StageSwitch({
   cfg,
   dates,
   current,
+  selected,
+  onSelect,
   forumStart,
+  sums,
+  view,
   onSave,
 }: {
   cfg: IncomeConfig;
   dates: [string, string, string];
   current: number;
+  selected: number | null;
+  onSelect: (k: number | null) => void;
   forumStart: string;
+  sums: { plan: number; fact: number }[];
+  view: 'plan' | 'fact';
   onSave: (patch: Partial<IncomeConfig>) => void;
 }) {
-  const sharesSum = cfg.shares.reduce((a, b) => a + b, 0);
   const setShare = (k: number, v: number) => {
-    const shares = [...cfg.shares] as [number, number, number];
+    const shares = [...cfg.shares] as Triple;
     shares[k] = Math.min(100, v);
     onSave({ shares });
   };
+  const total = sums.reduce((a, s) => ({ plan: a.plan + s.plan, fact: a.fact + s.fact }), {
+    plan: 0,
+    fact: 0,
+  });
+  const amount = (s: { plan: number; fact: number }) =>
+    view === 'plan' ? formatRub(s.plan) : `${formatRub(s.fact)} из ${formatRub(s.plan)}`;
+  const card = (active: boolean) =>
+    cn(
+      'cursor-pointer rounded-md border px-3 py-2 text-left transition-colors',
+      active
+        ? 'border-brand bg-brand/5 ring-1 ring-brand'
+        : 'border-line bg-white hover:border-brand/50',
+    );
   return (
-    <section className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]" data-testid="income-stages">
-      <div className="rounded-lg border border-line bg-white px-4 py-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-sm font-semibold">Этапы цен</h2>
-          <span className={cn('text-xs', sharesSum === 100 ? 'text-ink/50' : 'text-yellow-700')}>
-            {sharesSum === 100
-              ? 'Доля — какая часть плана продаётся по ценам этапа'
-              : `Сумма долей ${sharesSum}% — в расчёте доли приводятся к 100%`}
-          </span>
-        </div>
-        <div className="mt-2 grid gap-2 sm:grid-cols-3">
-          {PRICE_STAGES.map((st, k) => {
-            const now = k === current;
-            const to = k < 2 ? dates[k + 1] : forumStart;
-            return (
-              <div
-                key={st.key}
-                className={cn(
-                  'rounded-md border px-3 py-2',
-                  now ? 'border-brand bg-brand/5' : 'border-line',
-                )}
-                data-testid={`income-stage-${st.key}`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className={cn('text-sm font-medium', now && 'text-brand')}>
-                    {k + 1}. {st.label}
-                  </span>
-                  {now && (
-                    <span className="rounded bg-brand px-1.5 py-0.5 text-[10px] font-medium text-white">
-                      сейчас
-                    </span>
-                  )}
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-ink/70">
-                  {k === 0 ? (
-                    <span title="Дата старта продаж задаётся в карточке форума">
-                      с {formatDate(dates[0])}
-                    </span>
-                  ) : (
-                    <label className="inline-flex items-center gap-1">
-                      с
-                      <input
-                        type="date"
-                        value={dates[k]}
-                        min={dates[k - 1]}
-                        max={forumStart}
-                        onChange={(e) =>
-                          e.target.value &&
-                          onSave(
-                            k === 1 ? { midDate: e.target.value } : { finalDate: e.target.value },
-                          )
-                        }
-                        className="h-6 rounded border border-line px-1 text-xs tabular-nums focus:border-brand focus:outline-none"
-                        aria-label={`Дата начала этапа «${st.label}»`}
-                        data-testid={`income-stage-date-${st.key}`}
-                      />
-                    </label>
-                  )}
-                  <span>по {formatDate(to)}</span>
-                </div>
-                <div className="mt-1 flex items-center gap-1 text-xs text-ink/70">
-                  Доля плана
-                  <NumberCell
-                    value={cfg.shares[k]}
-                    format={formatPct}
-                    label={`Доля плана продаж на этапе «${st.label}», %`}
-                    onCommit={(v) => setShare(k, v)}
-                    testId={`income-share-${st.key}`}
-                    className="w-auto py-0 text-left text-sm font-semibold text-ink"
-                    inputClassName="h-6 w-16 text-left"
+    <div
+      className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4"
+      role="tablist"
+      data-testid="income-stages"
+    >
+      {PRICE_STAGES.map((st, k) => {
+        const to = k < 2 ? dates[k + 1] : forumStart;
+        return (
+          <div
+            key={st.key}
+            role="tab"
+            tabIndex={0}
+            aria-selected={selected === k}
+            onClick={() => onSelect(k)}
+            onKeyDown={(e) =>
+              (e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget && onSelect(k)
+            }
+            className={card(selected === k)}
+            data-testid={`income-stage-${st.key}`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className={cn('text-sm font-medium', selected === k && 'text-brand')}>
+                {k + 1}. {st.label}
+              </span>
+              {k === current && (
+                <span className="rounded bg-brand px-1.5 py-0.5 text-[10px] font-medium text-white">
+                  сейчас
+                </span>
+              )}
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-ink/70">
+              {k === 0 ? (
+                <span title="Дата старта продаж задаётся в карточке форума">
+                  с {formatDate(dates[0])}
+                </span>
+              ) : (
+                <label
+                  className="inline-flex items-center gap-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  с
+                  <input
+                    type="date"
+                    value={dates[k]}
+                    min={dates[k - 1]}
+                    max={forumStart}
+                    onChange={(e) =>
+                      e.target.value &&
+                      onSave(k === 1 ? { midDate: e.target.value } : { finalDate: e.target.value })
+                    }
+                    className="h-6 rounded border border-line bg-white px-1 text-xs tabular-nums focus:border-brand focus:outline-none"
+                    aria-label={`Дата начала этапа «${st.label}»`}
+                    data-testid={`income-stage-date-${st.key}`}
                   />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <div
-        className="rounded-lg border border-line bg-white px-4 py-3 lg:w-72"
-        data-testid="income-discounts"
-      >
-        <h2 className="text-sm font-semibold">Скидки в плане</h2>
-        <p className="text-xs text-ink/50">% от выручки; в факте — суммы по позициям</p>
-        {DISCOUNTS.map((d) => (
-          <div key={d.key} className="mt-1.5 flex items-center justify-between gap-2 text-sm">
-            <span className="text-ink/80">{d.label}</span>
-            <NumberCell
-              value={d.key === 'personal' ? cfg.discountPersonal : cfg.discountPartner}
-              format={formatPct}
-              label={`${d.label}, % от выручки`}
-              onCommit={(v) =>
-                onSave(
-                  d.key === 'personal'
-                    ? { discountPersonal: Math.min(100, v) }
-                    : { discountPartner: Math.min(100, v) },
-                )
-              }
-              testId={`income-discount-${d.key}`}
-              className="w-20 font-semibold"
-              inputClassName="w-20"
-            />
+                </label>
+              )}
+              <span>по {formatDate(to)}</span>
+            </div>
+            <div className="mt-1 text-sm font-semibold tabular-nums">{amount(sums[k])}</div>
+            <div
+              className="flex items-center gap-1 text-xs text-ink/60"
+              onClick={(e) => e.stopPropagation()}
+              title="Как автоподбор раскладывает план билетов по этапам"
+            >
+              Доля автоподбора
+              <NumberCell
+                value={cfg.shares[k]}
+                format={formatPct}
+                label={`Доля автоподбора на этапе «${st.label}», %`}
+                onCommit={(v) => setShare(k, v)}
+                testId={`income-share-${st.key}`}
+                className="w-auto py-0 text-left text-xs font-medium text-ink"
+                inputClassName="h-6 w-16 text-left"
+              />
+            </div>
           </div>
-        ))}
+        );
+      })}
+      <div
+        role="tab"
+        tabIndex={0}
+        aria-selected={selected === null}
+        onClick={() => onSelect(null)}
+        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onSelect(null)}
+        className={card(selected === null)}
+        data-testid="income-stage-all"
+      >
+        <span className={cn('text-sm font-medium', selected === null && 'text-brand')}>
+          Все этапы
+        </span>
+        <div className="mt-1 text-xs text-ink/70">Накопленный итог по билетам</div>
+        <div className="mt-1 text-sm font-semibold tabular-nums">{amount(total)}</div>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -899,49 +997,6 @@ function IncomeSummary({
 
 const pctOne = (part: number, total: number) =>
   `${((part / total) * 100).toLocaleString('ru-RU', { maximumFractionDigits: 1 })}%`;
-
-function GroupRow({
-  group: g,
-  open,
-  onToggle,
-  cells,
-}: {
-  group: IncomeGroup;
-  open: boolean;
-  onToggle: () => void;
-  cells: React.ReactNode[];
-}) {
-  return (
-    <tr
-      className="cursor-pointer border-t border-line hover:bg-surface/60"
-      onClick={onToggle}
-      aria-expanded={open}
-    >
-      <td className="px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          {open ? (
-            <ChevronDown className="size-4 shrink-0" />
-          ) : (
-            <ChevronRight className="size-4 shrink-0" />
-          )}
-          <span className="h-4 w-1.5 shrink-0 rounded-sm" style={{ background: g.color }} />
-          <span className="font-semibold">{g.label}</span>
-        </div>
-      </td>
-      {cells.map((c, i) => (
-        <td
-          key={i}
-          className={cn(
-            'px-2 py-2.5 text-right font-semibold tabular-nums',
-            i === cells.length - 1 && 'px-3',
-          )}
-        >
-          {c}
-        </td>
-      ))}
-    </tr>
-  );
-}
 
 function Progress({ part, total }: { part: number; total: number }) {
   if (!total) return <div className="text-right text-xs text-status-gray">—</div>;
