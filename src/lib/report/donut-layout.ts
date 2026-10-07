@@ -34,12 +34,23 @@ export function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-/** Сегменты по убыванию суммы, цвета — от тёмного к светлому. */
-export function computeSegments(items: ChartItem[], palette: PaletteKey): Segment[] {
+/** Порядок статей в диаграмме: по убыванию или по возрастанию суммы */
+export type SortDir = 'desc' | 'asc';
+
+export function isSortDir(v: unknown): v is SortDir {
+  return v === 'desc' || v === 'asc';
+}
+
+/** Сегменты по убыванию (или возрастанию) суммы, цвета — от тёмного к светлому. */
+export function computeSegments(
+  items: ChartItem[],
+  palette: PaletteKey,
+  sort: SortDir = 'desc',
+): Segment[] {
   const valid = items
     .map((i, idx) => ({ ...i, idx }))
     .filter((i) => i.amount > 0)
-    .sort((a, b) => b.amount - a.amount || a.idx - b.idx);
+    .sort((a, b) => (sort === 'asc' ? a.amount - b.amount : b.amount - a.amount) || a.idx - b.idx);
   const total = valid.reduce((s, i) => s + i.amount, 0);
   const colors = paletteShades(palette, valid.length);
   let acc = 0;

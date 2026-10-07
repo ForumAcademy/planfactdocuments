@@ -1,5 +1,6 @@
 import 'server-only';
 import { prisma } from '@/lib/db';
+import { isSortDir, type SortDir } from '@/lib/report/donut-layout';
 import type { PaletteKey } from '@/lib/report/palette';
 
 export interface ChartDTO {
@@ -7,6 +8,7 @@ export interface ChartDTO {
   title: string;
   palette: PaletteKey;
   unit: string;
+  sort: SortDir;
   order: number;
   items: { id: number; name: string; amount: number; note: string | null; order: number }[];
 }
@@ -22,6 +24,7 @@ export async function getReportCharts(forumId: number): Promise<ChartDTO[]> {
     title: c.title,
     palette: c.palette,
     unit: c.unit,
+    sort: isSortDir(c.sort) ? c.sort : 'desc',
     order: c.order,
     items: c.items.map((i) => ({
       id: i.id,

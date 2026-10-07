@@ -16,6 +16,8 @@ export interface ForumDTO {
   expenseLimit: number | null;
   archived: boolean;
   reportDate: ISODate | null;
+  /** «Отчёт для АЭ»: порядок статей в диаграмме */
+  aeReportSort: 'desc' | 'asc';
 }
 
 export interface TaskDTO {

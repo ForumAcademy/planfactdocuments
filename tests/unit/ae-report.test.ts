@@ -26,6 +26,11 @@ describe('buildAeChart', () => {
     ]);
   });
 
+  it('передаёт порядок сортировки', () => {
+    expect(buildAeChart([task(1, 1, 'org')], () => null, 'asc').sort).toBe('asc');
+    expect(buildAeChart([task(1, 1, 'org')], () => null).sort).toBe('desc');
+  });
+
   it('без факта — пустая диаграмма', () => {
     expect(buildAeChart([task(1000, 0, 'org')], () => null).items).toEqual([]);
   });

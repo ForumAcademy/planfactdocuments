@@ -63,6 +63,40 @@ export async function saveChart(
   });
 }
 
+const sortDir = z.enum(['desc', 'asc']);
+
+/** Порядок статей в диаграмме отчёта: по убыванию или по возрастанию. */
+export async function setChartSort(
+  forumId: number,
+  chartId: number,
+  sort: 'desc' | 'asc',
+): Promise<ActionResult<ChartDTO[]>> {
+  return run(async () => {
+    await requireEditor();
+    await prisma.reportChart.update({
+      where: { id: id.parse(chartId), forumId },
+      data: { sort: sortDir.parse(sort) },
+    });
+    return getReportCharts(forumId);
+  });
+}
+
+/** Порядок статей в диаграмме «Отчёта для АЭ». */
+export async function setAeReportSort(
+  forumId: number,
+  sort: 'desc' | 'asc',
+): Promise<ActionResult> {
+  return run(async () => {
+    await requireEditor();
+    await prisma.forum.update({
+      where: { id: forumId },
+      data: { aeReportSort: sortDir.parse(sort) },
+    });
+    revalidatePath(`/forums/${forumId}`, 'layout');
+    return null;
+  });
+}
+
 export async function deleteChart(
   forumId: number,
   chartId: number,
@@ -156,6 +190,7 @@ export async function copyReportFrom(
             title: c.title,
             palette: c.palette,
             unit: c.unit,
+            sort: c.sort,
             order: c.order,
             items: {
               create: c.items.map((i) => ({

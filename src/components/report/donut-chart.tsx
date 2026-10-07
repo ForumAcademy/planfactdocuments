@@ -8,6 +8,7 @@ import {
   radialLayout,
   sectorPathD,
   type ChartItem,
+  type SortDir,
 } from '@/lib/report/donut-layout';
 import type { PaletteKey } from '@/lib/report/palette';
 import { formatAmount } from '@/lib/utils';
@@ -21,14 +22,19 @@ export function DonutChart({
   items,
   palette,
   unit,
+  sort = 'desc',
   size = 320,
 }: {
   items: ChartItem[];
   palette: PaletteKey;
   unit: string;
+  sort?: SortDir;
   size?: number;
 }) {
-  const segments = React.useMemo(() => computeSegments(items, palette), [items, palette]);
+  const segments = React.useMemo(
+    () => computeSegments(items, palette, sort),
+    [items, palette, sort],
+  );
   const total = chartTotal(items);
   const c = size / 2;
   const outerR = size / 2 - 4;

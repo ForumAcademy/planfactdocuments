@@ -44,6 +44,13 @@ describe('отчёт', () => {
     expect(s.reduce((a, x) => a + x.pct, 0)).toBeCloseTo(100);
   });
 
+  it('сегменты по возрастанию', () => {
+    const s = computeSegments(expenses, 'RED', 'asc');
+    expect(s.map((x) => x.amount)).toEqual([...s.map((x) => x.amount)].sort((a, b) => a - b));
+    expect(s.at(-1)!.name).toBe('Персонал');
+    expect(s.at(-1)!.end).toBeCloseTo(Math.PI * 2);
+  });
+
   it('подписи не перекрываются', () => {
     const segs = computeSegments(expenses, 'RED');
     const labels = layoutLabels(segs, {

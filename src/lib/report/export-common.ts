@@ -1,5 +1,6 @@
 import { formatDate, type ISODate } from '../dates';
 import type { ForumDTO } from '../types';
+import type { SortDir } from './donut-layout';
 import type { PaletteKey } from './palette';
 
 export interface ExportChart {
@@ -7,6 +8,7 @@ export interface ExportChart {
   title: string;
   palette: PaletteKey;
   unit: string;
+  sort?: SortDir;
   items: { name: string; amount: number; note?: string | null }[];
 }
 

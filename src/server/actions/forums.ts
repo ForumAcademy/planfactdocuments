@@ -309,11 +309,13 @@ export async function duplicateForum(id: number): Promise<ActionResult<{ id: num
         website: src.website,
         color: src.color,
         reportDate: src.reportDate,
+        aeReportSort: src.aeReportSort,
         charts: {
           create: src.charts.map((c) => ({
             title: c.title,
             palette: c.palette,
             unit: c.unit,
+            sort: c.sort,
             order: c.order,
             items: {
               create: c.items.map((i) => ({

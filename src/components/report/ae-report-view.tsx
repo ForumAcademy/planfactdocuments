@@ -9,6 +9,8 @@ import { Field } from '@/components/ui/input';
 import { useForum } from '@/components/forum/forum-context';
 import { formatDate } from '@/lib/dates';
 import { buildAeChart } from '@/lib/report/ae-report';
+import type { SortDir } from '@/lib/report/donut-layout';
+import { setAeReportSort } from '@/server/actions/report';
 import type { TaskDTO } from '@/lib/types';
 import { ChartCard } from './report-view';
 
@@ -24,7 +26,18 @@ export function AeReportView() {
     (t: TaskDTO) => (t.blockId ? (lookups.block.get(t.blockId) ?? null) : null),
     [lookups],
   );
-  const chart = React.useMemo(() => buildAeChart(tasks, blockOf), [tasks, blockOf]);
+  const [sort, setSort] = React.useState<SortDir>(forum.aeReportSort);
+  React.useEffect(() => setSort(forum.aeReportSort), [forum.aeReportSort]);
+  const chart = React.useMemo(() => buildAeChart(tasks, blockOf, sort), [tasks, blockOf, sort]);
+  const changeSort = async (next: SortDir) => {
+    const prev = sort;
+    setSort(next);
+    const res = await setAeReportSort(forum.id, next);
+    if (!res.ok) {
+      setSort(prev);
+      toast.error(res.error);
+    } else toast.success('Сортировка сохранена', { id: 'saved' });
+  };
   const charts = chart.items.length ? [chart] : [];
 
   const exportAs = async (kind: 'pptx' | 'pdf') => {
@@ -90,7 +103,7 @@ export function AeReportView() {
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
         {charts.map((c) => (
           <div key={c.id} className="flex [&>*]:flex-1">
-            <ChartCard chart={c} count={charts.length} />
+            <ChartCard chart={c} count={charts.length} onSort={changeSort} />
           </div>
         ))}
         {charts.length === 0 && (

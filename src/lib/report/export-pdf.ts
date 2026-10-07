@@ -89,7 +89,7 @@ export async function buildPdf(d: ReportExportData): Promise<jsPDF> {
   d.charts.forEach((c, i) => {
     doc.addPage([W, H], 'landscape');
     header(doc, c.title, d.forum.name);
-    const segs = computeSegments(c.items, c.palette);
+    const segs = computeSegments(c.items, c.palette, c.sort);
     const total = chartTotal(c.items);
     const cx = 290;
     const cy = 300;

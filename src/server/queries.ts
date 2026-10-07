@@ -26,6 +26,7 @@ export function toForumDTO(f: Forum): ForumDTO {
     expenseLimit: f.expenseLimit,
     archived: f.archived,
     reportDate: dbToISO(f.reportDate),
+    aeReportSort: f.aeReportSort === 'asc' ? 'asc' : 'desc',
   };
 }
 

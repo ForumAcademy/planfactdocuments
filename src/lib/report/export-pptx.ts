@@ -128,7 +128,7 @@ export async function buildPptx(d: ReportExportData): Promise<PptxGenJS> {
       align: 'right',
     });
 
-    const segs = computeSegments(c.items, c.palette);
+    const segs = computeSegments(c.items, c.palette, c.sort);
     const total = chartTotal(c.items);
     if (segs.length) {
       // Диаграмма с секторами разной длины — картинкой (в PowerPoint нет такого типа)

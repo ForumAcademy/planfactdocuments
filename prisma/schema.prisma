@@ -127,6 +127,8 @@ model Forum {
   /// Возвращён из архива вручную — автоархив прошедших форумов его не трогает
   keepActive     Boolean       @default(false)
   reportDate     DateTime?     @db.Date
+  /// «Отчёт для АЭ»: порядок статей в диаграмме — desc (по убыванию) или asc
+  aeReportSort   String        @default("desc")
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   tasks          Task[]
@@ -272,6 +274,8 @@ model ReportChart {
   palette ChartPalette @default(BLUE)
   unit    String       @default("млн руб.")
   order   Int          @default(0)
+  /// Порядок статей в диаграмме: desc — по убыванию, asc — по возрастанию
+  sort    String       @default("desc")
   items   ReportItem[]
 }
 

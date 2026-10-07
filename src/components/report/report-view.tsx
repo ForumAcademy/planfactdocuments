@@ -5,7 +5,9 @@ import { markCacheStale } from '@/lib/stale-cache';
 import { toast } from 'sonner';
 import {
   ArrowDown,
+  ArrowDownWideNarrow,
   ArrowUp,
+  ArrowUpNarrowWide,
   Copy,
   FileDown,
   GripVertical,
@@ -22,7 +24,7 @@ import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { Field, Input, Select } from '@/components/ui/input';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { formatDate, todayMsk } from '@/lib/dates';
-import { chartTotal, computeSegments, formatPct } from '@/lib/report/donut-layout';
+import { chartTotal, computeSegments, formatPct, type SortDir } from '@/lib/report/donut-layout';
 import { PALETTES, type PaletteKey } from '@/lib/report/palette';
 import type { ForumDTO } from '@/lib/types';
 import { cn, formatAmount, parseAmount } from '@/lib/utils';
@@ -32,6 +34,7 @@ import {
   reorderCharts,
   saveChart,
   saveChartItems,
+  setChartSort,
   setReportDate,
 } from '@/server/actions/report';
 import type { ChartDTO } from '@/server/report-queries';
@@ -209,6 +212,10 @@ export function ReportView({
             <ChartCard
               chart={c}
               count={charts.length}
+              onSort={async (sort) => {
+                setCharts((list) => list.map((x) => (x.id === c.id ? { ...x, sort } : x)));
+                apply(await setChartSort(forum.id, c.id, sort), 'Сортировка сохранена');
+              }}
               onDragStart={() => setDragId(c.id)}
               onDragEnd={() => {
                 setDragId(null);
@@ -242,14 +249,18 @@ export function ChartCard({
   count,
   onDragStart,
   onDragEnd,
+  onSort,
 }: {
-  chart: ChartDTO;
+  chart: Omit<ChartDTO, 'sort'> & { sort?: SortDir };
   count: number;
   onDragStart?: () => void;
   onDragEnd?: () => void;
+  /** Смена порядка статей; без него переключатель не показывается */
+  onSort?: (sort: SortDir) => void;
 }) {
+  const sort = chart.sort ?? 'desc';
   const total = chartTotal(chart.items);
-  const segments = computeSegments(chart.items, chart.palette);
+  const segments = computeSegments(chart.items, chart.palette, sort);
   const hasNotes = segments.some((s) => s.note);
   return (
     <Card className="flex flex-col p-4" data-testid="report-chart">
@@ -274,11 +285,18 @@ export function ChartCard({
           </span>
         )}
         <h2 className="text-lg font-semibold">{chart.title}</h2>
+        {onSort && <SortToggle value={sort} onChange={onSort} />}
       </div>
       {/* Диаграмма — по центру блока по вертикали, таблица — сверху */}
       <div className="mt-2 grid flex-1 grid-cols-1 items-start gap-6 md:grid-cols-[312px_minmax(0,1fr)] md:gap-8">
         <div className="self-center py-2">
-          <DonutChart items={chart.items} palette={chart.palette} unit={chart.unit} size={280} />
+          <DonutChart
+            items={chart.items}
+            palette={chart.palette}
+            unit={chart.unit}
+            sort={sort}
+            size={280}
+          />
         </div>
         {/* Таблица справа — она же легенда */}
         <table className="w-full text-sm">
@@ -329,6 +347,41 @@ export function ChartCard({
         </table>
       </div>
     </Card>
+  );
+}
+
+/** Переключатель порядка статей: по убыванию / по возрастанию суммы */
+function SortToggle({ value, onChange }: { value: SortDir; onChange: (v: SortDir) => void }) {
+  const opts = [
+    { key: 'desc', label: 'По убыванию', Icon: ArrowDownWideNarrow },
+    { key: 'asc', label: 'По возрастанию', Icon: ArrowUpNarrowWide },
+  ] as const;
+  return (
+    <div
+      className="ml-auto inline-flex shrink-0 rounded-md border border-line bg-surface p-0.5 print:hidden"
+      role="group"
+      aria-label="Сортировка статей"
+      data-testid="chart-sort"
+    >
+      {opts.map(({ key, label, Icon }) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => key !== value && onChange(key)}
+          aria-pressed={value === key}
+          title={`Сортировать статьи ${label.toLowerCase()}`}
+          className={cn(
+            'inline-flex items-center gap-1 rounded px-2 py-1 text-xs',
+            value === key
+              ? 'bg-white font-medium text-brand shadow-sm'
+              : 'text-ink/60 hover:text-ink',
+          )}
+        >
+          <Icon className="size-3.5" />
+          <span className="hidden sm:inline">{label}</span>
+        </button>
+      ))}
+    </div>
   );
 }
 
