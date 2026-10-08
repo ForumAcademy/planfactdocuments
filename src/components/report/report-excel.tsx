@@ -11,7 +11,8 @@ import { downloadBlob, safeFileName } from '@/lib/download';
 import type { ReportSheetChart } from '@/lib/excel/report-excel';
 import { PALETTES } from '@/lib/report/palette';
 import type { ForumDTO } from '@/lib/types';
-import { formatAmount, pluralRu } from '@/lib/utils';
+import { formatUnitValue } from '@/lib/report/units';
+import { pluralRu } from '@/lib/utils';
 import { importReport } from '@/server/actions/report';
 import type { ChartDTO } from '@/server/report-queries';
 
@@ -213,7 +214,12 @@ function ImportDialog({
                       </div>
                       <div className="mt-1 text-xs text-ink/70">
                         {c.items.length} {pluralRu(c.items.length, 'статья', 'статьи', 'статей')} ·
-                        итого {formatAmount(c.items.reduce((s, i) => s + i.amount, 0))} {c.unit}
+                        итого{' '}
+                        {formatUnitValue(
+                          c.items.reduce((s, i) => s + i.amount, 0),
+                          c.unit,
+                        )}{' '}
+                        {c.unit}
                       </div>
                     </div>
                   ))}

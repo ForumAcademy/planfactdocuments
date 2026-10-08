@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { formatDate } from '../dates';
-import { formatAmount } from '../utils';
+import { formatUnitValue } from './units';
 import { chartTotal, computeSegments, formatPct, radialLayout, sectorPoints } from './donut-layout';
 import {
   BRAND,
@@ -120,7 +120,7 @@ export async function buildPdf(d: ReportExportData): Promise<jsPDF> {
       doc.setFont('DejaVu', 'bold');
       doc.setFontSize(22);
       doc.setTextColor(hex(INK));
-      doc.text(formatAmount(total), cx, cy + 3, { align: 'center' });
+      doc.text(formatUnitValue(total, c.unit), cx, cy + 3, { align: 'center' });
       doc.setFont('DejaVu', 'normal');
       doc.setFontSize(10);
       doc.setTextColor('#444444');
@@ -163,7 +163,7 @@ export async function buildPdf(d: ReportExportData): Promise<jsPDF> {
       const name = doc.splitTextToSize(s.name, 150) as string[];
       doc.text(name[0] + (name.length > 1 ? '…' : ''), x0 + 22, y + rowH / 2 + 3.5);
       doc.text(
-        formatAmount(s.amount) + (s.note ? ` (${s.note})` : ''),
+        formatUnitValue(s.amount, c.unit) + (s.note ? ` (${s.note})` : ''),
         x0 + 262,
         y + rowH / 2 + 3.5,
         {
@@ -178,7 +178,7 @@ export async function buildPdf(d: ReportExportData): Promise<jsPDF> {
     doc.setFont('DejaVu', 'bold');
     doc.setTextColor(hex(INK));
     doc.text('Итого', x0 + 22, y + rowH / 2 + 3.5);
-    doc.text(formatAmount(total), x0 + 262, y + rowH / 2 + 3.5, { align: 'right' });
+    doc.text(formatUnitValue(total, c.unit), x0 + 262, y + rowH / 2 + 3.5, { align: 'right' });
     doc.text(total > 0 ? '100 %' : '—', x0 + 314, y + rowH / 2 + 3.5, { align: 'right' });
     footer(doc, i + 2, d);
   });

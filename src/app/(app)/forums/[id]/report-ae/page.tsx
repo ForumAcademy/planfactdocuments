@@ -9,5 +9,5 @@ export default async function AeReportPage({ params }: { params: Promise<{ id: s
   const forum = await getForum(forumId);
   if (!forum) notFound();
   const charts = await getReportCharts(forumId);
-  return <ReportView forum={forum} kind="ae" charts={charts} forumOptions={[]} />;
+  return <ReportView forum={forum} kind="ae" charts={charts} />;
 }

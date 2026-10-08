@@ -5,6 +5,7 @@ import { useForum } from '@/components/forum/forum-context';
 import {
   autoItems,
   computeAutoRows,
+  unitScale,
   type AutoRow,
   type AutoSource,
 } from '@/lib/report/auto-charts';
@@ -42,10 +43,10 @@ export function useAutoCharts(charts: ChartDTO[]): {
     () =>
       charts.map((c) => {
         if (!c.source) return c;
-        const saved = c.refreshedAt
-          ? c.items.map((i) => ({ name: i.name, rub: i.amount }))
-          : rows[c.source];
-        return { ...c, items: autoItems(saved, c.unit) };
+        if (!c.refreshedAt) return { ...c, items: autoItems(rows[c.source], c.unit) };
+        // Снимок хранится в рублях — пересчитываем в единицу диаграммы
+        const scale = unitScale(c.unit);
+        return { ...c, items: c.items.map((i) => ({ ...i, amount: i.amount / scale })) };
       }),
     [charts, rows],
   );

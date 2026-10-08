@@ -11,7 +11,7 @@ import {
   type SortDir,
 } from '@/lib/report/donut-layout';
 import type { PaletteKey } from '@/lib/report/palette';
-import { formatAmount } from '@/lib/utils';
+import { formatUnitValue } from '@/lib/report/units';
 
 /**
  * Радиальная диаграмма: ширина сектора — доля статьи, длина убывает от крупной статьи
@@ -120,7 +120,7 @@ export function DonutChart({
         }}
       >
         <span className="font-bold leading-none text-ink" style={{ fontSize: layout.hole * 0.42 }}>
-          {formatAmount(total)}
+          {formatUnitValue(total, unit)}
         </span>
         <span className="mt-1 max-w-full truncate px-1 text-xs text-ink/70">{unit}</span>
       </div>
@@ -137,7 +137,7 @@ export function DonutChart({
             {hovered.name}
           </div>
           <div className="mt-1">
-            {formatAmount(hovered.amount)} {unit}
+            {formatUnitValue(hovered.amount, unit)} {unit}
             {hovered.note ? ` (${hovered.note})` : ''} · {formatPct(hovered.pct)}
           </div>
         </div>

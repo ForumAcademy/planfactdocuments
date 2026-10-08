@@ -7,7 +7,7 @@ import { requireEditor } from '@/lib/auth';
 import { isoToDb } from '@/lib/dates';
 import { optionalIsoDate } from '@/lib/validation';
 import { run, UserError, type ActionResult } from '@/server/action-utils';
-import { AUTO_SOURCES } from '@/lib/report/auto-charts';
+import { AUTO_SOURCES, unitScale } from '@/lib/report/auto-charts';
 import { PALETTE_KEYS, type PaletteKey } from '@/lib/report/palette';
 import { getReportCharts, type ChartDTO } from '@/server/report-queries';
 
@@ -130,7 +130,10 @@ export async function refreshAutoChart(
     await prisma.$transaction([
       prisma.reportItem.deleteMany({ where: { chartId } }),
       prisma.reportItem.createMany({ data: autoItemsData(list).map((i) => ({ ...i, chartId })) }),
-      prisma.reportChart.update({ where: { id: chartId }, data: { refreshedAt: new Date() } }),
+      prisma.reportChart.update({
+        where: { id: chartId },
+        data: { refreshedAt: new Date(), edited: false },
+      }),
     ]);
     return getReportCharts(forumId);
   });
@@ -202,78 +205,50 @@ const itemsSchema = z
   )
   .max(100);
 
-/** Заменяет строки диаграммы (порядок — как в списке); автоматическая диаграмма становится ручной. */
-export async function saveChartItems(
+const updateSchema = z.object({
+  title: z.string().trim().min(1, 'Укажите название диаграммы').max(200),
+  palette,
+  unit: z.string().trim().min(1, 'Укажите единицу измерения').max(50),
+  items: itemsSchema,
+});
+
+/**
+ * Сохраняет диаграмму целиком: название, цвет, единицу и строки (порядок — как в списке).
+ * Автоматическая остаётся автоматической с пометкой «изменена вручную»: её строки хранятся
+ * в рублях, а «Автообновление» возвращает данные «Расходов» и «Доходов».
+ */
+export async function updateChart(
   forumId: number,
   chartId: number,
-  items: z.input<typeof itemsSchema>,
+  input: z.input<typeof updateSchema>,
 ): Promise<ActionResult<ChartDTO[]>> {
   return run(async () => {
     await requireEditor();
-    const list = itemsSchema.parse(items);
-    const chart = await prisma.reportChart.findFirst({ where: { id: chartId, forumId } });
+    const d = updateSchema.parse(input);
+    const chart = await prisma.reportChart.findFirst({ where: { id: id.parse(chartId), forumId } });
     if (!chart) throw new UserError('Диаграмма не найдена');
+    const scale = chart.source ? unitScale(d.unit) : 1;
     await prisma.$transaction([
       prisma.reportChart.update({
         where: { id: chartId },
-        data: { source: null, refreshedAt: null },
+        data: {
+          title: d.title,
+          palette: d.palette,
+          unit: d.unit,
+          ...(chart.source && { edited: true }),
+        },
       }),
       prisma.reportItem.deleteMany({ where: { chartId } }),
       prisma.reportItem.createMany({
-        data: list.map((i, k) => ({
+        data: d.items.map((i, k) => ({
           chartId,
           name: i.name,
-          amount: Math.round(i.amount * 100) / 100,
+          amount: Math.round(i.amount * scale * 100) / 100,
           note: i.note,
           order: k + 1,
         })),
       }),
     ]);
-    return getReportCharts(forumId);
-  });
-}
-
-/** Копирует структуру отчёта (диаграммы и строки, при желании — с суммами) из другого форума. */
-export async function copyReportFrom(
-  forumId: number,
-  sourceForumId: number,
-  withAmounts: boolean,
-): Promise<ActionResult<ChartDTO[]>> {
-  return run(async () => {
-    await requireEditor();
-    if (forumId === sourceForumId) throw new UserError('Выберите другой форум');
-    const src = await prisma.reportChart.findMany({
-      where: { forumId: sourceForumId, report: 'main', archived: false },
-      include: { items: { orderBy: { order: 'asc' } } },
-      orderBy: { order: 'asc' },
-    });
-    if (!src.length) throw new UserError('В выбранном форуме нет диаграмм');
-    await prisma.$transaction(async (tx) => {
-      // Архив форума остаётся как был — заменяются только активные диаграммы
-      await tx.reportChart.deleteMany({ where: { forumId, report: 'main', archived: false } });
-      for (const c of src) {
-        await tx.reportChart.create({
-          data: {
-            forumId,
-            title: c.title,
-            palette: c.palette,
-            unit: c.unit,
-            sort: c.sort,
-            order: c.order,
-            source: c.source,
-            items: {
-              // Автоматическая диаграмма заполнится данными этого форума при открытии отчёта
-              create: (c.source ? [] : c.items).map((i) => ({
-                name: i.name,
-                amount: withAmounts ? i.amount : 0,
-                note: withAmounts ? i.note : null,
-                order: i.order,
-              })),
-            },
-          },
-        });
-      }
-    });
     return getReportCharts(forumId);
   });
 }

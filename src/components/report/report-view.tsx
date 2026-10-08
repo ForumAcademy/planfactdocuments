@@ -10,7 +10,6 @@ import {
   ArrowDownWideNarrow,
   ArrowUp,
   ArrowUpNarrowWide,
-  Copy,
   FileDown,
   GripVertical,
   Keyboard,
@@ -19,7 +18,6 @@ import {
   Presentation,
   RefreshCw,
   Trash2,
-  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -29,20 +27,20 @@ import { Field, Input, Select } from '@/components/ui/input';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { formatDate, todayMsk } from '@/lib/dates';
 import { chartTotal, computeSegments, formatPct, type SortDir } from '@/lib/report/donut-layout';
-import { AUTO_SOURCES, autoSource, type AutoRow, type AutoSource } from '@/lib/report/auto-charts';
+import { AUTO_SOURCES, autoSource, type AutoSource } from '@/lib/report/auto-charts';
 import { PALETTE_KEYS, PALETTES, type PaletteKey } from '@/lib/report/palette';
+import { formatUnitValue, UNIT_PRESETS } from '@/lib/report/units';
 import type { ForumDTO } from '@/lib/types';
-import { cn, formatAmount, parseAmount } from '@/lib/utils';
+import { cn, parseAmount } from '@/lib/utils';
 import {
-  copyReportFrom,
   deleteChart,
   refreshAutoChart,
   reorderCharts,
   saveChart,
-  saveChartItems,
   setChartArchived,
   setChartSort,
   setReportDate,
+  updateChart,
 } from '@/server/actions/report';
 import type { ChartDTO, ReportKind } from '@/server/report-queries';
 import { DonutChart } from './donut-chart';
@@ -52,6 +50,8 @@ import { useAutoCharts } from './use-auto-charts';
 const TITLES: Record<ReportKind, string> = { main: 'Отчёт', ae: 'Отчёт для АЭ' };
 
 type Section = 'active' | 'archive';
+
+type Result = { ok: true; data: ChartDTO[] } | { ok: false; error: string };
 
 /** Время последнего «Автообновления»: «08.10.2026 10:15» по Москве */
 function refreshedLabel(iso: string): string {
@@ -69,28 +69,24 @@ function refreshedLabel(iso: string): string {
 
 /**
  * «Отчёт» и «Отчёт для АЭ»: круговые диаграммы в подразделах «Активные» и «Архив».
- * Автоматические берут строки из «Расходов» и «Доходов» кнопкой «Автообновление», ручные
- * заполняются вручную. Для выгрузки в PPTX, PDF и Excel диаграммы отмечаются галочкой.
+ * Каждая диаграмма правится, архивируется и удаляется сама по себе. Автоматические берут строки
+ * из «Расходов» и «Доходов»; после ручных правок «Автообновление» возвращает исходные данные.
+ * Для выгрузки в PPTX, PDF и Excel диаграммы отмечаются галочкой.
  */
 export function ReportView({
   forum,
   kind = 'main',
   charts: initial,
-  forumOptions,
 }: {
   forum: ForumDTO;
   kind?: ReportKind;
   /** Диаграммы обеих вкладок форума — сервер возвращает их вместе */
   charts: ChartDTO[];
-  forumOptions: { id: number; name: string }[];
 }) {
   const [all, setAll] = React.useState(initial);
   const charts = React.useMemo(() => all.filter((c) => c.report === kind), [all, kind]);
-  const setCharts = (next: ChartDTO[] | ((list: ChartDTO[]) => ChartDTO[])) =>
-    setAll((list) => {
-      const mine = typeof next === 'function' ? next(list.filter((c) => c.report === kind)) : next;
-      return [...list.filter((c) => c.report !== kind), ...mine];
-    });
+  const setCharts = (next: ChartDTO[]) =>
+    setAll((list) => [...list.filter((c) => c.report !== kind), ...next]);
   const { shown: shownAll, rows } = useAutoCharts(charts);
   const title = TITLES[kind];
   const confirm = useConfirm();
@@ -113,17 +109,14 @@ export function ReportView({
       return n;
     });
   const [reportDate, setDate] = React.useState(forum.reportDate ?? todayMsk());
-  const [editing, setEditing] = React.useState(false);
-  const [copyOpen, setCopyOpen] = React.useState(false);
+  const [editId, setEditId] = React.useState<number | null>(null);
+  const editing = shownAll.find((c) => c.id === editId) ?? null;
   const [busy, setBusy] = React.useState<'pptx' | 'pdf' | null>(null);
   const [refreshing, setRefreshing] = React.useState<number | null>(null);
 
   React.useEffect(() => setAll(initial), [initial]);
 
-  const apply = (
-    res: { ok: true; data: ChartDTO[] } | { ok: false; error: string },
-    msg: string | null = 'Сохранено',
-  ) => {
+  const apply = (res: Result, msg: string | null = 'Сохранено') => {
     if (!res.ok) {
       toast.error(res.error);
       return false;
@@ -134,7 +127,7 @@ export function ReportView({
     return true;
   };
 
-  // Автоматическая диаграмма без снимка (новая или скопированная) один раз заполняется сама
+  // Автоматическая диаграмма без снимка (новая или из старых данных) один раз заполняется сама
   const filled = React.useRef(new Set<number>());
   React.useEffect(() => {
     const todo = charts.filter((c) => c.source && !c.refreshedAt && !filled.current.has(c.id));
@@ -148,8 +141,35 @@ export function ReportView({
     })();
   }, [charts, rows, forum.id]);
 
+  const addChart = async (source: AutoSource | null) => {
+    const a = source ? autoSource(source) : null;
+    const before = new Set(all.map((c) => c.id));
+    const res = await saveChart(forum.id, {
+      title: a?.title ?? 'Новая диаграмма',
+      palette: a?.palette ?? 'BLUE',
+      unit: 'млн руб.',
+      report: kind,
+      source,
+      rows: source ? rows[source] : undefined,
+    });
+    if (!apply(res, 'Диаграмма добавлена')) return;
+    setSection('active');
+    // Пустую сразу открываем на правку — в ней нечего показывать
+    const added = res.ok ? res.data.find((c) => !before.has(c.id)) : undefined;
+    if (added && !source) setEditId(added.id);
+  };
+
   const refreshChart = async (c: ChartDTO) => {
     if (!c.source) return;
+    if (
+      c.edited &&
+      !(await confirm({
+        title: `Вернуть исходные данные в «${c.title}»?`,
+        description: 'Ручные правки строк заменятся текущими данными «Расходов» и «Доходов».',
+        confirmText: 'Обновить',
+      }))
+    )
+      return;
     setRefreshing(c.id);
     apply(
       await refreshAutoChart(forum.id, c.id, rows[c.source]),
@@ -236,21 +256,7 @@ export function ReportView({
           />
         </Field>
         <div className="ml-auto flex flex-wrap gap-2">
-          {!archive && (
-            <Button
-              variant={editing ? 'default' : 'outline'}
-              onClick={() => setEditing((e) => !e)}
-              data-testid="report-edit"
-            >
-              {editing ? <X /> : <Pencil />}{' '}
-              {editing ? 'Завершить редактирование' : 'Редактировать отчёт'}
-            </Button>
-          )}
-          {kind === 'main' && (
-            <Button variant="outline" onClick={() => setCopyOpen(true)}>
-              <Copy /> Скопировать из другого форума
-            </Button>
-          )}
+          <AddChartMenu onAdd={addChart} />
           <ReportExcelButtons
             forum={forum}
             reportDate={reportDate}
@@ -310,10 +316,7 @@ export function ReportView({
               type="button"
               role="tab"
               aria-selected={section === key}
-              onClick={() => {
-                setSection(key);
-                if (key === 'archive') setEditing(false);
-              }}
+              onClick={() => setSection(key)}
               className={cn(
                 'rounded px-3 py-1.5 text-sm',
                 section === key
@@ -349,18 +352,6 @@ export function ReportView({
         )}
       </div>
 
-      {editing && !archive && (
-        <ChartsEditor
-          forumId={forum.id}
-          kind={kind}
-          charts={shown}
-          rows={rows}
-          apply={apply}
-          onArchive={(c) => archiveChart(c, true)}
-          onDelete={removeChart}
-        />
-      )}
-
       {/* На широком экране — по две диаграммы в строке */}
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
         {shown.map((c, i) => (
@@ -392,10 +383,11 @@ export function ReportView({
               onSelect={(on) => toggleSelected(c.id, on)}
               refreshing={refreshing === c.id}
               onRefresh={() => refreshChart(c)}
+              onEdit={() => setEditId(c.id)}
               onArchive={() => archiveChart(c, !c.archived)}
               onDelete={() => removeChart(c)}
               onSort={async (sort) => {
-                setCharts((list) => list.map((x) => (x.id === c.id ? { ...x, sort } : x)));
+                setCharts(charts.map((x) => (x.id === c.id ? { ...x, sort } : x)));
                 apply(await setChartSort(forum.id, c.id, sort), 'Сортировка сохранена');
               }}
               onDragStart={() => setDragId(c.id)}
@@ -410,21 +402,84 @@ export function ReportView({
           <div className="rounded-md border border-dashed border-line p-10 text-center text-status-gray xl:col-span-2">
             {archive
               ? 'В архиве нет диаграмм. Перенести диаграмму в архив можно кнопкой с коробкой у её названия.'
-              : 'В отчёте нет диаграмм. Нажмите «Редактировать отчёт», чтобы добавить.'}
+              : 'В отчёте нет диаграмм. Нажмите «Добавить диаграмму».'}
           </div>
         )}
       </div>
 
-      {kind === 'main' && (
-        <CopyDialog
-          open={copyOpen}
-          onOpenChange={setCopyOpen}
-          forumOptions={forumOptions}
-          onCopy={async (sourceId, withAmounts) => {
-            const res = await copyReportFrom(forum.id, sourceId, withAmounts);
-            if (apply(res, 'Структура отчёта скопирована')) setCopyOpen(false);
+      {editing && (
+        <ChartEditDialog
+          key={editing.id}
+          chart={editing}
+          onClose={() => setEditId(null)}
+          onSave={async (patch) => {
+            const ok = apply(await updateChart(forum.id, editing.id, patch), 'Диаграмма сохранена');
+            if (ok) setEditId(null);
           }}
         />
+      )}
+    </div>
+  );
+}
+
+/** Кнопка «Добавить диаграмму»: пустая (ручной ввод) или автоматическая из вкладок */
+function AddChartMenu({ onAdd }: { onAdd: (source: AutoSource | null) => Promise<void> }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+  // Меню закрывается кликом мимо него
+  React.useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+  const add = (source: AutoSource | null) => {
+    setOpen(false);
+    void onAdd(source);
+  };
+  return (
+    <div className="relative" ref={ref}>
+      <Button variant="outline" onClick={() => setOpen((o) => !o)} data-testid="chart-add">
+        <Plus /> Добавить диаграмму
+      </Button>
+      {open && (
+        <div
+          className="absolute left-0 z-20 mt-1 w-80 rounded-md border border-line bg-white p-1 shadow-lg sm:left-auto sm:right-0"
+          data-testid="chart-add-menu"
+        >
+          <button
+            type="button"
+            className="w-full rounded px-3 py-2 text-left text-sm hover:bg-surface"
+            onClick={() => add(null)}
+          >
+            <div className="font-medium">Пустая диаграмма</div>
+            <div className="text-xs text-ink/60">
+              Ручной ввод: строки, суммы или количество вносятся вручную
+            </div>
+          </button>
+          <div className="px-3 pb-1 pt-2 text-[11px] uppercase tracking-wide text-ink/50">
+            Авто: из вкладок «Расходы» и «Доходы»
+          </div>
+          {AUTO_SOURCES.map((a) => (
+            <button
+              key={a.key}
+              type="button"
+              className="flex w-full items-start gap-2 rounded px-3 py-2 text-left text-sm hover:bg-surface"
+              onClick={() => add(a.key)}
+            >
+              <span
+                className="mt-1 size-2.5 shrink-0 rounded-sm"
+                style={{ background: PALETTES[a.palette].dark }}
+              />
+              <span>
+                <span className="block font-medium">{a.title}</span>
+                <span className="block text-xs text-ink/60">{a.hint}</span>
+              </span>
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -437,6 +492,7 @@ export function ChartCard({
   onSelect,
   refreshing,
   onRefresh,
+  onEdit,
   onArchive,
   onDelete,
   onDragStart,
@@ -451,6 +507,7 @@ export function ChartCard({
   refreshing: boolean;
   /** «Автообновление» — только у автоматических */
   onRefresh: () => void;
+  onEdit: () => void;
   /** В архив или обратно в активные */
   onArchive: () => void;
   onDelete: () => void;
@@ -463,6 +520,7 @@ export function ChartCard({
   const total = chartTotal(chart.items);
   const segments = computeSegments(chart.items, chart.palette, sort);
   const hasNotes = segments.some((s) => s.note);
+  const fmt = (n: number) => formatUnitValue(n, chart.unit);
   return (
     <Card className={cn('flex flex-col p-4', !selected && 'opacity-70')} data-testid="report-chart">
       <div className="flex flex-wrap items-center gap-2">
@@ -504,12 +562,21 @@ export function ChartCard({
               variant="outline"
               onClick={onRefresh}
               disabled={refreshing}
-              title="Взять текущие данные из «Расходов» и «Доходов»"
+              title="Взять текущие данные из «Расходов» и «Доходов» вместо ручных правок"
               data-testid="chart-refresh"
             >
               <RefreshCw className={cn(refreshing && 'animate-spin')} /> Автообновление
             </Button>
           )}
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={onEdit}
+            title="Редактировать диаграмму"
+            data-testid="chart-edit"
+          >
+            <Pencil />
+          </Button>
           <Button
             size="icon"
             variant="ghost"
@@ -534,6 +601,7 @@ export function ChartCard({
       {chart.source && chart.refreshedAt && (
         <div className="mt-0.5 text-xs text-ink/50">
           Данные на {refreshedLabel(chart.refreshedAt)}
+          {chart.edited && <span className="text-yellow-800"> · изменены вручную</span>}
         </div>
       )}
       {/* Диаграмма — по центру блока по вертикали, таблица — сверху */}
@@ -570,7 +638,7 @@ export function ChartCard({
                   </span>
                 </td>
                 <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
-                  {formatAmount(s.amount)}
+                  {fmt(s.amount)}
                 </td>
                 {hasNotes && (
                   <td className="max-w-[180px] px-2 py-1.5 text-right text-ink/70">
@@ -585,7 +653,7 @@ export function ChartCard({
             <tr className="border-t-2 border-ink/20 font-semibold">
               <td className="px-2 py-1.5">Итого</td>
               <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
-                {formatAmount(total)}
+                {fmt(total)}
               </td>
               {hasNotes && <td />}
               <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
@@ -604,7 +672,7 @@ function AutoBadge({ source }: { source: AutoSource }) {
   return (
     <span
       className="inline-flex shrink-0 items-center gap-1 rounded bg-brand-light px-1.5 py-0.5 text-[11px] text-brand print:hidden"
-      title={`${autoSource(source).hint}. Обновляется кнопкой «Автообновление».`}
+      title={`${autoSource(source).hint}. Исходные данные возвращает кнопка «Автообновление».`}
       data-testid="chart-auto"
     >
       <RefreshCw className="size-3" /> авто
@@ -617,7 +685,7 @@ function ManualBadge() {
   return (
     <span
       className="inline-flex shrink-0 items-center gap-1 rounded bg-surface px-1.5 py-0.5 text-[11px] text-ink/60 print:hidden"
-      title="Строки и суммы вносятся вручную в режиме «Редактировать отчёт»"
+      title="Строки вносятся вручную кнопкой с карандашом"
       data-testid="chart-manual"
     >
       <Keyboard className="size-3" /> Ручной ввод
@@ -660,167 +728,6 @@ function SortToggle({ value, onChange }: { value: SortDir; onChange: (v: SortDir
   );
 }
 
-type Apply = (
-  res: { ok: true; data: ChartDTO[] } | { ok: false; error: string },
-  msg?: string,
-) => boolean;
-
-function ChartsEditor({
-  forumId,
-  kind,
-  charts,
-  rows,
-  apply,
-  onArchive,
-  onDelete,
-}: {
-  forumId: number;
-  kind: ReportKind;
-  charts: ChartDTO[];
-  /** Текущие данные «Расходов» и «Доходов» — для новой автоматической диаграммы */
-  rows: Record<AutoSource, AutoRow[]>;
-  apply: Apply;
-  onArchive: (c: ChartDTO) => void;
-  onDelete: (c: ChartDTO) => void;
-}) {
-  const [dragId, setDragId] = React.useState<number | null>(null);
-  const [adding, setAdding] = React.useState(false);
-  const menuRef = React.useRef<HTMLDivElement>(null);
-  // Меню «Добавить диаграмму» закрывается кликом мимо него
-  React.useEffect(() => {
-    if (!adding) return;
-    const close = (e: MouseEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) setAdding(false);
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [adding]);
-
-  const add = async (source: AutoSource | null) => {
-    setAdding(false);
-    const a = source ? autoSource(source) : null;
-    apply(
-      await saveChart(forumId, {
-        title: a?.title ?? 'Новая диаграмма',
-        palette: a?.palette ?? 'BLUE',
-        unit: 'млн руб.',
-        report: kind,
-        source,
-        rows: source ? rows[source] : undefined,
-      }),
-      'Диаграмма добавлена',
-    );
-  };
-
-  const move = async (from: number, to: number) => {
-    if (to < 0 || to >= charts.length) return;
-    const ids = charts.map((c) => c.id);
-    const [x] = ids.splice(from, 1);
-    ids.splice(to, 0, x);
-    apply(await reorderCharts(forumId, ids), 'Порядок сохранён');
-  };
-
-  return (
-    <div
-      className="mt-4 rounded-md border border-brand/40 bg-brand-light/40 p-4"
-      data-testid="charts-editor"
-    >
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <h2 className="mr-auto font-semibold">Диаграммы отчёта</h2>
-        <div className="relative" ref={menuRef}>
-          <Button size="sm" onClick={() => setAdding((a) => !a)} data-testid="chart-add">
-            <Plus /> Добавить диаграмму
-          </Button>
-          {adding && (
-            <div
-              className="absolute right-0 z-20 mt-1 w-80 rounded-md border border-line bg-white p-1 shadow-lg"
-              data-testid="chart-add-menu"
-            >
-              <button
-                type="button"
-                className="w-full rounded px-3 py-2 text-left text-sm hover:bg-surface"
-                onClick={() => add(null)}
-              >
-                <div className="font-medium">Пустая диаграмма</div>
-                <div className="text-xs text-ink/60">
-                  Ручной ввод: строки и суммы вносятся вручную
-                </div>
-              </button>
-              <div className="px-3 pb-1 pt-2 text-[11px] uppercase tracking-wide text-ink/50">
-                Авто: из вкладок «Расходы» и «Доходы»
-              </div>
-              {AUTO_SOURCES.map((a) => (
-                <button
-                  key={a.key}
-                  type="button"
-                  className="flex w-full items-start gap-2 rounded px-3 py-2 text-left text-sm hover:bg-surface"
-                  onClick={() => add(a.key)}
-                >
-                  <span
-                    className="mt-1 size-2.5 shrink-0 rounded-sm"
-                    style={{ background: PALETTES[a.palette].dark }}
-                  />
-                  <span>
-                    <span className="block font-medium">{a.title}</span>
-                    <span className="block text-xs text-ink/60">{a.hint}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-      <p className="mb-3 text-xs text-ink/70">
-        Порядок диаграмм — это порядок слайдов в презентации. Перетащите карточку за значок ⋮⋮ или
-        используйте стрелки. Диаграммы с меткой «авто» берут строки из вкладок «Расходы» и «Доходы»
-        кнопкой «Автообновление»; их строки можно перевести в ручной ввод.
-      </p>
-      <div className="space-y-3">
-        {charts.map((c, i) => (
-          <div
-            key={c.id}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={() => {
-              if (dragId === null || dragId === c.id) return;
-              void move(
-                charts.findIndex((x) => x.id === dragId),
-                i,
-              );
-              setDragId(null);
-            }}
-            className={cn(
-              'rounded-md border border-line bg-white p-3',
-              dragId === c.id && 'opacity-50',
-            )}
-          >
-            <ChartEditorRow
-              chart={c}
-              index={i}
-              count={charts.length}
-              onMove={move}
-              onDragStart={() => setDragId(c.id)}
-              onSave={async (patch) =>
-                apply(
-                  await saveChart(forumId, {
-                    id: c.id,
-                    title: c.title,
-                    palette: c.palette,
-                    unit: c.unit,
-                    ...patch,
-                  }),
-                )
-              }
-              onSaveItems={async (items) => apply(await saveChartItems(forumId, c.id, items))}
-              onArchive={() => onArchive(c)}
-              onDelete={() => onDelete(c)}
-            />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 interface DraftItem {
   key: string;
   name: string;
@@ -830,176 +737,140 @@ interface DraftItem {
 
 let draftSeq = 0;
 
-function ChartEditorRow({
+const CUSTOM_UNIT = '__custom';
+
+/** Число для поля ввода: без пробелов, с запятой, без лишних нулей */
+function draftAmount(n: number): string {
+  return String(Math.round(n * 100) / 100).replace('.', ',');
+}
+
+/** Правка одной диаграммы: название, цвет, единица измерения и строки */
+function ChartEditDialog({
   chart,
-  index,
-  count,
-  onMove,
-  onDragStart,
+  onClose,
   onSave,
-  onSaveItems,
-  onArchive,
-  onDelete,
 }: {
   chart: ChartDTO;
-  index: number;
-  count: number;
-  onMove: (from: number, to: number) => void;
-  onDragStart: () => void;
-  onSave: (p: Partial<{ title: string; palette: PaletteKey; unit: string }>) => void;
-  onSaveItems: (items: { name: string; amount: number; note: string | null }[]) => Promise<boolean>;
-  onArchive: () => void;
-  onDelete: () => void;
+  onClose: () => void;
+  onSave: (patch: {
+    title: string;
+    palette: PaletteKey;
+    unit: string;
+    items: { name: string; amount: number; note: string | null }[];
+  }) => Promise<void>;
 }) {
+  const isPreset = UNIT_PRESETS.some((p) => p.unit === chart.unit);
   const [title, setTitle] = React.useState(chart.title);
-  const [unit, setUnit] = React.useState(chart.unit);
-  const toDraft = React.useCallback(
-    () =>
-      chart.items.map((i) => ({
-        key: String(i.id),
-        name: i.name,
-        amount: formatAmount(i.amount).replace(/\s/g, ''),
-        note: i.note ?? '',
-      })),
-    [chart.items],
+  const [palette, setPalette] = React.useState<PaletteKey>(chart.palette);
+  const [unitChoice, setUnitChoice] = React.useState(isPreset ? chart.unit : CUSTOM_UNIT);
+  const [customUnit, setCustomUnit] = React.useState(isPreset ? '' : chart.unit);
+  const unit = unitChoice === CUSTOM_UNIT ? customUnit.trim() : unitChoice;
+  const [items, setItems] = React.useState<DraftItem[]>(() =>
+    chart.items.map((i) => ({
+      key: String(i.id),
+      name: i.name,
+      amount: draftAmount(i.amount),
+      note: i.note ?? '',
+    })),
   );
-  const [items, setItems] = React.useState<DraftItem[]>(toDraft);
-  const [dirty, setDirty] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState('');
-  // Данные с сервера принимаем, только если нет несохранённых правок
-  React.useEffect(() => {
-    if (!dirty) setItems(toDraft());
-  }, [toDraft, dirty]);
-  React.useEffect(() => setTitle(chart.title), [chart.title]);
-  React.useEffect(() => setUnit(chart.unit), [chart.unit]);
 
   const change = (list: DraftItem[]) => {
     setItems(list);
-    setDirty(true);
     setError('');
   };
   const update = (k: number, patch: Partial<DraftItem>) =>
     change(items.map((x, i) => (i === k ? { ...x, ...patch } : x)));
+  const swap = (a: number, b: number) => {
+    const l = [...items];
+    [l[a], l[b]] = [l[b], l[a]];
+    change(l);
+  };
 
   const save = async () => {
+    if (!title.trim()) return setError('Укажите название диаграммы');
+    if (!unit) return setError('Укажите единицу измерения');
     const parsed: { name: string; amount: number; note: string | null }[] = [];
     for (const [k, i] of items.entries()) {
       if (!i.name.trim() && !i.amount.trim() && !i.note.trim()) continue;
       const a = parseAmount(i.amount || '0');
       if (!i.name.trim()) return setError(`Строка ${k + 1}: укажите название статьи`);
       if (a === null || a < 0)
-        return setError(`Строка ${k + 1}: сумма должна быть числом, например 6,21`);
+        return setError(`Строка ${k + 1}: значение должно быть числом, например 6,21 или 30`);
       parsed.push({ name: i.name.trim(), amount: a, note: i.note.trim() || null });
     }
     setSaving(true);
-    const ok = await onSaveItems(parsed);
+    await onSave({ title: title.trim(), palette, unit, items: parsed });
     setSaving(false);
-    if (ok) setDirty(false);
   };
 
   const total = items.reduce((s, i) => s + (parseAmount(i.amount) ?? 0), 0);
 
   return (
-    <div>
-      <div className="flex flex-wrap items-end gap-2">
-        <span
-          draggable
-          onDragStart={onDragStart}
-          className="mb-2 cursor-grab text-status-gray hover:text-ink"
-          title="Перетащите, чтобы изменить порядок"
-        >
-          <GripVertical className="size-4" />
-        </span>
-        <span className="mb-2 w-6 text-sm text-ink/60">{index + 1}.</span>
-        <Field label="Название диаграммы" className="min-w-[200px] flex-1">
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={() => title.trim() && title !== chart.title && onSave({ title: title.trim() })}
-          />
-        </Field>
-        <Field label="Цветовая гамма" className="w-36">
-          <Select
-            value={chart.palette}
-            onChange={(e) => onSave({ palette: e.target.value as PaletteKey })}
-          >
-            {PALETTE_KEYS.map((p) => (
-              <option key={p} value={p}>
-                {PALETTES[p].label}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Единица" className="w-32">
-          <Input
-            value={unit}
-            onChange={(e) => setUnit(e.target.value)}
-            onBlur={() => unit.trim() && unit !== chart.unit && onSave({ unit: unit.trim() })}
-          />
-        </Field>
-        <div className="flex gap-1">
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={index === 0}
-            onClick={() => onMove(index, index - 1)}
-            title="Выше"
-          >
-            <ArrowUp />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={index === count - 1}
-            onClick={() => onMove(index, index + 1)}
-            title="Ниже"
-          >
-            <ArrowDown />
-          </Button>
-          <Button size="icon" variant="ghost" onClick={onArchive} title="В архив">
-            <Archive />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="text-status-red"
-            onClick={onDelete}
-            title="Удалить диаграмму"
-          >
-            <Trash2 />
-          </Button>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent
+        title="Редактирование диаграммы"
+        description={
+          chart.source
+            ? `Авто: ${autoSource(chart.source).hint}. Строки можно поправить вручную, исходные данные вернёт кнопка «Автообновление».`
+            : 'Ручной ввод: строки и значения вносятся вручную.'
+        }
+        wide
+      >
+        <div className="flex flex-wrap items-end gap-2">
+          <Field label="Название диаграммы" className="min-w-[220px] flex-1">
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              data-testid="chart-edit-title"
+            />
+          </Field>
+          <Field label="Цветовая гамма" className="w-40">
+            <Select value={palette} onChange={(e) => setPalette(e.target.value as PaletteKey)}>
+              {PALETTE_KEYS.map((p) => (
+                <option key={p} value={p}>
+                  {PALETTES[p].label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Единица измерения" className="w-40">
+            <Select
+              value={unitChoice}
+              onChange={(e) => setUnitChoice(e.target.value)}
+              data-testid="chart-edit-unit"
+            >
+              {UNIT_PRESETS.map((p) => (
+                <option key={p.unit} value={p.unit}>
+                  {p.unit}
+                </option>
+              ))}
+              <option value={CUSTOM_UNIT}>Другая…</option>
+            </Select>
+          </Field>
+          {unitChoice === CUSTOM_UNIT && (
+            <Field label="Своя единица" className="w-36">
+              <Input
+                value={customUnit}
+                onChange={(e) => setCustomUnit(e.target.value)}
+                placeholder="напр. билетов"
+                data-testid="chart-edit-unit-custom"
+              />
+            </Field>
+          )}
         </div>
-      </div>
-      {chart.source ? (
-        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-md bg-surface px-3 py-2 text-sm">
-          <RefreshCw className="size-4 shrink-0 text-ink/50" />
-          <span className="mr-auto text-ink/70">
-            {autoSource(chart.source).hint}: строки обновляются кнопкой «Автообновление»
-            {chart.items.length ? '' : ' (пока данных нет)'}.
-          </span>
-          <Button
-            size="sm"
-            variant="outline"
-            data-testid="chart-detach"
-            onClick={() =>
-              onSaveItems(
-                chart.items.map((i) => ({ name: i.name, amount: i.amount, note: i.note })),
-              )
-            }
-            title="Зафиксировать текущие строки и править их вручную; обновляться сами они перестанут"
-          >
-            <Pencil /> Править строки вручную
-          </Button>
-        </div>
-      ) : (
+        <p className="mt-1 text-xs text-ink/60">
+          Формат чисел — по единице: {formatUnitValue(1234.5, unit || 'шт.')} {unit || 'шт.'}
+        </p>
+
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[560px] text-sm">
             <thead className="text-left text-xs text-ink/60">
               <tr>
                 <th className="w-8" />
                 <th className="px-1 py-1">Статья</th>
-                <th className="w-32 px-1 py-1">Сумма ({chart.unit})</th>
+                <th className="w-32 px-1 py-1">Значение ({unit || '—'})</th>
                 <th className="w-36 px-1 py-1">Доп. единица</th>
                 <th className="w-28" />
               </tr>
@@ -1021,8 +892,8 @@ function ChartEditorRow({
                       value={it.amount}
                       inputMode="decimal"
                       onChange={(e) => update(k, { amount: e.target.value })}
-                      aria-label="Сумма"
-                      placeholder="0,00"
+                      aria-label="Значение"
+                      placeholder="0"
                       className="h-8 text-right tabular-nums"
                     />
                   </td>
@@ -1040,11 +911,7 @@ function ChartEditorRow({
                       size="iconSm"
                       variant="ghost"
                       disabled={k === 0}
-                      onClick={() => {
-                        const l = [...items];
-                        [l[k - 1], l[k]] = [l[k], l[k - 1]];
-                        change(l);
-                      }}
+                      onClick={() => swap(k, k - 1)}
                       title="Выше"
                     >
                       <ArrowUp />
@@ -1053,11 +920,7 @@ function ChartEditorRow({
                       size="iconSm"
                       variant="ghost"
                       disabled={k === items.length - 1}
-                      onClick={() => {
-                        const l = [...items];
-                        [l[k + 1], l[k]] = [l[k], l[k + 1]];
-                        change(l);
-                      }}
+                      onClick={() => swap(k, k + 1)}
                       title="Ниже"
                     >
                       <ArrowDown />
@@ -1082,103 +945,23 @@ function ChartEditorRow({
               onClick={() =>
                 change([...items, { key: `new-${++draftSeq}`, name: '', amount: '', note: '' }])
               }
+              data-testid="chart-edit-add-row"
             >
               <Plus /> Добавить строку
             </Button>
-            <span className="text-sm font-semibold tabular-nums">Итого: {formatAmount(total)}</span>
-            <div className="ml-auto flex items-center gap-2">
-              {dirty && (
-                <span className="text-xs text-yellow-800">Есть несохранённые изменения</span>
-              )}
-              {dirty && (
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setDirty(false);
-                    setItems(toDraft());
-                    setError('');
-                  }}
-                >
-                  Отменить
-                </Button>
-              )}
-              <Button onClick={save} disabled={!dirty || saving} data-testid="save-items">
-                {saving ? 'Сохраняем…' : 'Сохранить строки'}
-              </Button>
-            </div>
+            <span className="ml-auto text-sm font-semibold tabular-nums">
+              Итого: {formatUnitValue(total, unit || 'шт.')} {unit}
+            </span>
           </div>
-          {error && <p className="mt-1 text-xs text-status-red">{error}</p>}
+          {error && <p className="mt-2 text-sm text-status-red">{error}</p>}
         </div>
-      )}
-    </div>
-  );
-}
 
-function CopyDialog({
-  open,
-  onOpenChange,
-  forumOptions,
-  onCopy,
-}: {
-  open: boolean;
-  onOpenChange: (o: boolean) => void;
-  forumOptions: { id: number; name: string }[];
-  onCopy: (sourceId: number, withAmounts: boolean) => Promise<void>;
-}) {
-  const [source, setSource] = React.useState('');
-  const [withAmounts, setWithAmounts] = React.useState(false);
-  const [pending, setPending] = React.useState(false);
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        title="Скопировать структуру отчёта"
-        description="Текущие диаграммы отчёта будут заменены диаграммами выбранного форума."
-      >
-        <div className="space-y-3">
-          <Field label="Форум-источник">
-            <Select value={source} onChange={(e) => setSource(e.target.value)}>
-              <option value="">— выберите форум —</option>
-              {forumOptions.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <div className="space-y-1 text-sm">
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                className="accent-brand"
-                checked={!withAmounts}
-                onChange={() => setWithAmounts(false)}
-              />
-              Названия диаграмм и строк без сумм
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                className="accent-brand"
-                checked={withAmounts}
-                onChange={() => setWithAmounts(true)}
-              />
-              Вместе с суммами
-            </label>
-          </div>
-        </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={onClose}>
             Отмена
           </Button>
-          <Button
-            disabled={!source || pending}
-            onClick={async () => {
-              setPending(true);
-              await onCopy(Number(source), withAmounts);
-              setPending(false);
-            }}
-          >
-            Скопировать
+          <Button onClick={save} disabled={saving} data-testid="chart-edit-save">
+            {saving ? 'Сохраняем…' : 'Сохранить'}
           </Button>
         </DialogFooter>
       </DialogContent>

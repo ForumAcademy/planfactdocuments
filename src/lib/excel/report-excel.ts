@@ -4,6 +4,7 @@
  */
 import ExcelJS from 'exceljs';
 import { PALETTES, type PaletteKey } from '../report/palette';
+import { unitNumFmt } from '../report/units';
 import { normalizeSpaces, parseAmount } from '../utils';
 
 export const REPORT_SHEET = 'Отчёт';
@@ -49,7 +50,7 @@ export async function buildReportWorkbook(
         it.name ? it.amount : null,
         it.note ?? '',
       ]);
-      r.getCell(5).numFmt = '0.00';
+      r.getCell(5).numFmt = unitNumFmt(ch.unit);
     }
   }
   ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: HEADERS.length } };
@@ -124,7 +125,7 @@ export async function buildReportTemplate(
         it.note ?? '',
       ]);
       const amount = r.getCell(5);
-      amount.numFmt = '0.00';
+      amount.numFmt = unitNumFmt(ch.unit);
       amount.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7D6' } };
     }
   }

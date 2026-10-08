@@ -19,6 +19,8 @@ export interface ChartDTO {
   source: AutoSource | null;
   /** Когда строки автоматической диаграммы обновлены (ISO); null — ещё ни разу */
   refreshedAt: string | null;
+  /** Строки автоматической диаграммы поправлены вручную */
+  edited: boolean;
   /** В подразделе «Архив» */
   archived: boolean;
   items: { id: number; name: string; amount: number; note: string | null; order: number }[];
@@ -40,6 +42,7 @@ export async function getReportCharts(forumId: number): Promise<ChartDTO[]> {
     report: c.report === 'ae' ? 'ae' : 'main',
     source: isAutoSource(c.source) ? c.source : null,
     refreshedAt: c.refreshedAt?.toISOString() ?? null,
+    edited: c.edited,
     archived: c.archived,
     items: c.items.map((i) => ({
       id: i.id,

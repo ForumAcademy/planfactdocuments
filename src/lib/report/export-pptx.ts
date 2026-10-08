@@ -1,6 +1,6 @@
 import PptxGenJS from 'pptxgenjs';
 import { formatDate } from '../dates';
-import { formatAmount } from '../utils';
+import { formatUnitValue } from './units';
 import { chartTotal, computeSegments, formatPct, radialSvg, type Segment } from './donut-layout';
 import {
   BRAND,
@@ -134,7 +134,7 @@ export async function buildPptx(d: ReportExportData): Promise<PptxGenJS> {
       // Диаграмма с секторами разной длины — картинкой (в PowerPoint нет такого типа)
       const side = 5.6;
       slide.addImage({
-        data: await radialPng(segs, formatAmount(total), c.unit),
+        data: await radialPng(segs, formatUnitValue(total, c.unit), c.unit),
         x: 0.3 + (7.4 - side) / 2,
         y: 1.2,
         w: side,
@@ -166,7 +166,7 @@ export async function buildPptx(d: ReportExportData): Promise<PptxGenJS> {
         { text: '', options: { fill: { color: s.color.replace('#', '') } } },
         { text: s.name },
         {
-          text: formatAmount(s.amount) + (s.note ? ` (${s.note})` : ''),
+          text: formatUnitValue(s.amount, c.unit) + (s.note ? ` (${s.note})` : ''),
           options: { align: 'right' },
         },
         { text: formatPct(s.pct), options: { align: 'right', color: '555555' } },
@@ -174,7 +174,7 @@ export async function buildPptx(d: ReportExportData): Promise<PptxGenJS> {
       [
         { text: '' },
         { text: 'Итого', options: { bold: true } },
-        { text: formatAmount(total), options: { bold: true, align: 'right' } },
+        { text: formatUnitValue(total, c.unit), options: { bold: true, align: 'right' } },
         { text: total > 0 ? '100 %' : '—', options: { bold: true, align: 'right' } },
       ],
     ];
