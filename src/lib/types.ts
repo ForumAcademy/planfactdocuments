@@ -14,6 +14,8 @@ export interface ForumDTO {
   color: string;
   /** Предельно допустимые расходы, руб.; null — не задан */
   expenseLimit: number | null;
+  /** Курс доллара, руб. за 1 $; null — не задан */
+  usdRate: number | null;
   archived: boolean;
   reportDate: ISODate | null;
   /** «Отчёт для АЭ»: порядок статей в диаграмме */

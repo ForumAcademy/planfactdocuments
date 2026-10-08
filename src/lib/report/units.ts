@@ -6,6 +6,9 @@ export const UNIT_PRESETS = [
   { unit: 'млн руб.', min: 2, max: 2 },
   { unit: 'тыс. руб.', min: 0, max: 1 },
   { unit: 'руб.', min: 0, max: 0 },
+  { unit: 'млн $', min: 2, max: 2 },
+  { unit: 'тыс. $', min: 0, max: 1 },
+  { unit: '$', min: 0, max: 0 },
   { unit: 'шт.', min: 0, max: 2 },
   { unit: 'чел.', min: 0, max: 2 },
   { unit: 'компаний', min: 0, max: 2 },
@@ -19,8 +22,20 @@ export function unitDigits(unit: string): { min: number; max: number } {
   if (preset) return preset;
   if (u.includes('млрд') || u.includes('млн')) return { min: 2, max: 2 };
   if (u.includes('тыс')) return { min: 0, max: 1 };
-  if (u.includes('руб') || u.includes('₽')) return { min: 0, max: 0 };
+  if (u.includes('руб') || u.includes('₽') || isUsdUnit(u)) return { min: 0, max: 0 };
   return { min: 0, max: 2 };
+}
+
+/** Единица в долларах («$», «тыс. $», «млн $»): суммы считаются из рублей по курсу форума */
+export function isUsdUnit(unit: string): boolean {
+  const u = unit.toLowerCase();
+  return u.includes('$') || u.includes('долл') || u.includes('usd');
+}
+
+/** Денежная единица: рубли или доллары (с млн/тыс.) */
+export function isMoneyUnit(unit: string): boolean {
+  const u = unit.toLowerCase();
+  return u.includes('руб') || u.includes('₽') || isUsdUnit(u);
 }
 
 const formatters = new Map<string, Intl.NumberFormat>();

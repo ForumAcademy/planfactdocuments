@@ -129,6 +129,8 @@ model Forum {
   incomeVariant     Int           @default(0)
   /// Доходы: снимки плана для кнопки «Вернуть» (PlanSnapshot[], последний — текущий)
   incomePlanHistory Json          @default("[]")
+  /// Курс доллара, руб. за 1 $ (null — не задан): столбцы «$» и диаграммы в $
+  usdRate           Float?
   archived          Boolean       @default(false)
   /// Возвращён из архива вручную — автоархив прошедших форумов его не трогает
   keepActive        Boolean       @default(false)

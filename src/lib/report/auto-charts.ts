@@ -4,6 +4,7 @@
  * единица, порядок и сортировка — строк нет.
  */
 import { groupExpenses, type ExpenseTaskInput } from '../expenses';
+import { isUsdUnit } from './units';
 import {
   incomeSum,
   itemSum,
@@ -82,13 +83,14 @@ export interface AutoChartInput<T extends ExpenseTaskInput> {
   today: string;
 }
 
-/** Делитель сумм по единице диаграммы: «млн руб.», «тыс. руб.» или рубли */
-export function unitScale(unit: string): number {
+/**
+ * Делитель рублёвых сумм по единице диаграммы: «млн руб.», «тыс. руб.», рубли; для «$», «тыс. $»,
+ * «млн $» — ещё и курс доллара форума (руб. за 1 $).
+ */
+export function unitScale(unit: string, usdRate: number | null = null): number {
   const u = unit.toLowerCase();
-  if (u.includes('млрд')) return 1e9;
-  if (u.includes('млн')) return 1e6;
-  if (u.includes('тыс')) return 1e3;
-  return 1;
+  const base = u.includes('млрд') ? 1e9 : u.includes('млн') ? 1e6 : u.includes('тыс') ? 1e3 : 1;
+  return isUsdUnit(u) && usdRate ? base * usdRate : base;
 }
 
 /** Сумма по статьям в рублях: строки без денег не показываются */
@@ -133,8 +135,8 @@ export function computeAutoRows<T extends ExpenseTaskInput>(
 }
 
 /** Строки диаграммы в её единице измерения */
-export function autoItems(rows: AutoRow[], unit: string) {
-  const scale = unitScale(unit);
+export function autoItems(rows: AutoRow[], unit: string, usdRate: number | null = null) {
+  const scale = unitScale(unit, usdRate);
   return rows.map((r, k) => ({
     id: -(k + 1),
     name: r.name,

@@ -29,7 +29,7 @@ import { useConfirm } from '@/components/ui/confirm-dialog';
 import type { SortKey } from '@/lib/filters';
 import { TONE_COLOR, isOverdue, lagDays, shouldStart } from '@/lib/status';
 import type { TaskDTO } from '@/lib/types';
-import { cn, formatRub, formatRubShort, pluralRu } from '@/lib/utils';
+import { cn, formatRub, formatRubShort, formatUsd, pluralRu } from '@/lib/utils';
 import { formatDate } from '@/lib/dates';
 import { FilterBar } from './filter-bar';
 import { useForum } from './forum-context';
@@ -121,6 +121,7 @@ const COLUMNS: { key: string; label: string; sort?: SortKey; className?: string;
     { key: 'status', label: 'Статус', sort: 'status', width: 150 },
     { key: 'lag', label: 'Отставание', sort: 'lag', width: 104 },
     { key: 'cost', label: 'Стоимость', sort: 'cost', width: 120, className: 'text-right' },
+    { key: 'usd', label: '$', width: 96, className: 'text-right' },
     { key: 'comment', label: 'Комментарий', width: 260 },
   ];
 
@@ -182,7 +183,8 @@ function useColumnWidths() {
 }
 
 function TaskTable() {
-  const { visible, dicts, lookups, filters, setFilters, tasks, reorder, patchTask } = useForum();
+  const { forum, visible, dicts, lookups, filters, setFilters, tasks, reorder, patchTask } =
+    useForum();
   const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set());
   const [selected, setSelected] = React.useState<Set<number>>(new Set());
   const [dragId, setDragId] = React.useState<number | null>(null);
@@ -400,6 +402,15 @@ function TaskTable() {
                             <b className="text-ink">
                               {formatRubShort(g.tasks.reduce((sum, t) => sum + t.cost, 0))}
                             </b>
+                            {forum.usdRate && (
+                              <span className="ml-1">
+                                ·{' '}
+                                {formatUsd(
+                                  g.tasks.reduce((sum, t) => sum + t.cost, 0),
+                                  forum.usdRate,
+                                )}
+                              </span>
+                            )}
                           </span>
                         )}
                       </button>
@@ -478,7 +489,7 @@ function MobileTaskList({
   toggle: (key: string) => void;
   empty: string;
 }) {
-  const { today, lookups, filters, setOpenTaskId } = useForum();
+  const { forum, today, lookups, filters, setOpenTaskId } = useForum();
   if (groups.length === 0) {
     return (
       <div className="rounded-md border border-line px-3 py-10 text-center text-status-gray">
@@ -554,7 +565,12 @@ function MobileTaskList({
                           {shouldStart(t, today) && !overdue && (
                             <span className="text-status-red">пора начинать</span>
                           )}
-                          {t.cost > 0 && <span>{formatRub(t.cost)}</span>}
+                          {t.cost > 0 && (
+                            <span>
+                              {formatRub(t.cost)}
+                              {forum.usdRate ? ` · ${formatUsd(t.cost, forum.usdRate)}` : ''}
+                            </span>
+                          )}
                         </div>
                         {t.employeeIds.length > 0 && (
                           <div className="mt-1 text-xs text-ink/80">
@@ -598,7 +614,8 @@ const TaskRow = React.memo(function TaskRow({
   onDragOver: () => void;
   onDrop: () => void;
 }) {
-  const { today, lookups, filters, patchTask, setOpenTaskId, duplicate, removeTasks } = useForum();
+  const { forum, today, lookups, filters, patchTask, setOpenTaskId, duplicate, removeTasks } =
+    useForum();
   const confirm = useConfirm();
   const overdue = isOverdue(t, today);
   const lag = lagDays(t, today);
@@ -706,6 +723,16 @@ const TaskRow = React.memo(function TaskRow({
       </td>
       <td className="px-1 py-1.5 text-xs">
         <CostCell task={t} />
+      </td>
+      <td
+        className={cn(
+          'whitespace-nowrap px-2 py-2 text-right text-xs tabular-nums',
+          t.cost ? 'text-ink/70' : 'text-status-gray',
+        )}
+        title={forum.usdRate ? undefined : 'Задайте курс $ в шапке форума'}
+        data-testid="usd-cell"
+      >
+        {formatUsd(t.cost, forum.usdRate)}
       </td>
       <td className="px-1 py-1.5 text-xs">
         <TextCell value={t.comment ?? ''} onSave={(v) => patchTask(t.id, { comment: v })}>

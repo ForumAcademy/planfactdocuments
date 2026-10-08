@@ -25,6 +25,7 @@ export function toForumDTO(f: Forum): ForumDTO {
     website: f.website,
     color: f.color,
     expenseLimit: f.expenseLimit,
+    usdRate: f.usdRate,
     archived: f.archived,
     reportDate: dbToISO(f.reportDate),
     aeReportSort: f.aeReportSort === 'asc' ? 'asc' : 'desc',

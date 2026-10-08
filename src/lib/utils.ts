@@ -20,6 +20,14 @@ export function formatRub(value: number): string {
   return `${Math.round(value).toLocaleString('ru-RU').replace(/ | /g, ' ')} ₽`;
 }
 
+/** Рубли в долларах по курсу форума: «2 500 $»; пока курс не задан — «—» */
+export function formatUsd(rub: number, rate: number | null): string {
+  if (!rate) return '—';
+  return `${Math.round(rub / rate)
+    .toLocaleString('ru-RU')
+    .replace(/[\u00a0\u202f]/g, ' ')} $`;
+}
+
 /** «7,7 млн ₽», «850 тыс. ₽», «0 ₽» — коротко для сумм по этапам */
 export function formatRubShort(value: number): string {
   if (value >= 1_000_000)

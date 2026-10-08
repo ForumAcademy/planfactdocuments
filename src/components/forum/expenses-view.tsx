@@ -36,7 +36,7 @@ import {
   type ExpenseGroup,
 } from '@/lib/expenses';
 import type { TaskDTO } from '@/lib/types';
-import { cn, formatRub, pluralRu } from '@/lib/utils';
+import { cn, formatRub, formatUsd, pluralRu } from '@/lib/utils';
 import { setExpenseLimit } from '@/server/actions/forums';
 import { CostCell } from './cells';
 import { ExpensesImportDialog } from './expenses-import-dialog';
@@ -306,7 +306,7 @@ export function ExpensesView() {
         />
       ) : (
         <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
-          <table className="w-full min-w-[760px] text-sm">
+          <table className="w-full min-w-[870px] text-sm">
             <thead className="bg-surface text-left text-xs text-ink/70">
               <tr>
                 <th className="px-3 py-2 font-medium">Направление / статья расходов</th>
@@ -319,6 +319,12 @@ export function ExpensesView() {
                 <th className="w-48 px-2 py-2 font-medium">Этап</th>
                 <th className="w-32 px-2 py-2 font-medium">Статус</th>
                 <th className="w-36 px-2 py-2 text-right font-medium">Стоимость</th>
+                <th
+                  className="w-28 px-2 py-2 text-right font-medium"
+                  title="Стоимость в долларах по курсу из шапки форума"
+                >
+                  $
+                </th>
                 <th className="w-20 px-3 py-2 text-right font-medium">Доля</th>
               </tr>
             </thead>
@@ -344,6 +350,9 @@ export function ExpensesView() {
                   )}
                 >
                   {formatRub(total)}
+                </td>
+                <td className="px-2 py-2.5 text-right tabular-nums" data-testid="expenses-usd-sum">
+                  {formatUsd(total, forum.usdRate)}
                 </td>
                 <td className="px-3 py-2.5 text-right tabular-nums">{total ? '100%' : '—'}</td>
               </tr>
@@ -376,6 +385,7 @@ function GroupRows({
   onToggle: () => void;
   showEmpty: boolean;
 }) {
+  const { forum } = useForum();
   const rows = showEmpty ? g.tasks : g.tasks.filter((t) => t.cost > 0);
   const priced = g.tasks.filter((t) => t.cost > 0).length;
   return (
@@ -411,11 +421,19 @@ function GroupRows({
         >
           {formatRub(g.total)}
         </td>
+        <td
+          className={cn(
+            'px-2 py-2.5 text-right font-semibold tabular-nums',
+            !g.total && 'text-status-gray',
+          )}
+        >
+          {formatUsd(g.total, forum.usdRate)}
+        </td>
         <td className="px-3 py-2.5 text-right tabular-nums text-ink/70">{pct(g.total, total)}</td>
       </tr>
       {open && rows.length === 0 && (
         <tr className="border-t border-line/60">
-          <td colSpan={6} className="py-2 pl-12 pr-3 text-xs text-status-gray">
+          <td colSpan={7} className="py-2 pl-12 pr-3 text-xs text-status-gray">
             {g.tasks.length
               ? 'Нет задач со стоимостью — включите «Показывать задачи без стоимости»'
               : 'Нет задач в этом направлении'}
@@ -428,7 +446,7 @@ function GroupRows({
 }
 
 function ItemRow({ task: t, total }: { task: TaskDTO; total: number }) {
-  const { lookups, today, setOpenTaskId } = useForum();
+  const { forum, lookups, today, setOpenTaskId } = useForum();
   const stage = t.stageId ? lookups.stage.get(t.stageId) : undefined;
   return (
     <tr className="group border-t border-line/60 align-top" data-testid="expense-row">
@@ -462,6 +480,14 @@ function ItemRow({ task: t, total }: { task: TaskDTO; total: number }) {
       </td>
       <td className="px-1 py-1">
         <CostCell task={t} />
+      </td>
+      <td
+        className={cn(
+          'whitespace-nowrap px-2 py-1.5 text-right tabular-nums',
+          t.cost ? 'text-ink/70' : 'text-status-gray',
+        )}
+      >
+        {formatUsd(t.cost, forum.usdRate)}
       </td>
       <td className="px-3 py-1.5 text-right text-xs tabular-nums text-ink/60">
         {t.cost ? pct(t.cost, total) : ''}
@@ -533,10 +559,11 @@ function FactTable({
   onToggle: (key: string) => void;
   showEmpty: boolean;
 }) {
-  const { patchTask, setOpenTaskId } = useForum();
+  const { forum, patchTask, setOpenTaskId } = useForum();
+  const usd = (rub: number) => formatUsd(rub, forum.usdRate);
   return (
     <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
-      <table className="w-full min-w-[860px] text-sm">
+      <table className="w-full min-w-[970px] text-sm">
         <thead className="bg-surface text-left text-xs text-ink/70">
           <tr>
             <th className="px-3 py-2 font-medium">Направление / статья расходов</th>
@@ -548,6 +575,12 @@ function FactTable({
             </th>
             <th className="w-36 px-2 py-2 text-right font-medium">План</th>
             <th className="w-36 px-2 py-2 text-right font-medium">Факт</th>
+            <th
+              className="w-28 px-2 py-2 text-right font-medium"
+              title="Факт в долларах по курсу из шапки форума"
+            >
+              Факт, $
+            </th>
             <th className="w-36 px-2 py-2 text-right font-medium">Остаток</th>
             <th className="w-44 px-3 py-2 text-right font-medium" title="Доля факта от плана">
               Исполнение плана
@@ -594,6 +627,14 @@ function FactTable({
                 >
                   {formatRub(g.fact)}
                 </td>
+                <td
+                  className={cn(
+                    'px-2 py-2.5 text-right font-semibold tabular-nums',
+                    !g.fact && 'text-status-gray',
+                  )}
+                >
+                  {usd(g.fact)}
+                </td>
                 <Rest plan={g.total} fact={g.fact} className="font-semibold" />
                 <td className="px-3 py-2.5">
                   <Execution part={g.fact} total={g.total} />
@@ -601,7 +642,7 @@ function FactTable({
               </tr>
               {open && rows.length === 0 && (
                 <tr className="border-t border-line/60">
-                  <td colSpan={6} className="py-2 pl-12 pr-3 text-xs text-status-gray">
+                  <td colSpan={7} className="py-2 pl-12 pr-3 text-xs text-status-gray">
                     {g.tasks.length
                       ? 'Нет задач с расходами — включите «Показывать задачи без стоимости»'
                       : 'Нет задач в этом направлении'}
@@ -638,6 +679,14 @@ function FactTable({
                         testId={`expense-fact-${t.number}`}
                       />
                     </td>
+                    <td
+                      className={cn(
+                        'whitespace-nowrap px-2 py-1.5 text-right tabular-nums',
+                        t.costFact ? 'text-ink/70' : 'text-status-gray',
+                      )}
+                    >
+                      {usd(t.costFact)}
+                    </td>
                     <Rest plan={t.cost} fact={t.costFact} />
                     <td className="px-3 py-1.5">
                       <Execution part={t.costFact} total={t.cost} />
@@ -656,6 +705,7 @@ function FactTable({
             <td className="px-2 py-2.5 text-right tabular-nums" data-testid="expenses-fact-sum">
               {formatRub(fact)}
             </td>
+            <td className="px-2 py-2.5 text-right tabular-nums">{usd(fact)}</td>
             <Rest plan={total} fact={fact} />
             <td className="px-3 py-2.5">
               <Execution part={fact} total={total} />

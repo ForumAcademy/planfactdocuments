@@ -27,9 +27,9 @@ import { Field, Input, Select } from '@/components/ui/input';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { formatDate, todayMsk } from '@/lib/dates';
 import { chartTotal, computeSegments, formatPct, type SortDir } from '@/lib/report/donut-layout';
-import { AUTO_SOURCES, autoSource, type AutoSource } from '@/lib/report/auto-charts';
+import { AUTO_SOURCES, autoSource, unitScale, type AutoSource } from '@/lib/report/auto-charts';
 import { PALETTE_KEYS, PALETTES, type PaletteKey } from '@/lib/report/palette';
-import { formatUnitValue, UNIT_PRESETS } from '@/lib/report/units';
+import { formatUnitValue, isMoneyUnit, isUsdUnit, UNIT_PRESETS } from '@/lib/report/units';
 import type { ForumDTO } from '@/lib/types';
 import { cn, parseAmount } from '@/lib/utils';
 import {
@@ -46,6 +46,7 @@ import type { ChartDTO, ReportKind } from '@/server/report-queries';
 import { DonutChart } from './donut-chart';
 import { ReportExcelButtons } from './report-excel';
 import { useAutoCharts } from './use-auto-charts';
+import { useForum } from '@/components/forum/forum-context';
 
 const TITLES: Record<ReportKind, string> = { main: 'Отчёт', ae: 'Отчёт для АЭ' };
 
@@ -759,6 +760,7 @@ function ChartEditDialog({
     items: { name: string; amount: number; note: string | null }[];
   }) => Promise<void>;
 }) {
+  const { forum } = useForum();
   const isPreset = UNIT_PRESETS.some((p) => p.unit === chart.unit);
   const [title, setTitle] = React.useState(chart.title);
   const [palette, setPalette] = React.useState<PaletteKey>(chart.palette);
@@ -782,6 +784,24 @@ function ChartEditDialog({
   };
   const update = (k: number, patch: Partial<DraftItem>) =>
     change(items.map((x, i) => (i === k ? { ...x, ...patch } : x)));
+  // У авто-диаграммы суммы денежные: при смене руб./$ и млн/тыс. значения пересчитываются
+  const changeUnit = (next: string) => {
+    const from = unit;
+    setUnitChoice(next);
+    if (!chart.source || next === CUSTOM_UNIT || !isMoneyUnit(from) || !isMoneyUnit(next)) return;
+    if (isUsdUnit(next) && !forum.usdRate) return;
+    const k = unitScale(from, forum.usdRate) / unitScale(next, forum.usdRate);
+    if (k === 1) return;
+    change(
+      items.map((x) => {
+        const a = parseAmount(x.amount);
+        if (a === null) return x;
+        const v = a * k;
+        const digits = Math.abs(v) >= 1 || v === 0 ? 100 : 10_000;
+        return { ...x, amount: String(Math.round(v * digits) / digits).replace('.', ',') };
+      }),
+    );
+  };
   const swap = (a: number, b: number) => {
     const l = [...items];
     [l[a], l[b]] = [l[b], l[a]];
@@ -791,6 +811,8 @@ function ChartEditDialog({
   const save = async () => {
     if (!title.trim()) return setError('Укажите название диаграммы');
     if (!unit) return setError('Укажите единицу измерения');
+    if (chart.source && isUsdUnit(unit) && !forum.usdRate)
+      return setError('Для диаграммы в $ задайте курс доллара в шапке форума');
     const parsed: { name: string; amount: number; note: string | null }[] = [];
     for (const [k, i] of items.entries()) {
       if (!i.name.trim() && !i.amount.trim() && !i.note.trim()) continue;
@@ -838,7 +860,7 @@ function ChartEditDialog({
           <Field label="Единица измерения" className="w-40">
             <Select
               value={unitChoice}
-              onChange={(e) => setUnitChoice(e.target.value)}
+              onChange={(e) => changeUnit(e.target.value)}
               data-testid="chart-edit-unit"
             >
               {UNIT_PRESETS.map((p) => (
@@ -862,6 +884,11 @@ function ChartEditDialog({
         </div>
         <p className="mt-1 text-xs text-ink/60">
           Формат чисел — по единице: {formatUnitValue(1234.5, unit || 'шт.')} {unit || 'шт.'}
+          {chart.source &&
+            isUsdUnit(unit) &&
+            (forum.usdRate
+              ? `. Суммы в $ — из рублей по курсу 1 $ = ${forum.usdRate.toLocaleString('ru-RU')} р.`
+              : '. Курс доллара не задан: задайте его в шапке форума')}
         </p>
 
         <div className="mt-3 overflow-x-auto">

@@ -54,4 +54,12 @@ describe('автоматические диаграммы отчёта', () => {
     expect(unitScale('руб.')).toBe(1);
     expect(autoItems([{ name: 'А', rub: 2_500_000 }], 'млн руб.')[0].amount).toBe(2.5);
   });
+
+  it('суммы в $ — из рублей по курсу форума', () => {
+    expect(unitScale('$', 80)).toBe(80);
+    expect(unitScale('тыс. $', 80)).toBe(80_000);
+    expect(unitScale('млн $', 80)).toBe(80e6);
+    expect(unitScale('млн руб.', 80)).toBe(1e6);
+    expect(autoItems([{ name: 'А', rub: 8_000_000 }], 'тыс. $', 80)[0].amount).toBe(100);
+  });
 });

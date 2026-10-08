@@ -43,12 +43,13 @@ export function useAutoCharts(charts: ChartDTO[]): {
     () =>
       charts.map((c) => {
         if (!c.source) return c;
-        if (!c.refreshedAt) return { ...c, items: autoItems(rows[c.source], c.unit) };
+        if (!c.refreshedAt)
+          return { ...c, items: autoItems(rows[c.source], c.unit, forum.usdRate) };
         // Снимок хранится в рублях — пересчитываем в единицу диаграммы
-        const scale = unitScale(c.unit);
+        const scale = unitScale(c.unit, forum.usdRate);
         return { ...c, items: c.items.map((i) => ({ ...i, amount: i.amount / scale })) };
       }),
-    [charts, rows],
+    [charts, rows, forum.usdRate],
   );
   return { shown, rows };
 }

@@ -18,6 +18,7 @@ import { useForum } from './forum-context';
 import { PlanImportButton } from './plan-import-dialog';
 import { PlanExportButton } from './plan-export-dialog';
 import { StatusLines } from './status-lines';
+import { UsdRate } from './usd-rate';
 
 /** Подразделы вкладки «План» (страницы /tasks и /gantt) */
 const PLAN_SECTIONS = [
@@ -164,6 +165,7 @@ export function ForumHeader({
                 {daysLeftText(forum, today)})
               </span>
               <span>Старт продаж: {formatDate(forum.salesStartDate)}</span>
+              <UsdRate />
               {forum.location && (
                 <span className="inline-flex items-center gap-1">
                   <MapPin className="size-3.5" /> {forum.location}

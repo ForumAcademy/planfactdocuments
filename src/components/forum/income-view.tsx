@@ -35,7 +35,7 @@ import {
   withDeals,
   withValues,
 } from '@/lib/income';
-import { cn, formatRub } from '@/lib/utils';
+import { cn, formatRub, formatUsd } from '@/lib/utils';
 import {
   addIncomeItem,
   applyIncomePlan,
@@ -296,7 +296,7 @@ export function IncomeView({
     );
   const [gPartners, gTickets] = INCOME_GROUPS;
   /** Столбцов в таблицах статей и итогов — одинаково, чтобы суммы стояли друг под другом */
-  const cols = view === 'plan' ? 8 : 10;
+  const cols = view === 'plan' ? 9 : 11;
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-4" data-testid="income-view">
@@ -413,6 +413,9 @@ export function IncomeView({
                   >
                     {formatRub(sumOf(rows))}
                   </td>
+                  <td className="px-2 py-1.5 text-right font-medium tabular-nums">
+                    {formatUsd(sumOf(rows), forum.usdRate)}
+                  </td>
                   <td colSpan={view === 'plan' ? 1 : 3} className="px-3 py-1.5 text-xs text-ink/60">
                     {view === 'fact' ? (
                       <span className="flex items-center gap-2">
@@ -464,6 +467,14 @@ export function IncomeView({
                   data-testid="income-plan-gap"
                 >
                   {formatRub(Math.abs(planGap))}
+                </td>
+                <td
+                  className={cn(
+                    'px-2 py-2 text-right font-medium tabular-nums',
+                    planGap > 0 ? 'text-status-red' : 'text-status-green',
+                  )}
+                >
+                  {formatUsd(Math.abs(planGap), forum.usdRate)}
                 </td>
                 <td />
               </tr>
@@ -533,6 +544,7 @@ function TotalRow({
   strong?: boolean;
   testId?: string;
 }) {
+  const { forum } = useForum();
   return (
     <tr className={cn('border-t border-line first:border-t-0', strong && 'font-semibold')}>
       {/* Сумма — в столбце «Сумма по плану» / «Выручка» таблиц статей выше */}
@@ -542,6 +554,7 @@ function TotalRow({
       <td className="px-2 py-2 text-right tabular-nums" data-testid={testId}>
         {formatRub(value)}
       </td>
+      <td className="px-2 py-2 text-right tabular-nums">{formatUsd(value, forum.usdRate)}</td>
       <td className="px-3 py-2" colSpan={view === 'plan' ? 1 : 3}>
         {plan !== undefined && (
           <div className="flex items-center gap-3 text-xs font-normal text-ink/60">
@@ -569,6 +582,7 @@ function TableTotal({
   total: number;
   testId: string;
 }) {
+  const { forum } = useForum();
   const value = incomeSum(list, view);
   const plan = view === 'fact' ? incomeSum(list, 'plan') : undefined;
   return (
@@ -580,6 +594,7 @@ function TableTotal({
         <td className="px-2 py-2.5 text-right tabular-nums" data-testid={testId}>
           {formatRub(value)}
         </td>
+        <td className="px-2 py-2.5 text-right tabular-nums">{formatUsd(value, forum.usdRate)}</td>
         <td
           className="px-3 py-2.5 text-right text-xs font-normal tabular-nums text-ink/60"
           colSpan={view === 'plan' ? 1 : 3}
@@ -600,12 +615,12 @@ function TableTotal({
 }
 
 const th = 'px-2 py-2 text-right font-medium';
-const tableClass = 'w-full min-w-[1150px] table-fixed text-sm';
+const tableClass = 'w-full min-w-[1260px] table-fixed text-sm';
 
 /** Ширины столбцов — общие для всех таблиц «Доходов» */
 const COL_WIDTHS: Record<View, (number | undefined)[]> = {
-  plan: [undefined, 176, 144, 96, 144, 128, 160, 80],
-  fact: [undefined, 176, 144, 96, 144, 128, 144, 112, 144, 160],
+  plan: [undefined, 176, 144, 96, 144, 128, 160, 112, 80],
+  fact: [undefined, 176, 144, 96, 144, 128, 144, 112, 112, 144, 160],
 };
 
 function Cols({ view }: { view: View }) {
@@ -633,12 +648,18 @@ function ItemsHead({ view, withStage }: { view: View; withStage?: boolean }) {
           <>
             <th className={th}>План, шт.</th>
             <th className={th}>Сумма по плану</th>
+            <th className={th} title="Сумма по плану в долларах по курсу из шапки форума">
+              Сумма, $
+            </th>
             <th className={cn(th, 'px-3')}>Доля</th>
           </>
         ) : (
           <>
             <th className={th}>Продано, шт.</th>
             <th className={th}>Выручка</th>
+            <th className={th} title="Выручка в долларах по курсу из шапки форума">
+              Выручка, $
+            </th>
             <th className={th}>План, шт.</th>
             <th className={th}>План, ₽</th>
             <th className={cn(th, 'px-3')}>Выполнение плана</th>
@@ -680,6 +701,7 @@ function ItemRow({
   const byDeals = view === 'fact' && it.deals.count > 0;
   const discount = it.discounts[k];
   const muted = 'px-2 py-1.5 text-right tabular-nums text-ink/70';
+  const { forum } = useForum();
   return (
     <tr className="border-t border-line/60" data-testid="income-row">
       <td className="py-1 pl-4 pr-3" colSpan={withStage ? 1 : 2}>
@@ -769,6 +791,7 @@ function ItemRow({
             </div>
           </td>
           <td className="px-2 py-1.5 text-right tabular-nums">{formatRub(plan)}</td>
+          <td className={muted}>{formatUsd(plan, forum.usdRate)}</td>
           <td className="px-3 py-1.5 text-right text-xs tabular-nums text-ink/60">
             {plan ? pctOf(plan, total) : ''}
           </td>
@@ -798,6 +821,7 @@ function ItemRow({
             )}
           </td>
           <td className="px-2 py-1.5 text-right tabular-nums">{formatRub(fact)}</td>
+          <td className={muted}>{formatUsd(fact, forum.usdRate)}</td>
           {it.factOnly ? (
             <td colSpan={3} className="px-3 py-1.5 text-right text-xs text-ink/50">
               {it.fromDeals ? 'нет статьи на этой стадии' : 'нет в плане'}

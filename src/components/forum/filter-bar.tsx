@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { filterTasks, hasActiveFilters, type DueFilter } from '@/lib/filters';
 import type { TaskDTO } from '@/lib/types';
 import { STATUS_LABEL, TASK_STATUSES } from '@/lib/status';
-import { cn, formatRub } from '@/lib/utils';
+import { cn, formatRub, formatUsd } from '@/lib/utils';
 import { useForum } from './forum-context';
 
 const DUE_BUTTONS: { key: DueFilter; label: string }[] = [
@@ -20,7 +20,8 @@ const DUE_BUTTONS: { key: DueFilter; label: string }[] = [
 
 /** Общая панель фильтров для вкладок Ганта и списка. Состояние — в URL. */
 export function FilterBar({ className }: { className?: string }) {
-  const { filters, setFilters, resetFilters, dicts, tasks, visible, today } = useForum();
+  const { forum, filters, setFilters, resetFilters, dicts, tasks, visible, today } = useForum();
+  const visibleCost = visible.reduce((sum, t) => sum + t.cost, 0);
   const [q, setQ] = React.useState(filters.q);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -234,7 +235,7 @@ export function FilterBar({ className }: { className?: string }) {
         <span className="ml-auto text-xs text-ink/70">
           Показано {visible.length} из {tasks.length}
           {visible.some((t) => t.cost) &&
-            ` · стоимость ${formatRub(visible.reduce((sum, t) => sum + t.cost, 0))}`}
+            ` · стоимость ${formatRub(visibleCost)}${forum.usdRate ? ` (${formatUsd(visibleCost, forum.usdRate)})` : ''}`}
         </span>
         <Button variant="ghost" size="sm" onClick={resetFilters} disabled={!active}>
           <RotateCcw /> Сбросить фильтры
