@@ -184,16 +184,20 @@ export function ForumHeader({
           </div>
         </div>
         <StatusLines income={income} />
-        <TabGroup className="thin-scroll mt-3 flex gap-1 overflow-x-auto" role="tablist">
+        <TabGroup
+          className="thin-scroll mt-3 flex gap-1.5 overflow-x-auto pb-1"
+          role="tablist"
+          data-testid="forum-sections"
+        >
           {SECTIONS.map((s) => (
             <TabLink
               key={s.key}
               href={href(s.href)}
               role="tab"
               active={current?.key === s.key}
-              className="-mb-px inline-flex flex-1 items-center justify-center whitespace-nowrap border-b-2 px-2 py-2 text-sm sm:flex-none sm:px-4"
-              activeClassName="border-brand font-medium text-brand"
-              inactiveClassName="border-transparent text-ink/70 hover:text-ink"
+              className="inline-flex flex-1 items-center justify-center whitespace-nowrap rounded-lg border px-2 py-2 text-sm font-medium transition-colors sm:flex-none sm:px-4"
+              activeClassName="border-brand bg-brand text-white shadow-sm"
+              inactiveClassName="border-brand/25 bg-brand/5 text-brand hover:border-brand/60 hover:bg-brand/10"
             >
               <span className="sm:hidden">{s.short}</span>
               <span className="hidden sm:inline">{s.label}</span>

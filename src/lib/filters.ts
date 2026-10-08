@@ -1,8 +1,8 @@
 import { addDays, startOfWeek, type ISODate } from './dates';
-import { isOverdue, lagDays, TASK_STATUSES, type TaskStatusCode } from './status';
+import { isOverdue, lagDays, shouldStart, TASK_STATUSES, type TaskStatusCode } from './status';
 import type { DictsDTO, TaskDTO } from './types';
 
-export type DueFilter = 'overdue' | 'week' | '14d' | 'nodate';
+export type DueFilter = 'overdue' | 'start' | 'soon' | 'week' | '14d' | 'nodate';
 export type SortKey =
   'number' | 'stage' | 'block' | 'end' | 'start' | 'role' | 'employee' | 'status' | 'lag' | 'cost';
 
@@ -34,7 +34,7 @@ export const EMPTY_FILTERS: Filters = {
   dir: 'asc',
 };
 
-const DUE: DueFilter[] = ['overdue', 'week', '14d', 'nodate'];
+const DUE: DueFilter[] = ['overdue', 'start', 'soon', 'week', '14d', 'nodate'];
 const SORTS: SortKey[] = [
   'number',
   'stage',
@@ -121,6 +121,18 @@ export function matchesDue(t: TaskDTO, due: DueFilter, today: ISODate): boolean 
   switch (due) {
     case 'overdue':
       return isOverdue(t, today);
+    // Как в линии статуса задач: дата начала наступила, задача не начата и ещё не просрочена
+    case 'start':
+      return shouldStart(t, today) && !isOverdue(t, today);
+    // Срок в ближайшие 3 дня, задача не начата (кроме тех, что уже «пора начинать»)
+    case 'soon':
+      return (
+        t.status === 'NOT_STARTED' &&
+        t.endDate !== null &&
+        t.endDate >= today &&
+        t.endDate <= addDays(today, 3) &&
+        !shouldStart(t, today)
+      );
     case 'week': {
       const mon = startOfWeek(today);
       return t.endDate !== null && t.endDate >= mon && t.endDate <= addDays(mon, 6);

@@ -13,6 +13,8 @@ import { useForum } from './forum-context';
 
 const DUE_BUTTONS: { key: DueFilter; label: string }[] = [
   { key: 'overdue', label: 'Просрочено' },
+  { key: 'start', label: 'Пора начинать' },
+  { key: 'soon', label: 'Скоро срок' },
   { key: 'week', label: 'На этой неделе' },
   { key: '14d', label: 'В ближайшие 14 дней' },
   { key: 'nodate', label: 'Без даты' },
@@ -207,7 +209,7 @@ export function FilterBar({ className }: { className?: string }) {
             className={cn(
               'h-9 rounded-md border px-3.5 text-sm',
               filters.due === b.key
-                ? b.key === 'overdue'
+                ? b.key === 'overdue' || b.key === 'start'
                   ? 'border-status-red bg-status-red text-white'
                   : 'border-brand bg-brand text-white'
                 : 'border-line bg-white hover:border-brand/50',

@@ -59,7 +59,7 @@ export function StatusLines({
       className="mt-3 divide-y divide-line/70 rounded-lg border border-line bg-white print:hidden"
       data-testid="status-lines"
     >
-      <Line id="tasks" title="Задачи" href={`${base}/gantt`} line={tasksLine} />
+      <Line id="tasks" title="Задачи" href={tasksHref(base, tasksLine)} line={tasksLine} />
       <Line id="expenses" title="Расходы" href={`${base}/expenses`} line={expensesLine} />
       <Line
         id="income"
@@ -72,6 +72,14 @@ export function StatusLines({
       />
     </div>
   );
+}
+
+/** Клик по линии задач открывает список именно тех задач, о которых говорит метка */
+function tasksHref(base: string, line: HealthLine): string {
+  if (line.badge.startsWith('Просрочено')) return `${base}/tasks?due=overdue`;
+  if (line.badge.startsWith('Пора начинать')) return `${base}/tasks?due=start`;
+  if (line.badge.startsWith('Скоро срок')) return `${base}/tasks?due=soon`;
+  return `${base}/tasks`;
 }
 
 function Line({

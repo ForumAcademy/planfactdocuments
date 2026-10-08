@@ -11,6 +11,7 @@ import { MultiSelect } from '@/components/ui/multi-select';
 import type { DictsDTO, EmployeeDTO, NamedDTO, StageDTO } from '@/lib/types';
 import { employeeSchema, fieldErrors } from '@/lib/validation';
 import { STAGE_COLORS } from '@/lib/plan';
+import { groupDigits } from '@/lib/utils';
 import { saveEmployee, saveNamed, saveStage, saveTemplate } from '@/server/actions/dicts';
 import type { TemplateDTO } from '@/server/queries';
 
@@ -263,7 +264,7 @@ export function TemplateDialog({
   useEffect(() => {
     if (!open) return;
     setF({
-      cost: String(item?.cost ?? 0),
+      cost: groupDigits(item?.cost ?? 0),
       number: String(item?.number ?? nextNumber),
       stageId: item?.stageId ? String(item.stageId) : '',
       blockId: item?.blockId ? String(item.blockId) : '',
@@ -380,7 +381,7 @@ export function TemplateDialog({
               inputMode="numeric"
               className="w-48 text-right tabular-nums"
               value={f.cost}
-              onChange={(e) => setF({ ...f, cost: e.target.value })}
+              onChange={(e) => setF({ ...f, cost: groupDigits(e.target.value) })}
             />
           </Field>
           <Field label="Комментарий">

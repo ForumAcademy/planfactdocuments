@@ -36,6 +36,14 @@ export function formatRubShort(value: number): string {
   return `${Math.round(value)} ₽`;
 }
 
+/** Целое число с разделением разрядов для поля ввода: «200000» → «200 000» */
+export function groupDigits(input: string | number): string {
+  const digits = String(input)
+    .replace(/\D/g, '')
+    .replace(/^0+(?=\d)/, '');
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+}
+
 /** Разбирает число, введённое с запятой или точкой: «1 234,56» → 1234.56 */
 export function parseAmount(input: string): number | null {
   const cleaned = input.replace(/[\s  ]/g, '').replace(',', '.');

@@ -18,6 +18,7 @@ import {
   type TaskStatusCode,
 } from '@/lib/status';
 import type { HistoryDTO, TaskDTO } from '@/lib/types';
+import { groupDigits } from '@/lib/utils';
 import { getTaskHistory } from '@/server/actions/tasks';
 import { useForum } from './forum-context';
 import { TermCombobox } from '@/components/ui/term-combobox';
@@ -52,8 +53,8 @@ function PanelBody({ task, onClose }: { task: TaskDTO; onClose: () => void }) {
   const [description, setDescription] = React.useState(task.description);
   const [termText, setTermText] = React.useState(task.termText);
   const [comment, setComment] = React.useState(task.comment ?? '');
-  const [cost, setCost] = React.useState(String(task.cost));
-  React.useEffect(() => setCost(String(task.cost)), [task.cost]);
+  const [cost, setCost] = React.useState(groupDigits(task.cost));
+  React.useEffect(() => setCost(groupDigits(task.cost)), [task.cost]);
   const [history, setHistory] = React.useState<HistoryDTO[] | null>(null);
 
   React.useEffect(() => setDescription(task.description), [task.description]);
@@ -282,10 +283,11 @@ function PanelBody({ task, onClose }: { task: TaskDTO; onClose: () => void }) {
             inputMode="numeric"
             className="w-48 text-right tabular-nums"
             value={cost}
-            onChange={(e) => setCost(e.target.value)}
+            onChange={(e) => setCost(groupDigits(e.target.value))}
             onBlur={() => {
               const n = Math.round(Number(cost.replace(/[\s  ₽]/g, '').replace(',', '.')));
-              if (!cost.trim() || !Number.isFinite(n) || n < 0) return setCost(String(task.cost));
+              if (!cost.trim() || !Number.isFinite(n) || n < 0)
+                return setCost(groupDigits(task.cost));
               if (n !== task.cost) void save({ cost: n });
             }}
             data-testid="panel-cost"
