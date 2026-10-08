@@ -4,6 +4,8 @@ import * as React from 'react';
 import { markCacheStale } from '@/lib/stale-cache';
 import { toast } from 'sonner';
 import {
+  Archive,
+  ArchiveRestore,
   ArrowDown,
   ArrowDownWideNarrow,
   ArrowUp,
@@ -11,6 +13,7 @@ import {
   Copy,
   FileDown,
   GripVertical,
+  Keyboard,
   Pencil,
   Plus,
   Presentation,
@@ -26,16 +29,18 @@ import { Field, Input, Select } from '@/components/ui/input';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { formatDate, todayMsk } from '@/lib/dates';
 import { chartTotal, computeSegments, formatPct, type SortDir } from '@/lib/report/donut-layout';
-import { AUTO_SOURCES, autoSource, type AutoSource } from '@/lib/report/auto-charts';
-import { PALETTES, type PaletteKey } from '@/lib/report/palette';
+import { AUTO_SOURCES, autoSource, type AutoRow, type AutoSource } from '@/lib/report/auto-charts';
+import { PALETTE_KEYS, PALETTES, type PaletteKey } from '@/lib/report/palette';
 import type { ForumDTO } from '@/lib/types';
 import { cn, formatAmount, parseAmount } from '@/lib/utils';
 import {
   copyReportFrom,
   deleteChart,
+  refreshAutoChart,
   reorderCharts,
   saveChart,
   saveChartItems,
+  setChartArchived,
   setChartSort,
   setReportDate,
 } from '@/server/actions/report';
@@ -46,9 +51,26 @@ import { useAutoCharts } from './use-auto-charts';
 
 const TITLES: Record<ReportKind, string> = { main: 'Отчёт', ae: 'Отчёт для АЭ' };
 
+type Section = 'active' | 'archive';
+
+/** Время последнего «Автообновления»: «08.10.2026 10:15» по Москве */
+function refreshedLabel(iso: string): string {
+  return new Date(iso)
+    .toLocaleString('ru-RU', {
+      timeZone: 'Europe/Moscow',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    .replace(',', '');
+}
+
 /**
- * «Отчёт» и «Отчёт для АЭ»: круговые диаграммы. Базовые строятся сами из «Расходов» и «Доходов»,
- * их можно переименовать, перекрасить, удалить или перевести в ручные; можно добавлять свои.
+ * «Отчёт» и «Отчёт для АЭ»: круговые диаграммы в подразделах «Активные» и «Архив».
+ * Автоматические берут строки из «Расходов» и «Доходов» кнопкой «Автообновление», ручные
+ * заполняются вручную. Для выгрузки в PPTX, PDF и Excel диаграммы отмечаются галочкой.
  */
 export function ReportView({
   forum,
@@ -69,18 +91,38 @@ export function ReportView({
       const mine = typeof next === 'function' ? next(list.filter((c) => c.report === kind)) : next;
       return [...list.filter((c) => c.report !== kind), ...mine];
     });
-  const shown = useAutoCharts(charts);
+  const { shown: shownAll, rows } = useAutoCharts(charts);
   const title = TITLES[kind];
+  const confirm = useConfirm();
+  const [section, setSection] = React.useState<Section>('active');
+  const archive = section === 'archive';
+  const active = React.useMemo(() => charts.filter((c) => !c.archived), [charts]);
+  const archivedCount = charts.length - active.length;
+  const shown = React.useMemo(
+    () => shownAll.filter((c) => c.archived === archive),
+    [shownAll, archive],
+  );
+  // Галочки «В выгрузку»: храним снятые, чтобы новые диаграммы попадали в выгрузку сами
+  const [excluded, setExcluded] = React.useState<Set<number>>(() => new Set());
+  const selected = shown.filter((c) => !excluded.has(c.id));
+  const toggleSelected = (id: number, on: boolean) =>
+    setExcluded((s) => {
+      const n = new Set(s);
+      if (on) n.delete(id);
+      else n.add(id);
+      return n;
+    });
   const [reportDate, setDate] = React.useState(forum.reportDate ?? todayMsk());
   const [editing, setEditing] = React.useState(false);
   const [copyOpen, setCopyOpen] = React.useState(false);
   const [busy, setBusy] = React.useState<'pptx' | 'pdf' | null>(null);
+  const [refreshing, setRefreshing] = React.useState<number | null>(null);
 
   React.useEffect(() => setAll(initial), [initial]);
 
   const apply = (
     res: { ok: true; data: ChartDTO[] } | { ok: false; error: string },
-    msg = 'Сохранено',
+    msg: string | null = 'Сохранено',
   ) => {
     if (!res.ok) {
       toast.error(res.error);
@@ -88,20 +130,59 @@ export function ReportView({
     }
     markCacheStale();
     setAll(res.data);
-    toast.success(msg, { id: 'saved' });
+    if (msg) toast.success(msg, { id: 'saved' });
     return true;
+  };
+
+  // Автоматическая диаграмма без снимка (новая или скопированная) один раз заполняется сама
+  const filled = React.useRef(new Set<number>());
+  React.useEffect(() => {
+    const todo = charts.filter((c) => c.source && !c.refreshedAt && !filled.current.has(c.id));
+    if (!todo.length) return;
+    void (async () => {
+      for (const c of todo) {
+        filled.current.add(c.id);
+        const res = await refreshAutoChart(forum.id, c.id, rows[c.source!]);
+        if (res.ok) setAll(res.data);
+      }
+    })();
+  }, [charts, rows, forum.id]);
+
+  const refreshChart = async (c: ChartDTO) => {
+    if (!c.source) return;
+    setRefreshing(c.id);
+    apply(
+      await refreshAutoChart(forum.id, c.id, rows[c.source]),
+      'Данные обновлены из «Расходов» и «Доходов»',
+    );
+    setRefreshing(null);
+  };
+
+  const archiveChart = async (c: ChartDTO, to: boolean) =>
+    apply(
+      await setChartArchived(forum.id, c.id, to),
+      to ? 'Диаграмма перенесена в архив' : 'Диаграмма возвращена в активные',
+    );
+
+  const removeChart = async (c: ChartDTO) => {
+    const ok = await confirm({
+      title: `Удалить диаграмму «${c.title}»?`,
+      confirmText: 'Удалить',
+      danger: true,
+    });
+    if (ok) apply(await deleteChart(forum.id, c.id), 'Диаграмма удалена');
   };
 
   // Перестановка блоков прямо на странице: перетаскивание за ручку
   const [dragId, setDragId] = React.useState<number | null>(null);
   const [overId, setOverId] = React.useState<number | null>(null);
   const moveChart = async (from: number, to: number) => {
-    if (from === to || to < 0 || to >= charts.length) return;
+    if (from === to || to < 0 || to >= active.length) return;
     const prev = charts;
-    const next = [...charts];
+    const next = [...active];
     const [m] = next.splice(from, 1);
     next.splice(to, 0, m);
-    setCharts(next);
+    setCharts([...next, ...charts.filter((c) => c.archived)]);
     if (
       !apply(
         await reorderCharts(
@@ -126,7 +207,7 @@ export function ReportView({
   const exportAs = async (kind: 'pptx' | 'pdf') => {
     setBusy(kind);
     try {
-      const data = { forum, reportDate, charts: shown, title };
+      const data = { forum, reportDate, charts: selected, title };
       if (kind === 'pptx') {
         const { exportPptx } = await import('@/lib/report/export-pptx');
         await exportPptx(data);
@@ -155,40 +236,43 @@ export function ReportView({
           />
         </Field>
         <div className="ml-auto flex flex-wrap gap-2">
-          <Button
-            variant={editing ? 'default' : 'outline'}
-            onClick={() => setEditing((e) => !e)}
-            data-testid="report-edit"
-          >
-            {editing ? <X /> : <Pencil />}{' '}
-            {editing ? 'Завершить редактирование' : 'Редактировать отчёт'}
-          </Button>
-          {kind === 'main' && (
-            <>
-              <Button variant="outline" onClick={() => setCopyOpen(true)}>
-                <Copy /> Скопировать из другого форума
-              </Button>
-              <ReportExcelButtons
-                forum={forum}
-                reportDate={reportDate}
-                charts={shown}
-                onImported={(c) => {
-                  markCacheStale();
-                  setAll(c);
-                }}
-              />
-            </>
+          {!archive && (
+            <Button
+              variant={editing ? 'default' : 'outline'}
+              onClick={() => setEditing((e) => !e)}
+              data-testid="report-edit"
+            >
+              {editing ? <X /> : <Pencil />}{' '}
+              {editing ? 'Завершить редактирование' : 'Редактировать отчёт'}
+            </Button>
           )}
+          {kind === 'main' && (
+            <Button variant="outline" onClick={() => setCopyOpen(true)}>
+              <Copy /> Скопировать из другого форума
+            </Button>
+          )}
+          <ReportExcelButtons
+            forum={forum}
+            reportDate={reportDate}
+            title={title}
+            charts={shownAll.filter((c) => !c.archived)}
+            exportCharts={selected}
+            importable={kind === 'main'}
+            onImported={(c) => {
+              markCacheStale();
+              setAll(c);
+            }}
+          />
           <Button
             onClick={() => exportAs('pptx')}
-            disabled={!!busy || !charts.length}
+            disabled={!!busy || !selected.length}
             data-testid="export-pptx"
           >
             <Presentation /> {busy === 'pptx' ? 'Формируем…' : 'Скачать PPTX'}
           </Button>
           <Button
             onClick={() => exportAs('pdf')}
-            disabled={!!busy || !charts.length}
+            disabled={!!busy || !selected.length}
             data-testid="export-pdf"
           >
             <FileDown /> {busy === 'pdf' ? 'Формируем…' : 'Скачать PDF'}
@@ -209,7 +293,73 @@ export function ReportView({
         </div>
       </div>
 
-      {editing && <ChartsEditor forumId={forum.id} kind={kind} charts={shown} apply={apply} />}
+      <div className="mt-4 flex flex-wrap items-center gap-3 print:hidden">
+        <div
+          className="inline-flex rounded-md border border-line bg-surface p-0.5"
+          role="tablist"
+          aria-label="Подразделы отчёта"
+        >
+          {(
+            [
+              ['active', 'Активные', active.length],
+              ['archive', 'Архив', archivedCount],
+            ] as const
+          ).map(([key, label, n]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={section === key}
+              onClick={() => {
+                setSection(key);
+                if (key === 'archive') setEditing(false);
+              }}
+              className={cn(
+                'rounded px-3 py-1.5 text-sm',
+                section === key
+                  ? 'bg-white font-medium text-brand shadow-sm'
+                  : 'text-ink/60 hover:text-ink',
+              )}
+              data-testid={`report-section-${key}`}
+            >
+              {label} <span className="tabular-nums text-ink/50">{n}</span>
+            </button>
+          ))}
+        </div>
+        {shown.length > 0 && (
+          <div className="ml-auto flex flex-wrap items-center gap-2 text-sm text-ink/70">
+            <span data-testid="export-selected">
+              В выгрузку: {selected.length} из {shown.length}
+            </span>
+            <button
+              type="button"
+              className="text-brand hover:underline"
+              onClick={() => setExcluded(new Set())}
+            >
+              Выбрать все
+            </button>
+            <button
+              type="button"
+              className="text-brand hover:underline"
+              onClick={() => setExcluded(new Set(charts.map((c) => c.id)))}
+            >
+              Снять все
+            </button>
+          </div>
+        )}
+      </div>
+
+      {editing && !archive && (
+        <ChartsEditor
+          forumId={forum.id}
+          kind={kind}
+          charts={shown}
+          rows={rows}
+          apply={apply}
+          onArchive={(c) => archiveChart(c, true)}
+          onDelete={removeChart}
+        />
+      )}
 
       {/* На широком экране — по две диаграммы в строке */}
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -229,7 +379,7 @@ export function ReportView({
             onDragLeave={() => setOverId((o) => (o === c.id ? null : o))}
             onDrop={(e) => {
               e.preventDefault();
-              const from = charts.findIndex((x) => x.id === dragId);
+              const from = active.findIndex((x) => x.id === dragId);
               setDragId(null);
               setOverId(null);
               if (from >= 0) void moveChart(from, i);
@@ -237,7 +387,13 @@ export function ReportView({
           >
             <ChartCard
               chart={c}
-              count={charts.length}
+              count={archive ? 1 : active.length}
+              selected={!excluded.has(c.id)}
+              onSelect={(on) => toggleSelected(c.id, on)}
+              refreshing={refreshing === c.id}
+              onRefresh={() => refreshChart(c)}
+              onArchive={() => archiveChart(c, !c.archived)}
+              onDelete={() => removeChart(c)}
               onSort={async (sort) => {
                 setCharts((list) => list.map((x) => (x.id === c.id ? { ...x, sort } : x)));
                 apply(await setChartSort(forum.id, c.id, sort), 'Сортировка сохранена');
@@ -250,9 +406,11 @@ export function ReportView({
             />
           </div>
         ))}
-        {charts.length === 0 && (
+        {shown.length === 0 && (
           <div className="rounded-md border border-dashed border-line p-10 text-center text-status-gray xl:col-span-2">
-            В отчёте нет диаграмм. Нажмите «Редактировать отчёт», чтобы добавить.
+            {archive
+              ? 'В архиве нет диаграмм. Перенести диаграмму в архив можно кнопкой с коробкой у её названия.'
+              : 'В отчёте нет диаграмм. Нажмите «Редактировать отчёт», чтобы добавить.'}
           </div>
         )}
       </div>
@@ -275,12 +433,27 @@ export function ReportView({
 export function ChartCard({
   chart,
   count,
+  selected,
+  onSelect,
+  refreshing,
+  onRefresh,
+  onArchive,
+  onDelete,
   onDragStart,
   onDragEnd,
   onSort,
 }: {
-  chart: Omit<ChartDTO, 'sort'> & { sort?: SortDir };
+  chart: ChartDTO;
   count: number;
+  /** Галочка «В выгрузку» */
+  selected: boolean;
+  onSelect: (on: boolean) => void;
+  refreshing: boolean;
+  /** «Автообновление» — только у автоматических */
+  onRefresh: () => void;
+  /** В архив или обратно в активные */
+  onArchive: () => void;
+  onDelete: () => void;
   onDragStart?: () => void;
   onDragEnd?: () => void;
   /** Смена порядка статей; без него переключатель не показывается */
@@ -291,8 +464,8 @@ export function ChartCard({
   const segments = computeSegments(chart.items, chart.palette, sort);
   const hasNotes = segments.some((s) => s.note);
   return (
-    <Card className="flex flex-col p-4" data-testid="report-chart">
-      <div className="flex items-center gap-2">
+    <Card className={cn('flex flex-col p-4', !selected && 'opacity-70')} data-testid="report-chart">
+      <div className="flex flex-wrap items-center gap-2">
         {count > 1 && onDragStart && (
           <span
             draggable
@@ -312,10 +485,57 @@ export function ChartCard({
             <GripVertical className="size-4" />
           </span>
         )}
+        <input
+          type="checkbox"
+          className="size-4 shrink-0 cursor-pointer accent-brand print:hidden"
+          checked={selected}
+          onChange={(e) => onSelect(e.target.checked)}
+          title="В выгрузку PPTX, PDF и Excel"
+          aria-label="В выгрузку"
+          data-testid="chart-select"
+        />
         <h2 className="text-lg font-semibold">{chart.title}</h2>
-        {chart.source && <AutoBadge source={chart.source} />}
-        {onSort && <SortToggle value={sort} onChange={onSort} />}
+        {chart.source ? <AutoBadge source={chart.source} /> : <ManualBadge />}
+        <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1 print:hidden">
+          {onSort && <SortToggle value={sort} onChange={onSort} />}
+          {chart.source && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onRefresh}
+              disabled={refreshing}
+              title="Взять текущие данные из «Расходов» и «Доходов»"
+              data-testid="chart-refresh"
+            >
+              <RefreshCw className={cn(refreshing && 'animate-spin')} /> Автообновление
+            </Button>
+          )}
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={onArchive}
+            title={chart.archived ? 'Вернуть в активные' : 'В архив'}
+            data-testid="chart-archive"
+          >
+            {chart.archived ? <ArchiveRestore /> : <Archive />}
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="text-status-red"
+            onClick={onDelete}
+            title="Удалить диаграмму"
+            data-testid="chart-delete"
+          >
+            <Trash2 />
+          </Button>
+        </div>
       </div>
+      {chart.source && chart.refreshedAt && (
+        <div className="mt-0.5 text-xs text-ink/50">
+          Данные на {refreshedLabel(chart.refreshedAt)}
+        </div>
+      )}
       {/* Диаграмма — по центру блока по вертикали, таблица — сверху */}
       <div className="mt-2 grid flex-1 grid-cols-1 items-start gap-6 md:grid-cols-[312px_minmax(0,1fr)] md:gap-8">
         <div className="self-center py-2">
@@ -383,11 +603,24 @@ export function ChartCard({
 function AutoBadge({ source }: { source: AutoSource }) {
   return (
     <span
-      className="inline-flex shrink-0 items-center gap-1 rounded bg-surface px-1.5 py-0.5 text-[11px] text-ink/60 print:hidden"
-      title={`${autoSource(source).hint}. Обновляется сама.`}
+      className="inline-flex shrink-0 items-center gap-1 rounded bg-brand-light px-1.5 py-0.5 text-[11px] text-brand print:hidden"
+      title={`${autoSource(source).hint}. Обновляется кнопкой «Автообновление».`}
       data-testid="chart-auto"
     >
-      <RefreshCw className="size-3" /> Авто
+      <RefreshCw className="size-3" /> авто
+    </span>
+  );
+}
+
+/** Метка диаграммы, строки которой вносятся вручную */
+function ManualBadge() {
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-1 rounded bg-surface px-1.5 py-0.5 text-[11px] text-ink/60 print:hidden"
+      title="Строки и суммы вносятся вручную в режиме «Редактировать отчёт»"
+      data-testid="chart-manual"
+    >
+      <Keyboard className="size-3" /> Ручной ввод
     </span>
   );
 }
@@ -400,7 +633,7 @@ function SortToggle({ value, onChange }: { value: SortDir; onChange: (v: SortDir
   ] as const;
   return (
     <div
-      className="ml-auto inline-flex shrink-0 rounded-md border border-line bg-surface p-0.5 print:hidden"
+      className="inline-flex shrink-0 rounded-md border border-line bg-surface p-0.5 print:hidden"
       role="group"
       aria-label="Сортировка статей"
       data-testid="chart-sort"
@@ -436,14 +669,20 @@ function ChartsEditor({
   forumId,
   kind,
   charts,
+  rows,
   apply,
+  onArchive,
+  onDelete,
 }: {
   forumId: number;
   kind: ReportKind;
   charts: ChartDTO[];
+  /** Текущие данные «Расходов» и «Доходов» — для новой автоматической диаграммы */
+  rows: Record<AutoSource, AutoRow[]>;
   apply: Apply;
+  onArchive: (c: ChartDTO) => void;
+  onDelete: (c: ChartDTO) => void;
 }) {
-  const confirm = useConfirm();
   const [dragId, setDragId] = React.useState<number | null>(null);
   const [adding, setAdding] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
@@ -467,6 +706,7 @@ function ChartsEditor({
         unit: 'млн руб.',
         report: kind,
         source,
+        rows: source ? rows[source] : undefined,
       }),
       'Диаграмма добавлена',
     );
@@ -502,10 +742,12 @@ function ChartsEditor({
                 onClick={() => add(null)}
               >
                 <div className="font-medium">Пустая диаграмма</div>
-                <div className="text-xs text-ink/60">Строки и суммы вносятся вручную</div>
+                <div className="text-xs text-ink/60">
+                  Ручной ввод: строки и суммы вносятся вручную
+                </div>
               </button>
               <div className="px-3 pb-1 pt-2 text-[11px] uppercase tracking-wide text-ink/50">
-                Из вкладок «Расходы» и «Доходы»
+                Авто: из вкладок «Расходы» и «Доходы»
               </div>
               {AUTO_SOURCES.map((a) => (
                 <button
@@ -530,8 +772,8 @@ function ChartsEditor({
       </div>
       <p className="mb-3 text-xs text-ink/70">
         Порядок диаграмм — это порядок слайдов в презентации. Перетащите карточку за значок ⋮⋮ или
-        используйте стрелки. Диаграммы с меткой «Авто» строятся из вкладок «Расходы» и «Доходы» и
-        обновляются сами; их строки можно перевести в ручные.
+        используйте стрелки. Диаграммы с меткой «авто» берут строки из вкладок «Расходы» и «Доходы»
+        кнопкой «Автообновление»; их строки можно перевести в ручной ввод.
       </p>
       <div className="space-y-3">
         {charts.map((c, i) => (
@@ -569,14 +811,8 @@ function ChartsEditor({
                 )
               }
               onSaveItems={async (items) => apply(await saveChartItems(forumId, c.id, items))}
-              onDelete={async () => {
-                const ok = await confirm({
-                  title: `Удалить диаграмму «${c.title}»?`,
-                  confirmText: 'Удалить',
-                  danger: true,
-                });
-                if (ok) apply(await deleteChart(forumId, c.id), 'Диаграмма удалена');
-              }}
+              onArchive={() => onArchive(c)}
+              onDelete={() => onDelete(c)}
             />
           </div>
         ))}
@@ -602,6 +838,7 @@ function ChartEditorRow({
   onDragStart,
   onSave,
   onSaveItems,
+  onArchive,
   onDelete,
 }: {
   chart: ChartDTO;
@@ -611,6 +848,7 @@ function ChartEditorRow({
   onDragStart: () => void;
   onSave: (p: Partial<{ title: string; palette: PaletteKey; unit: string }>) => void;
   onSaveItems: (items: { name: string; amount: number; note: string | null }[]) => Promise<boolean>;
+  onArchive: () => void;
   onDelete: () => void;
 }) {
   const [title, setTitle] = React.useState(chart.title);
@@ -686,7 +924,7 @@ function ChartEditorRow({
             value={chart.palette}
             onChange={(e) => onSave({ palette: e.target.value as PaletteKey })}
           >
-            {(Object.keys(PALETTES) as PaletteKey[]).map((p) => (
+            {PALETTE_KEYS.map((p) => (
               <option key={p} value={p}>
                 {PALETTES[p].label}
               </option>
@@ -719,6 +957,9 @@ function ChartEditorRow({
           >
             <ArrowDown />
           </Button>
+          <Button size="icon" variant="ghost" onClick={onArchive} title="В архив">
+            <Archive />
+          </Button>
           <Button
             size="icon"
             variant="ghost"
@@ -734,7 +975,7 @@ function ChartEditorRow({
         <div className="mt-3 flex flex-wrap items-center gap-3 rounded-md bg-surface px-3 py-2 text-sm">
           <RefreshCw className="size-4 shrink-0 text-ink/50" />
           <span className="mr-auto text-ink/70">
-            {autoSource(chart.source).hint}: строки обновляются сами
+            {autoSource(chart.source).hint}: строки обновляются кнопкой «Автообновление»
             {chart.items.length ? '' : ' (пока данных нет)'}.
           </span>
           <Button

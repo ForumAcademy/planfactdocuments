@@ -264,24 +264,32 @@ enum ChartPalette {
   RED
   GREEN
   BLUE
+  PURPLE
+  CYAN
+  ORANGE
 }
 
 model ReportChart {
-  id      Int          @id @default(autoincrement())
-  forumId Int
-  forum   Forum        @relation(fields: [forumId], references: [id], onDelete: Cascade)
-  title   String
-  palette ChartPalette @default(BLUE)
-  unit    String       @default("млн руб.")
-  order   Int          @default(0)
+  id          Int          @id @default(autoincrement())
+  forumId     Int
+  forum       Forum        @relation(fields: [forumId], references: [id], onDelete: Cascade)
+  title       String
+  palette     ChartPalette @default(BLUE)
+  unit        String       @default("млн руб.")
+  order       Int          @default(0)
   /// Порядок статей в диаграмме: desc — по убыванию, asc — по возрастанию
-  sort    String       @default("desc")
+  sort        String       @default("desc")
   /// Вкладка: main — «Отчёт», ae — «Отчёт для АЭ»
-  report  String       @default("main")
-  /// Автоматическая диаграмма: ключ из src/lib/report/auto-charts.ts, строки считаются
-  /// из «Расходов» и «Доходов»; null — строки вносятся вручную
-  source  String?
-  items   ReportItem[]
+  report      String       @default("main")
+  /// Автоматическая диаграмма: ключ из src/lib/report/auto-charts.ts, строки берутся
+  /// из «Расходов» и «Доходов» кнопкой «Автообновление»; null — строки вносятся вручную
+  source      String?
+  /// Когда строки автоматической диаграммы последний раз взяты из «Расходов» и «Доходов»
+  /// (суммы её строк хранятся в рублях); null — ещё ни разу
+  refreshedAt DateTime?
+  /// В подразделе «Архив»
+  archived    Boolean      @default(false)
+  items       ReportItem[]
 
   @@index([forumId, report])
 }

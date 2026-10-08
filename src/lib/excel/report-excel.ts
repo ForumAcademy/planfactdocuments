@@ -133,7 +133,7 @@ export async function buildReportTemplate(
     ws.getCell(r, 2).dataValidation = {
       type: 'list',
       allowBlank: true,
-      formulae: ['"Красная,Зелёная,Синяя"'],
+      formulae: ['"Красная,Зелёная,Синяя,Фиолетовая,Голубая,Оранжевая"'],
     };
     ws.getCell(r, 5).dataValidation = {
       type: 'decimal',
@@ -153,7 +153,7 @@ export async function buildReportTemplate(
     '',
     '1. Лист «Отчёт»: одна строка — одна статья диаграммы.',
     '2. «Диаграмма» — название диаграммы (Расходы, Доходы, Кто пригласил…). Строки с одинаковым названием попадут в одну диаграмму.',
-    '3. «Цветовая гамма» — Красная, Зелёная или Синяя (выпадающий список).',
+    '3. «Цветовая гамма» — Красная, Зелёная, Синяя, Фиолетовая, Голубая или Оранжевая (выпадающий список).',
     '4. «Единица» — единица измерения сумм, например «млн руб.».',
     '5. «Статья» и «Сумма» — название статьи и число (жёлтые ячейки). Строки без суммы не загружаются.',
     '6. «Доп. единица» — необязательно, например «6 шт.»; на диаграмме будет в скобках после суммы.',
@@ -183,6 +183,9 @@ export function paletteFromText(s: string, title: string): PaletteKey {
   if (v.startsWith('крас') || v === 'red') return 'RED';
   if (v.startsWith('зел') || v === 'green') return 'GREEN';
   if (v.startsWith('син') || v === 'blue') return 'BLUE';
+  if (v.startsWith('фиол') || v === 'purple') return 'PURPLE';
+  if (v.startsWith('голуб') || v === 'cyan') return 'CYAN';
+  if (v.startsWith('оранж') || v === 'orange') return 'ORANGE';
   const t = title.toLowerCase();
   if (t.includes('расход')) return 'RED';
   if (t.includes('доход')) return 'GREEN';

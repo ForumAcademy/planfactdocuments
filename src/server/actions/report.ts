@@ -8,10 +8,11 @@ import { isoToDb } from '@/lib/dates';
 import { optionalIsoDate } from '@/lib/validation';
 import { run, UserError, type ActionResult } from '@/server/action-utils';
 import { AUTO_SOURCES } from '@/lib/report/auto-charts';
+import { PALETTE_KEYS, type PaletteKey } from '@/lib/report/palette';
 import { getReportCharts, type ChartDTO } from '@/server/report-queries';
 
 const id = z.number().int().positive();
-const palette = z.enum(['RED', 'GREEN', 'BLUE']);
+const palette = z.enum(PALETTE_KEYS as [PaletteKey, ...PaletteKey[]]);
 
 // Диаграммы страница обновляет сама по ответу сервера — пересобирать её целиком не нужно.
 // Дата отчёта хранится в форуме (шапка страницы), её обновляем через пересборку.
@@ -41,7 +42,27 @@ const chartSchema = z.object({
     .enum(AUTO_SOURCES.map((a) => a.key) as [string, ...string[]])
     .nullish()
     .transform((v) => v ?? null),
+  /** Только при создании автоматической диаграммы: строки из «Расходов» и «Доходов», руб. */
+  rows: z.lazy(() => autoRowsSchema).optional(),
 });
+
+/** Строки автоматической диаграммы — суммы в рублях */
+const autoRowsSchema = z
+  .array(
+    z.object({
+      name: z.string().trim().min(1).max(300),
+      rub: z.number().finite().min(0).max(1e12),
+    }),
+  )
+  .max(100);
+
+function autoItemsData(rows: z.infer<typeof autoRowsSchema>) {
+  return rows.map((r, k) => ({
+    name: r.name,
+    amount: Math.round(r.rub * 100) / 100,
+    order: k + 1,
+  }));
+}
 
 export async function saveChart(
   forumId: number,
@@ -66,6 +87,9 @@ export async function saveChart(
           report: d.report,
           source: d.source,
           order: (agg._max.order ?? 0) + 1,
+          ...(d.source && d.rows
+            ? { refreshedAt: new Date(), items: { create: autoItemsData(d.rows) } }
+            : {}),
         },
       });
     }
@@ -86,6 +110,51 @@ export async function setChartSort(
     await prisma.reportChart.update({
       where: { id: id.parse(chartId), forumId },
       data: { sort: sortDir.parse(sort) },
+    });
+    return getReportCharts(forumId);
+  });
+}
+
+/** «Автообновление»: строки автоматической диаграммы заново берутся из «Расходов» и «Доходов». */
+export async function refreshAutoChart(
+  forumId: number,
+  chartId: number,
+  rows: z.input<typeof autoRowsSchema>,
+): Promise<ActionResult<ChartDTO[]>> {
+  return run(async () => {
+    await requireEditor();
+    const list = autoRowsSchema.parse(rows);
+    const chart = await prisma.reportChart.findFirst({ where: { id: id.parse(chartId), forumId } });
+    if (!chart) throw new UserError('Диаграмма не найдена');
+    if (!chart.source) throw new UserError('Диаграмма с ручным вводом не обновляется');
+    await prisma.$transaction([
+      prisma.reportItem.deleteMany({ where: { chartId } }),
+      prisma.reportItem.createMany({ data: autoItemsData(list).map((i) => ({ ...i, chartId })) }),
+      prisma.reportChart.update({ where: { id: chartId }, data: { refreshedAt: new Date() } }),
+    ]);
+    return getReportCharts(forumId);
+  });
+}
+
+/** Перенос диаграммы в подраздел «Архив» и обратно; вернувшаяся встаёт последней. */
+export async function setChartArchived(
+  forumId: number,
+  chartId: number,
+  archived: boolean,
+): Promise<ActionResult<ChartDTO[]>> {
+  return run(async () => {
+    await requireEditor();
+    const chart = await prisma.reportChart.findFirst({ where: { id: id.parse(chartId), forumId } });
+    if (!chart) throw new UserError('Диаграмма не найдена');
+    const agg = archived
+      ? null
+      : await prisma.reportChart.aggregate({ where: { forumId }, _max: { order: true } });
+    await prisma.reportChart.update({
+      where: { id: chartId },
+      data: {
+        archived: z.boolean().parse(archived),
+        ...(agg && { order: (agg._max.order ?? 0) + 1 }),
+      },
     });
     return getReportCharts(forumId);
   });
@@ -145,7 +214,10 @@ export async function saveChartItems(
     const chart = await prisma.reportChart.findFirst({ where: { id: chartId, forumId } });
     if (!chart) throw new UserError('Диаграмма не найдена');
     await prisma.$transaction([
-      prisma.reportChart.update({ where: { id: chartId }, data: { source: null } }),
+      prisma.reportChart.update({
+        where: { id: chartId },
+        data: { source: null, refreshedAt: null },
+      }),
       prisma.reportItem.deleteMany({ where: { chartId } }),
       prisma.reportItem.createMany({
         data: list.map((i, k) => ({
@@ -171,13 +243,14 @@ export async function copyReportFrom(
     await requireEditor();
     if (forumId === sourceForumId) throw new UserError('Выберите другой форум');
     const src = await prisma.reportChart.findMany({
-      where: { forumId: sourceForumId, report: 'main' },
+      where: { forumId: sourceForumId, report: 'main', archived: false },
       include: { items: { orderBy: { order: 'asc' } } },
       orderBy: { order: 'asc' },
     });
     if (!src.length) throw new UserError('В выбранном форуме нет диаграмм');
     await prisma.$transaction(async (tx) => {
-      await tx.reportChart.deleteMany({ where: { forumId, report: 'main' } });
+      // Архив форума остаётся как был — заменяются только активные диаграммы
+      await tx.reportChart.deleteMany({ where: { forumId, report: 'main', archived: false } });
       for (const c of src) {
         await tx.reportChart.create({
           data: {
@@ -189,7 +262,8 @@ export async function copyReportFrom(
             order: c.order,
             source: c.source,
             items: {
-              create: c.items.map((i) => ({
+              // Автоматическая диаграмма заполнится данными этого форума при открытии отчёта
+              create: (c.source ? [] : c.items).map((i) => ({
                 name: i.name,
                 amount: withAmounts ? i.amount : 0,
                 note: withAmounts ? i.note : null,
@@ -225,7 +299,7 @@ export async function importReport(
     await requireEditor();
     const list = importSchema.parse(charts);
     await prisma.$transaction(async (tx) => {
-      await tx.reportChart.deleteMany({ where: { forumId, report: 'main' } });
+      await tx.reportChart.deleteMany({ where: { forumId, report: 'main', archived: false } });
       for (const [k, c] of list.entries()) {
         await tx.reportChart.create({
           data: {

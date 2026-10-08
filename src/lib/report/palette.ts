@@ -1,10 +1,15 @@
-export type PaletteKey = 'RED' | 'GREEN' | 'BLUE';
+export type PaletteKey = 'RED' | 'GREEN' | 'BLUE' | 'PURPLE' | 'CYAN' | 'ORANGE';
 
 export const PALETTES: Record<PaletteKey, { label: string; dark: string; light: string }> = {
   RED: { label: 'Красная', dark: '#7F1D1D', light: '#FCA5A5' },
   GREEN: { label: 'Зелёная', dark: '#14532D', light: '#86EFAC' },
   BLUE: { label: 'Синяя', dark: '#060670', light: '#93C5FD' },
+  PURPLE: { label: 'Фиолетовая', dark: '#4C1D95', light: '#D8B4FE' },
+  CYAN: { label: 'Голубая', dark: '#0E7490', light: '#A5F3FC' },
+  ORANGE: { label: 'Оранжевая', dark: '#9A3412', light: '#FDBA74' },
 };
+
+export const PALETTE_KEYS = Object.keys(PALETTES) as PaletteKey[];
 
 function hexToRgb(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);

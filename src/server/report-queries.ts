@@ -15,8 +15,12 @@ export interface ChartDTO {
   order: number;
   /** Вкладка: «Отчёт» или «Отчёт для АЭ» */
   report: ReportKind;
-  /** Автоматическая диаграмма (строки считаются из «Расходов» и «Доходов»); null — ручная */
+  /** Автоматическая диаграмма (строки берутся из «Расходов» и «Доходов»); null — ручная */
   source: AutoSource | null;
+  /** Когда строки автоматической диаграммы обновлены (ISO); null — ещё ни разу */
+  refreshedAt: string | null;
+  /** В подразделе «Архив» */
+  archived: boolean;
   items: { id: number; name: string; amount: number; note: string | null; order: number }[];
 }
 
@@ -35,6 +39,8 @@ export async function getReportCharts(forumId: number): Promise<ChartDTO[]> {
     order: c.order,
     report: c.report === 'ae' ? 'ae' : 'main',
     source: isAutoSource(c.source) ? c.source : null,
+    refreshedAt: c.refreshedAt?.toISOString() ?? null,
+    archived: c.archived,
     items: c.items.map((i) => ({
       id: i.id,
       name: i.name,

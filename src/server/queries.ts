@@ -182,7 +182,7 @@ export async function getForumsForHome(archived: boolean): Promise<ForumCardData
       GROUP BY t."forumId"`,
     // Деньги на плашке — из ручных диаграмм «Отчёта»: у автоматических строки в базе не хранятся
     prisma.reportChart.findMany({
-      where: { forum: { archived }, report: 'main', source: null },
+      where: { forum: { archived }, report: 'main', source: null, archived: false },
       select: {
         forumId: true,
         title: true,

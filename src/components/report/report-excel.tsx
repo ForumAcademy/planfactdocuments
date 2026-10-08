@@ -15,25 +15,32 @@ import { formatAmount, pluralRu } from '@/lib/utils';
 import { importReport } from '@/server/actions/report';
 import type { ChartDTO } from '@/server/report-queries';
 
-const PALETTE_DOT = { RED: '#D93838', GREEN: '#1E9E5A', BLUE: '#0A0A9F' } as const;
-
-/** Кнопки «Excel»: выгрузка и загрузка диаграмм отчёта. */
+/** Кнопки «Excel»: выгрузка отмеченных диаграмм; в «Отчёте» — ещё шаблон и загрузка. */
 export function ReportExcelButtons({
   forum,
   reportDate,
+  title = 'Отчёт',
   charts,
+  exportCharts,
+  importable,
   onImported,
 }: {
   forum: ForumDTO;
   reportDate: string;
+  title?: string;
+  /** Активные диаграммы — для шаблона и загрузки */
   charts: ChartDTO[];
+  /** Отмеченные для выгрузки */
+  exportCharts: ChartDTO[];
+  /** Шаблон и загрузка из Excel */
+  importable: boolean;
   onImported: (charts: ChartDTO[]) => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
 
-  const sheetCharts = () =>
-    charts.map((c) => ({
+  const sheetCharts = (list: ChartDTO[]) =>
+    list.map((c) => ({
       title: c.title,
       palette: c.palette,
       unit: c.unit,
@@ -45,15 +52,15 @@ export function ReportExcelButtons({
     try {
       const { buildReportWorkbook, buildReportTemplate } = await import('@/lib/excel/report-excel');
       const buf = template
-        ? await buildReportTemplate(sheetCharts(), forum.name)
-        : await buildReportWorkbook(sheetCharts(), forum.name);
+        ? await buildReportTemplate(sheetCharts(charts), forum.name)
+        : await buildReportWorkbook(sheetCharts(exportCharts), forum.name);
       downloadBlob(
         new Blob([buf], {
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         }),
         template
           ? `${safeFileName(forum.name)} — шаблон отчёта.xlsx`
-          : `${safeFileName(forum.name)} — отчёт ${formatDate(reportDate)}.xlsx`,
+          : `${safeFileName(forum.name)} — ${title.toLowerCase()} ${formatDate(reportDate)}.xlsx`,
       );
     } catch (e) {
       console.error(e);
@@ -65,22 +72,26 @@ export function ReportExcelButtons({
 
   return (
     <>
-      <Button
-        variant="outline"
-        onClick={() => exportXlsx(true)}
-        disabled={busy}
-        title="Таблица для заполнения: статьи отчёта с пустыми суммами и инструкцией"
-        data-testid="report-template"
-      >
-        <FileDown /> Шаблон Excel
-      </Button>
-      <Button variant="outline" onClick={() => setOpen(true)} data-testid="report-import">
-        <Upload /> Загрузить из Excel
-      </Button>
+      {importable && (
+        <>
+          <Button
+            variant="outline"
+            onClick={() => exportXlsx(true)}
+            disabled={busy}
+            title="Таблица для заполнения: статьи отчёта с пустыми суммами и инструкцией"
+            data-testid="report-template"
+          >
+            <FileDown /> Шаблон Excel
+          </Button>
+          <Button variant="outline" onClick={() => setOpen(true)} data-testid="report-import">
+            <Upload /> Загрузить из Excel
+          </Button>
+        </>
+      )}
       <Button
         variant="outline"
         onClick={() => exportXlsx(false)}
-        disabled={busy || !charts.length}
+        disabled={busy || !exportCharts.length}
         data-testid="report-export-xlsx"
       >
         <FileSpreadsheet /> Выгрузить в Excel
@@ -184,7 +195,7 @@ function ImportDialog({
             {parsed.charts.length > 0 && (
               <>
                 <p>
-                  Текущие диаграммы отчёта ({currentCount}) будут <b>заменены</b> диаграммами из
+                  Активные диаграммы отчёта ({currentCount}) будут <b>заменены</b> диаграммами из
                   файла:
                 </p>
                 <div className="grid gap-2 sm:grid-cols-2" data-testid="report-import-preview">
@@ -193,7 +204,7 @@ function ImportDialog({
                       <div className="flex items-center gap-2 font-medium">
                         <span
                           className="size-2.5 rounded-full"
-                          style={{ background: PALETTE_DOT[c.palette] }}
+                          style={{ background: PALETTES[c.palette].dark }}
                         />
                         {c.title}
                         <span className="ml-auto text-xs font-normal text-ink/60">
