@@ -304,7 +304,7 @@ export function IncomeView({
       />
     );
   const [gPartners, gTickets] = INCOME_GROUPS;
-  /** Свёрнутые таблицы: видны заголовок и «Итого», как у направлений в «Расходах» */
+  /** Свёрнутые таблицы: виден только заголовок, как у направлений в «Расходах» */
   const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set());
   const toggleGroup = (key: string) =>
     setCollapsed((s) => {
@@ -370,11 +370,15 @@ export function IncomeView({
         actions={addActions(gPartners)}
       />
       {addForm(gPartners)}
-      <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
+      {/* Свёрнутая таблица скрывается целиком, вместе с «Итого» */}
+      <div
+        hidden={!partnersOpen}
+        className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white"
+      >
         <table className={tableClass} data-testid="income-group-partners">
           <Cols view={view} />
           <ItemsHead view={view} />
-          <tbody hidden={!partnersOpen}>
+          <tbody>
             {partners.map((it) => (
               <ItemRow key={it.key} {...rowProps(it)} />
             ))}
@@ -406,14 +410,17 @@ export function IncomeView({
         />
       )}
       {addForm(gTickets)}
-      <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
+      <div
+        hidden={!ticketsOpen}
+        className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white"
+      >
         <table className={tableClass} data-testid="income-group-tickets">
           <Cols view={view} />
           <ItemsHead view={view} withStage />
           {PRICE_STAGES.map((st, k) => {
             const rows = tickets.filter((i) => i.stage === k);
             return (
-              <tbody key={st.key} hidden={!ticketsOpen} data-testid={`income-stage-${st.key}`}>
+              <tbody key={st.key} data-testid={`income-stage-${st.key}`}>
                 <tr className="border-t border-line bg-surface/50">
                   <td className="px-3 py-1.5" colSpan={6}>
                     <span className="font-medium">{st.label}</span>
