@@ -366,6 +366,7 @@ export function IncomeView({
               </tr>
             )}
           </tbody>
+          <TableTotal view={view} list={partners} total={planSum} testId="income-partners-total" />
         </table>
       </div>
 
@@ -433,6 +434,7 @@ export function IncomeView({
               </tbody>
             );
           })}
+          <TableTotal view={view} list={tickets} total={planSum} testId="income-tickets-total" />
         </table>
       </div>
 
@@ -551,6 +553,49 @@ function TotalRow({
         )}
       </td>
     </tr>
+  );
+}
+
+/** «Итого» внизу таблицы статей: сумма — в столбце «Сумма по плану» / «Выручка» */
+function TableTotal({
+  view,
+  list,
+  total,
+  testId,
+}: {
+  view: View;
+  list: IncomeItemValue[];
+  /** Весь план — для доли раздела */
+  total: number;
+  testId: string;
+}) {
+  const value = incomeSum(list, view);
+  const plan = view === 'fact' ? incomeSum(list, 'plan') : undefined;
+  return (
+    <tfoot>
+      <tr className="border-t-2 border-brand/40 font-semibold">
+        <td className="px-3 py-2.5" colSpan={6}>
+          Итого
+        </td>
+        <td className="px-2 py-2.5 text-right tabular-nums" data-testid={testId}>
+          {formatRub(value)}
+        </td>
+        <td
+          className="px-3 py-2.5 text-right text-xs font-normal tabular-nums text-ink/60"
+          colSpan={view === 'plan' ? 1 : 3}
+        >
+          {view === 'plan' && value > 0 && pctOf(value, total)}
+          {plan !== undefined && (
+            <div className="flex items-center gap-3 text-xs font-normal text-ink/60">
+              <span className="w-28 text-right tabular-nums">из {formatRub(plan)}</span>
+              <div className="flex-1">
+                <Progress part={value} total={plan} />
+              </div>
+            </div>
+          )}
+        </td>
+      </tr>
+    </tfoot>
   );
 }
 
@@ -1093,7 +1138,7 @@ function AddItemActions({
         data-testid={`income-add-${group.key}`}
       >
         <Plus className="size-4" />
-        {factOnly ? 'Добавить статью факта' : 'Добавить статью'}
+        Добавить статью
       </Button>
     </div>
   );

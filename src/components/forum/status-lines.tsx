@@ -95,7 +95,7 @@ function Line({
     <Link
       href={href}
       title={hint}
-      className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 px-3 py-2 transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-surface/60 sm:grid-cols-[120px_minmax(0,1fr)_170px_190px]"
+      className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 px-3 py-2 transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-surface/60 sm:grid-cols-[120px_minmax(0,1fr)_230px_190px]"
       data-testid={`status-line-${id}`}
       data-health={line.health}
     >
@@ -103,17 +103,11 @@ function Line({
         {title}
       </span>
       <span className="col-span-2 row-start-2 flex items-center gap-3 sm:contents">
-        <span className="relative h-1.5 min-w-0 flex-1 rounded-full bg-surface sm:col-start-2 sm:row-start-1">
+        <span className="h-1.5 min-w-0 flex-1 rounded-full bg-surface sm:col-start-2 sm:row-start-1">
           <span
             className={cn('block h-full rounded-full', BAR[line.health])}
             style={{ width: `${line.fill * 100}%` }}
           />
-          {line.mark !== null && (
-            <span
-              className="absolute -top-[3px] h-3 w-px bg-ink/40"
-              style={{ left: `${line.mark * 100}%` }}
-            />
-          )}
         </span>
         <span className="shrink-0 text-xs tabular-nums text-ink/70 sm:col-start-3 sm:row-start-1 sm:text-right">
           {line.value}

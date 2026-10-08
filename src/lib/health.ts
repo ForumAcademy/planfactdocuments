@@ -31,7 +31,7 @@ export interface HealthLine {
   mark: number | null;
   /** Подпись отметки */
   markLabel?: string;
-  /** Главная цифра коротко: «59 из 149», «10,9 из 18,5 млн ₽» */
+  /** Главная цифра с подписью: «110 из 149 шт. выполнено», «10,5 из 18,9 млн р. потрачено» */
   value: string;
   /** Коротко, почему такой цвет: «Просрочено 50», «По плану» */
   badge: string;
@@ -62,13 +62,13 @@ const plural = (n: number, one: string, few: string, many: string) => {
   if (m10 === 1) return one;
   return many;
 };
-/** «10,9 из 18,5 млн ₽» — обе суммы в одних единицах */
+/** «10,9 из 18,5 млн р.» — обе суммы в одних единицах */
 const rubOf = (part: number, total: number) => {
   const m = Math.max(Math.abs(part), Math.abs(total));
   const [div, unit] =
     m >= 1_000_000 ? [1_000_000, 'млн '] : m >= 1_000 ? [1_000, 'тыс. '] : [1, ''];
   const f = (v: number) => (Math.round((v / div) * 10) / 10).toLocaleString('ru-RU');
-  return `${f(part)} из ${f(total)} ${unit}₽`;
+  return `${f(part)} из ${f(total)} ${unit}р.`;
 };
 const tasksWord = (n: number) => `${n} ${plural(n, 'задача', 'задачи', 'задач')}`;
 
@@ -113,7 +113,7 @@ export function taskHealth(tasks: StatusInput[], today: ISODate): HealthLine {
     fill: share(c.done, c.total),
     // Отметки у задач нет: лимита по задачам нет, линия — просто доля выполненных
     mark: null,
-    value: `${c.done} из ${c.total} выполнено`,
+    value: `${c.done} из ${c.total} шт. выполнено`,
     badge,
     summary: `Выполнено ${c.done} из ${c.total} (${percent(share(c.done, c.total))}) · в работе ${c.inProgress} · не начато ${c.notStarted} · просрочено ${c.overdue}`,
     reasons,
@@ -172,7 +172,7 @@ export function expenseHealth(tasks: ExpenseTaskInput[], limit: number | null): 
     fill: clamp01(share(fact, cap)),
     mark: cap > 0 && plan > 0 ? clamp01(share(plan, cap)) : null,
     markLabel: 'План (стоимость задач)',
-    value: cap > 0 ? rubOf(fact, cap) : rub(fact),
+    value: `${cap > 0 ? rubOf(fact, cap) : rub(fact).replace('₽', 'р.')} потрачено`,
     badge,
     summary:
       `Факт ${rub(fact)} · план ${rub(plan)} · предельно ${limit != null ? rub(limit) : 'не заданы'}` +
@@ -283,7 +283,7 @@ export function incomeHealth(input: {
     fill: clamp01(share(fact, plan)),
     mark: plan > 0 && today >= salesStart ? clamp01(share(expected, plan)) : null,
     markLabel: `Ожидалось к сегодняшнему дню: ${rub(expected)}`,
-    value: plan > 0 ? rubOf(fact, plan) : rub(fact),
+    value: `${plan > 0 ? rubOf(fact, plan) : rub(fact).replace('₽', 'р.')} заработано`,
     badge,
     summary: `Факт ${rub(fact)} · план ${rub(plan)} (${percent(share(fact, plan))}) · цель ${rub(target)}`,
     reasons,
