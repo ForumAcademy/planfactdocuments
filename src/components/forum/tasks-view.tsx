@@ -729,7 +729,7 @@ const TaskRow = React.memo(function TaskRow({
           'whitespace-nowrap px-2 py-2 text-right text-xs tabular-nums',
           t.cost ? 'text-ink/70' : 'text-status-gray',
         )}
-        title={forum.usdRate ? undefined : 'Задайте курс $ в шапке форума'}
+        title={forum.usdRate ? undefined : 'Задайте курс $ в «База данных» → «Курс $»'}
         data-testid="usd-cell"
       >
         {formatUsd(t.cost, forum.usdRate)}

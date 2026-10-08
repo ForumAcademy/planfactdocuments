@@ -818,7 +818,7 @@ function ChartEditDialog({
     if (!title.trim()) return setError('Укажите название диаграммы');
     if (!unit) return setError('Укажите единицу измерения');
     if (chart.source && isUsdUnit(unit) && !forum.usdRate)
-      return setError('Для диаграммы в $ задайте курс доллара в шапке форума');
+      return setError('Для диаграммы в $ задайте курс доллара в «База данных» → «Курс $»');
     const parsed: { name: string; amount: number; note: string | null }[] = [];
     for (const [k, i] of items.entries()) {
       if (!i.name.trim() && !i.amount.trim() && !i.note.trim()) continue;
@@ -894,7 +894,7 @@ function ChartEditDialog({
             isUsdUnit(unit) &&
             (forum.usdRate
               ? `. Суммы в $ — из рублей по курсу 1 $ = ${forum.usdRate.toLocaleString('ru-RU')} р.`
-              : '. Курс доллара не задан: задайте его в шапке форума')}
+              : '. Курс доллара не задан: задайте его в «База данных» → «Курс $»')}
         </p>
 
         <div className="mt-3 overflow-x-auto">

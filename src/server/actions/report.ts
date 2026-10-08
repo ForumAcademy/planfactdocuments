@@ -9,8 +9,8 @@ import { optionalIsoDate } from '@/lib/validation';
 import { run, UserError, type ActionResult } from '@/server/action-utils';
 import { AUTO_SOURCES, unitScale } from '@/lib/report/auto-charts';
 import { isUsdUnit } from '@/lib/report/units';
-import { usdRateOn } from '@/lib/usd';
-import { getUsdRates } from '@/server/queries';
+import { forumUsdRate } from '@/lib/usd';
+import { getUsdRates, toForumDTO } from '@/server/queries';
 import { PALETTE_KEYS, type PaletteKey } from '@/lib/report/palette';
 import { getReportCharts, type ChartDTO } from '@/server/report-queries';
 
@@ -230,7 +230,8 @@ export async function updateChart(
     const d = updateSchema.parse(input);
     const chart = await prisma.reportChart.findFirst({ where: { id: id.parse(chartId), forumId } });
     if (!chart) throw new UserError('Диаграмма не найдена');
-    const usdRate = usdRateOn(await getUsdRates(), todayMsk())?.rate ?? null;
+    const forum = await prisma.forum.findUniqueOrThrow({ where: { id: forumId } });
+    const usdRate = forumUsdRate(await getUsdRates(), toForumDTO(forum), todayMsk())?.rate ?? null;
     if (chart.source && isUsdUnit(d.unit) && !usdRate)
       throw new UserError('Задайте курс $ в «База данных» → «Курс $»');
     const scale = chart.source ? unitScale(d.unit, usdRate) : 1;

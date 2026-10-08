@@ -143,6 +143,7 @@ model Forum {
   charts            ReportChart[]
   incomeItems       IncomeItem[]
   deals             Deal[]
+  usdRates          UsdRate[]
 }
 
 /// Линия доходов: позиция (партнёрство или билет) — цена за единицу, план и факт продаж
@@ -351,10 +352,16 @@ model ReminderLog {
 /// holiday — праздничный / нерабочий день; workday — рабочий день (перенос на выходной);
 /// short — сокращённый рабочий день.
 /// Курс доллара по датам, руб. за 1 $: столбцы «$» и диаграммы в $ считаются по курсу на сегодня
+/// Курс доллара на дату (руб. за 1 $); forumId — курс только для этого форума, null — для всех форумов
 model UsdRate {
-  date      DateTime @id @db.Date
+  id        Int      @id @default(autoincrement())
+  date      DateTime @db.Date
   rate      Float
+  forumId   Int?
+  forum     Forum?   @relation(fields: [forumId], references: [id], onDelete: Cascade)
   updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([forumId, date])
 }
 
 model CalendarDay {

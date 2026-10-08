@@ -339,11 +339,15 @@ export async function getWorkCalendar(): Promise<ActionResult<CalendarDayDTO[]>>
 
 const usdRateSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Укажите дату'),
-  /** null — удалить курс на эту дату */
-  rate: z.number().positive('Курс должен быть больше нуля').max(100_000).nullable(),
+  rate: z.number().positive('Курс должен быть больше нуля').max(100_000),
+  /** Форум, к которому привязан курс; null — для всех форумов */
+  forumId: z.number().int().positive().nullable(),
 });
 
-/** Курс доллара на дату (руб. за 1 $): внести, поменять или удалить. */
+/**
+ * Курс доллара на дату (руб. за 1 $) для форума или для всех форумов. Прежние курсы не удаляются:
+ * курс на ту же дату и для того же форума обновляется, остальные остаются.
+ */
 export async function setUsdRate(
   input: z.input<typeof usdRateSchema>,
 ): Promise<ActionResult<UsdRateDTO[]>> {
@@ -351,11 +355,22 @@ export async function setUsdRate(
     await requireEditor();
     const d = usdRateSchema.parse(input);
     const date = isoToDb(d.date)!;
-    if (d.rate === null) await prisma.usdRate.deleteMany({ where: { date } });
-    else {
-      const rate = Math.round(d.rate * 10_000) / 10_000;
-      await prisma.usdRate.upsert({ where: { date }, update: { rate }, create: { date, rate } });
-    }
+    const rate = Math.round(d.rate * 10_000) / 10_000;
+    if (d.forumId !== null && !(await prisma.forum.findUnique({ where: { id: d.forumId } })))
+      throw new UserError('Форум не найден');
+    const same = await prisma.usdRate.findFirst({ where: { date, forumId: d.forumId } });
+    if (same) await prisma.usdRate.update({ where: { id: same.id }, data: { rate } });
+    else await prisma.usdRate.create({ data: { date, rate, forumId: d.forumId } });
+    refresh();
+    return getUsdRates();
+  });
+}
+
+/** Удалить курс доллара */
+export async function deleteUsdRate(rateId: number): Promise<ActionResult<UsdRateDTO[]>> {
+  return run(async () => {
+    await requireEditor();
+    await prisma.usdRate.deleteMany({ where: { id: z.number().int().parse(rateId) } });
     refresh();
     return getUsdRates();
   });

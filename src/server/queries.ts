@@ -123,8 +123,8 @@ export async function getDicts(): Promise<DictsDTO> {
 
 /** Курс доллара по датам, по возрастанию даты */
 export async function getUsdRates(): Promise<UsdRateDTO[]> {
-  const rows = await prisma.usdRate.findMany({ orderBy: { date: 'asc' } });
-  return rows.map((r) => ({ date: dbToISO(r.date)!, rate: r.rate }));
+  const rows = await prisma.usdRate.findMany({ orderBy: [{ date: 'asc' }, { id: 'asc' }] });
+  return rows.map((r) => ({ id: r.id, date: dbToISO(r.date)!, rate: r.rate, forumId: r.forumId }));
 }
 
 /** Производственный календарь (все отмеченные дни — их немного, десятки в год). */
