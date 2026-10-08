@@ -4,7 +4,16 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { Lightbulb, Pencil, Plus, RotateCcw, Shuffle, Trash2 } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Lightbulb,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Shuffle,
+  Trash2,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { NumberCell } from '@/components/ui/number-cell';
@@ -295,6 +304,17 @@ export function IncomeView({
       />
     );
   const [gPartners, gTickets] = INCOME_GROUPS;
+  /** Свёрнутые таблицы: видны заголовок и «Итого», как у направлений в «Расходах» */
+  const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set());
+  const toggleGroup = (key: string) =>
+    setCollapsed((s) => {
+      const n = new Set(s);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      return n;
+    });
+  const partnersOpen = !collapsed.has(gPartners.key);
+  const ticketsOpen = !collapsed.has(gTickets.key);
   /** Столбцов в таблицах статей и итогов — одинаково, чтобы суммы стояли друг под другом */
   const cols = view === 'plan' ? 9 : 11;
 
@@ -345,8 +365,8 @@ export function IncomeView({
       {/* Партнёрства: без стадий продаж */}
       <SectionTitle
         group={gPartners}
-        sum={sumOf(partners)}
-        plan={view === 'fact' ? incomeSum(partners, 'plan') : undefined}
+        open={partnersOpen}
+        onToggle={() => toggleGroup(gPartners.key)}
         actions={addActions(gPartners)}
       />
       {addForm(gPartners)}
@@ -354,7 +374,7 @@ export function IncomeView({
         <table className={tableClass} data-testid="income-group-partners">
           <Cols view={view} />
           <ItemsHead view={view} />
-          <tbody>
+          <tbody hidden={!partnersOpen}>
             {partners.map((it) => (
               <ItemRow key={it.key} {...rowProps(it)} />
             ))}
@@ -373,16 +393,18 @@ export function IncomeView({
       {/* Билеты: у каждой статьи своя стадия продаж */}
       <SectionTitle
         group={gTickets}
-        sum={sumOf(tickets)}
-        plan={view === 'fact' ? incomeSum(tickets, 'plan') : undefined}
+        open={ticketsOpen}
+        onToggle={() => toggleGroup(gTickets.key)}
         actions={addActions(gTickets)}
       />
-      <StageDates
-        dates={dates}
-        current={stageNow}
-        forumStart={forum.startDate}
-        onSave={saveConfig}
-      />
+      {ticketsOpen && (
+        <StageDates
+          dates={dates}
+          current={stageNow}
+          forumStart={forum.startDate}
+          onSave={saveConfig}
+        />
+      )}
       {addForm(gTickets)}
       <div className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white">
         <table className={tableClass} data-testid="income-group-tickets">
@@ -391,7 +413,7 @@ export function IncomeView({
           {PRICE_STAGES.map((st, k) => {
             const rows = tickets.filter((i) => i.stage === k);
             return (
-              <tbody key={st.key} data-testid={`income-stage-${st.key}`}>
+              <tbody key={st.key} hidden={!ticketsOpen} data-testid={`income-stage-${st.key}`}>
                 <tr className="border-t border-line bg-surface/50">
                   <td className="px-3 py-1.5" colSpan={6}>
                     <span className="font-medium">{st.label}</span>
@@ -501,29 +523,38 @@ export function IncomeView({
 
 function SectionTitle({
   group,
-  sum,
-  plan,
+  open,
+  onToggle,
   actions,
 }: {
   group: IncomeGroup;
-  sum: number;
-  plan?: number;
+  open: boolean;
+  onToggle: () => void;
   /** Кнопки справа над таблицей */
   actions?: React.ReactNode;
 }) {
+  // Суммы — в «Итого» внизу таблицы; заголовок сворачивает и разворачивает таблицу
   return (
-    <div className="mt-5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <h2 className="flex items-center gap-2 font-semibold">
-        <span className="h-4 w-1.5 rounded-sm" style={{ background: group.color }} />
-        {group.label}
+    <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1">
+      <h2>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className="flex items-center gap-2 font-semibold hover:text-brand"
+          title={open ? 'Свернуть таблицу' : 'Развернуть таблицу'}
+          data-testid={`income-toggle-${group.key}`}
+        >
+          {open ? (
+            <ChevronDown className="size-4 shrink-0" />
+          ) : (
+            <ChevronRight className="size-4 shrink-0" />
+          )}
+          <span className="h-4 w-1.5 rounded-sm" style={{ background: group.color }} />
+          {group.label}
+        </button>
       </h2>
-      <span className="font-semibold tabular-nums">{formatRub(sum)}</span>
-      {plan !== undefined && (
-        <span className="text-sm text-ink/60">
-          из {formatRub(plan)} · {pctOf(sum, plan)}
-        </span>
-      )}
-      {actions && <div className="ml-auto self-center">{actions}</div>}
+      {actions && <div className="ml-auto">{actions}</div>}
     </div>
   );
 }

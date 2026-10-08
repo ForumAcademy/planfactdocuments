@@ -524,7 +524,8 @@ export function ChartCard({
   const fmt = (n: number) => formatUnitValue(n, chart.unit);
   return (
     <Card className={cn('flex flex-col p-4', !selected && 'opacity-70')} data-testid="report-chart">
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Кнопки — в верхней строке у всех диаграмм, чтобы стояли на одной высоте; название — под ними */}
+      <div className="flex items-center gap-2">
         {count > 1 && onDragStart && (
           <span
             draggable
@@ -553,9 +554,7 @@ export function ChartCard({
           aria-label="В выгрузку"
           data-testid="chart-select"
         />
-        <h2 className="text-lg font-semibold">{chart.title}</h2>
-        {chart.source ? <AutoBadge source={chart.source} /> : <ManualBadge />}
-        <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1 print:hidden">
+        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1 print:hidden">
           {onSort && <SortToggle value={sort} onChange={onSort} />}
           {chart.source && (
             <Button
@@ -599,12 +598,19 @@ export function ChartCard({
           </Button>
         </div>
       </div>
-      {chart.source && chart.refreshedAt && (
-        <div className="mt-0.5 text-xs text-ink/50">
-          Данные на {refreshedLabel(chart.refreshedAt)}
-          {chart.edited && <span className="text-yellow-800"> · изменены вручную</span>}
-        </div>
-      )}
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        <h2 className="text-lg font-semibold">{chart.title}</h2>
+        {chart.source ? <AutoBadge source={chart.source} /> : <ManualBadge />}
+      </div>
+      {/* Строка даты есть у всех диаграмм (у ручных — пустая), чтобы таблицы начинались на одной высоте */}
+      <div className="mt-0.5 min-h-4 text-xs text-ink/50">
+        {chart.source && chart.refreshedAt && (
+          <>
+            Данные на {refreshedLabel(chart.refreshedAt)}
+            {chart.edited && <span className="text-yellow-800"> · изменены вручную</span>}
+          </>
+        )}
+      </div>
       {/* Диаграмма — по центру блока по вертикали, таблица — сверху */}
       <div className="mt-2 grid flex-1 grid-cols-1 items-start gap-6 md:grid-cols-[312px_minmax(0,1fr)] md:gap-8">
         <div className="self-center py-2">
