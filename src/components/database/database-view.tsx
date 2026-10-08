@@ -19,6 +19,7 @@ import { deleteForum, setForumArchived } from '@/server/actions/forums';
 import { EmployeeDialog, NamedDialog, TemplateDialog } from './dict-dialogs';
 import { TermsTab } from './terms-tab';
 import { CalendarTab } from './calendar-tab';
+import { UsdTab } from './usd-tab';
 
 const TABS = [
   { key: 'employees', label: 'Ответственные' },
@@ -27,6 +28,7 @@ const TABS = [
   { key: 'roles', label: 'Роли' },
   { key: 'terms', label: 'Сроки' },
   { key: 'calendar', label: 'Производственный календарь' },
+  { key: 'usd', label: 'Курс $' },
   { key: 'templates', label: 'Задачи (мастер-план)' },
   { key: 'forums', label: 'Форумы' },
 ] as const;
@@ -130,6 +132,7 @@ export function DatabaseView({ data }: { data: DatabaseData }) {
           <NamedTab kind="role" rows={data.dicts.roles} usage={data.usage.role} />
         )}
         {tab === 'calendar' && <CalendarTab days={data.dicts.calendar} />}
+        {tab === 'usd' && <UsdTab rates={data.dicts.usdRates} />}
         {tab === 'terms' && <TermsTab rows={data.dicts.terms} usage={data.usage.term} />}
         {tab === 'templates' && <TemplatesTab data={data} />}
         {tab === 'forums' && <ForumsTab forums={data.forums} />}

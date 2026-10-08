@@ -1,17 +1,24 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { DollarSign } from 'lucide-react';
+import { DollarSign, History } from 'lucide-react';
+import { formatDate } from '@/lib/dates';
 import { cn, parseAmount } from '@/lib/utils';
-import { setUsdRate } from '@/server/actions/forums';
+import { setUsdRate } from '@/server/actions/dicts';
 import { useForum } from './forum-context';
 
 const rateFormat = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 4 });
 
-/** Курс доллара форума в шапке: по клику — поле ввода; по нему считаются столбцы «$». */
+/**
+ * Курс доллара на сегодня в шапке форума (из «База данных» → «Курс $»). По клику — поле ввода:
+ * введённый курс сохраняется в базу на сегодняшнюю дату. По нему считаются столбцы «$».
+ */
 export function UsdRate() {
-  const { forum } = useForum();
+  const { forum, today } = useForum();
+  const router = useRouter();
   const [rate, setRate] = React.useState(forum.usdRate);
   React.useEffect(() => setRate(forum.usdRate), [forum.usdRate]);
   const [editing, setEditing] = React.useState(false);
@@ -28,11 +35,14 @@ export function UsdRate() {
     if (next === rate) return;
     const prev = rate;
     setRate(next);
-    const res = await setUsdRate(forum.id, next);
+    const res = await setUsdRate({ date: today, rate: next });
     if (!res.ok) {
       setRate(prev);
       toast.error(res.error);
+      return;
     }
+    toast.success(`Курс на ${formatDate(today)} сохранён в базе данных`);
+    router.refresh();
   };
 
   if (editing) {
@@ -55,26 +65,39 @@ export function UsdRate() {
           aria-label="Курс доллара, руб. за 1 $"
           data-testid="usd-rate-input"
         />
-        р.
+        р. на {formatDate(today)}
       </span>
     );
   }
   return (
-    <button
-      type="button"
-      onClick={() => {
-        setDraft(rate ? String(rate).replace('.', ',') : '');
-        setEditing(true);
-      }}
-      className={cn(
-        'inline-flex items-center gap-1 rounded px-1 hover:bg-brand-light',
-        !rate && 'text-brand',
-      )}
-      title="Курс доллара: по нему считаются столбцы «$» в задачах, расходах, доходах и диаграммы в $"
-      data-testid="usd-rate"
-    >
-      <DollarSign className="size-3.5" />
-      {rate ? `1 $ = ${rateFormat.format(rate)} р.` : 'Задать курс $'}
-    </button>
+    <span className="inline-flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => {
+          setDraft(rate ? String(rate).replace('.', ',') : '');
+          setEditing(true);
+        }}
+        className={cn(
+          'inline-flex items-center gap-1 rounded px-1 hover:bg-brand-light',
+          !rate && 'text-brand',
+        )}
+        title="Курс доллара на сегодня: по нему считаются столбцы «$» в задачах, расходах, доходах и диаграммы в $. Нажмите, чтобы внести курс на сегодня"
+        data-testid="usd-rate"
+      >
+        <DollarSign className="size-3.5" />
+        {rate ? `1 $ = ${rateFormat.format(rate)} р.` : 'Задать курс $'}
+        {rate && forum.usdRateDate && forum.usdRateDate !== today && (
+          <span className="text-xs text-ink/50">(курс на {formatDate(forum.usdRateDate)})</span>
+        )}
+      </button>
+      <Link
+        href="/database?tab=usd"
+        className="rounded p-0.5 text-ink/40 hover:bg-brand-light hover:text-brand"
+        title="Курсы по датам — «База данных» → «Курс $»"
+        aria-label="Курсы по датам"
+      >
+        <History className="size-3.5" />
+      </Link>
+    </span>
   );
 }

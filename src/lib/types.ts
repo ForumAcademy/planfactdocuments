@@ -1,6 +1,7 @@
 import type { ISODate } from './dates';
 import type { CalendarDayDTO } from './work-calendar';
 import type { TaskStatusCode } from './status';
+import type { UsdRateDTO } from './usd';
 
 export interface ForumDTO {
   id: number;
@@ -14,8 +15,10 @@ export interface ForumDTO {
   color: string;
   /** Предельно допустимые расходы, руб.; null — не задан */
   expenseLimit: number | null;
-  /** Курс доллара, руб. за 1 $; null — не задан */
+  /** Курс доллара на сегодня, руб. за 1 $ (из «База данных» → «Курс $»); null — не задан */
   usdRate: number | null;
+  /** Дата этого курса */
+  usdRateDate: ISODate | null;
   archived: boolean;
   reportDate: ISODate | null;
   /** «Отчёт для АЭ»: порядок статей в диаграмме */
@@ -91,6 +94,8 @@ export interface DictsDTO {
   terms: TermPhraseDTO[];
   /** Производственный календарь: праздники, переносы, сокращённые дни */
   calendar: CalendarDayDTO[];
+  /** Курс доллара по датам, по возрастанию даты */
+  usdRates: UsdRateDTO[];
 }
 
 export interface HistoryDTO {

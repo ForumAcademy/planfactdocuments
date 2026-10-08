@@ -17,6 +17,7 @@ import {
 import type { DealValue } from '@/lib/funnel';
 import type { IncomeConfig, IncomeItemValue } from '@/lib/income';
 import type { DictsDTO, ForumDTO, TaskDTO } from '@/lib/types';
+import { usdRateOn } from '@/lib/usd';
 import {
   bulkUpdateTasks,
   createTask,
@@ -116,6 +117,11 @@ export function ForumProvider({
   }, [setFilters]);
 
   const calendar = React.useMemo(() => makeCalendar(dicts.calendar), [dicts.calendar]);
+  // Курс доллара на сегодня — из справочника «Курс $»: по нему считаются столбцы «$»
+  const forumWithRate = React.useMemo(() => {
+    const r = usdRateOn(dicts.usdRates, today);
+    return { ...forum, usdRate: r?.rate ?? null, usdRateDate: r?.date ?? null };
+  }, [forum, dicts.usdRates, today]);
   const lookups = React.useMemo<Lookups>(
     () => ({
       stage: new Map(dicts.stages.map((s) => [s.id, s])),
@@ -249,7 +255,7 @@ export function ForumProvider({
   };
 
   const value: ForumContextValue = {
-    forum,
+    forum: forumWithRate,
     income,
     today,
     dicts,

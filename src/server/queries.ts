@@ -1,4 +1,5 @@
 import type { CalendarDayDTO } from '@/lib/work-calendar';
+import type { UsdRateDTO } from '@/lib/usd';
 import 'server-only';
 import type { Deal, Employee, Forum, Role, Task } from '@prisma/client';
 import { prisma } from '@/lib/db';
@@ -25,7 +26,9 @@ export function toForumDTO(f: Forum): ForumDTO {
     website: f.website,
     color: f.color,
     expenseLimit: f.expenseLimit,
-    usdRate: f.usdRate,
+    // Курс на сегодня подставляет ForumProvider из справочника курсов
+    usdRate: null,
+    usdRateDate: null,
     archived: f.archived,
     reportDate: dbToISO(f.reportDate),
     aeReportSort: f.aeReportSort === 'asc' ? 'asc' : 'desc',
@@ -92,13 +95,14 @@ function toEmployeeDTO(e: Employee & { roles: Role[] }) {
 }
 
 export async function getDicts(): Promise<DictsDTO> {
-  const [stages, blocks, roles, employees, terms, calendar] = await Promise.all([
+  const [stages, blocks, roles, employees, terms, calendar, usdRates] = await Promise.all([
     prisma.stage.findMany({ orderBy: [{ order: 'asc' }, { name: 'asc' }] }),
     prisma.block.findMany({ orderBy: [{ order: 'asc' }, { name: 'asc' }] }),
     prisma.role.findMany({ orderBy: [{ order: 'asc' }, { name: 'asc' }] }),
     prisma.employee.findMany({ include: { roles: true }, orderBy: { fullName: 'asc' } }),
     prisma.termPhrase.findMany({ orderBy: [{ order: 'asc' }, { text: 'asc' }] }),
     getCalendarDays(),
+    getUsdRates(),
   ]);
   return {
     stages: stages.map(({ id, name, order, color, archived }) => ({
@@ -113,7 +117,14 @@ export async function getDicts(): Promise<DictsDTO> {
     employees: employees.map(toEmployeeDTO),
     terms: terms.map(({ id, text, order, archived }) => ({ id, text, order, archived })),
     calendar,
+    usdRates,
   };
+}
+
+/** Курс доллара по датам, по возрастанию даты */
+export async function getUsdRates(): Promise<UsdRateDTO[]> {
+  const rows = await prisma.usdRate.findMany({ orderBy: { date: 'asc' } });
+  return rows.map((r) => ({ date: dbToISO(r.date)!, rate: r.rate }));
 }
 
 /** Производственный календарь (все отмеченные дни — их немного, десятки в год). */

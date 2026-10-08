@@ -129,7 +129,7 @@ model Forum {
   incomeVariant     Int           @default(0)
   /// Доходы: снимки плана для кнопки «Вернуть» (PlanSnapshot[], последний — текущий)
   incomePlanHistory Json          @default("[]")
-  /// Курс доллара, руб. за 1 $ (null — не задан): столбцы «$» и диаграммы в $
+  /// Устарело: курс доллара теперь в таблице UsdRate (по датам)
   usdRate           Float?
   archived          Boolean       @default(false)
   /// Возвращён из архива вручную — автоархив прошедших форумов его не трогает
@@ -350,6 +350,13 @@ model ReminderLog {
 /// Производственный календарь: исключения из обычной недели (сб, вс — выходные).
 /// holiday — праздничный / нерабочий день; workday — рабочий день (перенос на выходной);
 /// short — сокращённый рабочий день.
+/// Курс доллара по датам, руб. за 1 $: столбцы «$» и диаграммы в $ считаются по курсу на сегодня
+model UsdRate {
+  date      DateTime @id @db.Date
+  rate      Float
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
 model CalendarDay {
   date DateTime @id @db.Date
   kind String

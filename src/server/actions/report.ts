@@ -4,11 +4,13 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { requireEditor } from '@/lib/auth';
-import { isoToDb } from '@/lib/dates';
+import { isoToDb, todayMsk } from '@/lib/dates';
 import { optionalIsoDate } from '@/lib/validation';
 import { run, UserError, type ActionResult } from '@/server/action-utils';
 import { AUTO_SOURCES, unitScale } from '@/lib/report/auto-charts';
 import { isUsdUnit } from '@/lib/report/units';
+import { usdRateOn } from '@/lib/usd';
+import { getUsdRates } from '@/server/queries';
 import { PALETTE_KEYS, type PaletteKey } from '@/lib/report/palette';
 import { getReportCharts, type ChartDTO } from '@/server/report-queries';
 
@@ -226,14 +228,11 @@ export async function updateChart(
   return run(async () => {
     await requireEditor();
     const d = updateSchema.parse(input);
-    const chart = await prisma.reportChart.findFirst({
-      where: { id: id.parse(chartId), forumId },
-      include: { forum: { select: { usdRate: true } } },
-    });
+    const chart = await prisma.reportChart.findFirst({ where: { id: id.parse(chartId), forumId } });
     if (!chart) throw new UserError('Диаграмма не найдена');
-    const usdRate = chart.forum.usdRate;
+    const usdRate = usdRateOn(await getUsdRates(), todayMsk())?.rate ?? null;
     if (chart.source && isUsdUnit(d.unit) && !usdRate)
-      throw new UserError('Задайте курс $ в шапке форума');
+      throw new UserError('Задайте курс $ в «База данных» → «Курс $»');
     const scale = chart.source ? unitScale(d.unit, usdRate) : 1;
     await prisma.$transaction([
       prisma.reportChart.update({

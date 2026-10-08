@@ -387,25 +387,6 @@ export async function setExpenseLimit(id: number, limit: number | null): Promise
   });
 }
 
-/** Курс доллара форума, руб. за 1 $ (null — не задан). */
-export async function setUsdRate(id: number, rate: number | null): Promise<ActionResult> {
-  return run(async () => {
-    await requireEditor();
-    const v = z
-      .number()
-      .positive('Курс должен быть больше нуля')
-      .max(100_000)
-      .nullable()
-      .parse(rate);
-    await prisma.forum.update({
-      where: { id },
-      data: { usdRate: v == null ? null : Math.round(v * 10_000) / 10_000 },
-    });
-    revalidatePath(`/forums/${id}`, 'layout');
-    return null;
-  });
-}
-
 export async function setForumColor(id: number, color: string): Promise<ActionResult> {
   return run(async () => {
     await requireEditor();

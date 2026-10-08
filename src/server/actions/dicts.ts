@@ -8,7 +8,8 @@ import { colorSchema, employeeSchema, nameSchema, type EmployeeInput } from '@/l
 import { run, UserError, type ActionResult } from '@/server/action-utils';
 import { normalizeTgUsername } from '@/lib/telegram-format';
 import { syncAutoAssignments } from '@/server/auto-assign';
-import { getCalendarDays } from '@/server/queries';
+import { getCalendarDays, getUsdRates } from '@/server/queries';
+import type { UsdRateDTO } from '@/lib/usd';
 import { isoToDb } from '@/lib/dates';
 import type { CalendarDayDTO } from '@/lib/work-calendar';
 
@@ -333,5 +334,29 @@ export async function getWorkCalendar(): Promise<ActionResult<CalendarDayDTO[]>>
   return run(async () => {
     await requireEditor();
     return getCalendarDays();
+  });
+}
+
+const usdRateSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Укажите дату'),
+  /** null — удалить курс на эту дату */
+  rate: z.number().positive('Курс должен быть больше нуля').max(100_000).nullable(),
+});
+
+/** Курс доллара на дату (руб. за 1 $): внести, поменять или удалить. */
+export async function setUsdRate(
+  input: z.input<typeof usdRateSchema>,
+): Promise<ActionResult<UsdRateDTO[]>> {
+  return run(async () => {
+    await requireEditor();
+    const d = usdRateSchema.parse(input);
+    const date = isoToDb(d.date)!;
+    if (d.rate === null) await prisma.usdRate.deleteMany({ where: { date } });
+    else {
+      const rate = Math.round(d.rate * 10_000) / 10_000;
+      await prisma.usdRate.upsert({ where: { date }, update: { rate }, create: { date, rate } });
+    }
+    refresh();
+    return getUsdRates();
   });
 }
