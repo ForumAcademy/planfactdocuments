@@ -501,7 +501,6 @@ function CategoryMenu({ task: t }: { task: TaskDTO }) {
             <DropdownMenuItem key={c.key} onSelect={() => set(c.key)}>
               <span className="size-2.5 shrink-0 rounded-sm" style={{ background: c.color }} />
               <span className={cn(current && 'font-semibold')}>{c.label}</span>
-              {c.key === auto && <span className="ml-auto text-xs text-ink/50">авто</span>}
             </DropdownMenuItem>
           );
         })}

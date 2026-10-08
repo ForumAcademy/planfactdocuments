@@ -48,7 +48,7 @@ describe('линия расходов', () => {
 
 describe('линия доходов', () => {
   const base = {
-    config: { midDate: null, finalDate: null },
+    config: { midDate: null, finalDate: null, margin: 30, variant: 0 },
     deals: [],
     expenses: 1_000_000,
     salesStart: '2026-01-01',

@@ -21,7 +21,7 @@ const rows = (deals = [] as Parameters<typeof computeAutoRows>[0]['income']['dea
     expenseLimit: null,
     income: {
       items: incomeItems([{ key: 'partner', price: 500_000, planQty: 0, factQty: 2 }]),
-      config: { midDate: null, finalDate: null },
+      config: { midDate: null, finalDate: null, margin: 30, variant: 0 },
       deals,
     },
     salesStart: '2026-01-01',

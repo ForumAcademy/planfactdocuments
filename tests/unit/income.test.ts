@@ -15,6 +15,8 @@ import {
   itemSum,
   netPrice,
   stageDates,
+  planSnapshot,
+  restorePatches,
 } from '@/lib/income';
 
 describe('доходы', () => {
@@ -382,5 +384,51 @@ describe('оплаченные сделки воронки в факте', () =>
     );
     const plan = autoPlan(items, 1_000_000, 1);
     expect(plan.find((i) => i.key === 'participant')!.plan).toEqual([3, 0, 0]);
+  });
+});
+
+describe('доходы: наценка, «Другой вариант» и «Вернуть»', () => {
+  const cfg = { midDate: null, finalDate: null, margin: 30, variant: 0 };
+
+  it('цель — расходы плюс заданный процент', () => {
+    expect(incomeTarget(10_000_000)).toBe(13_000_000);
+    expect(incomeTarget(10_000_000, 50)).toBe(15_000_000);
+    expect(incomeTarget(10_000_000, 0)).toBe(10_000_000);
+  });
+
+  it('другой вариант даёт другой план, но тоже не меньше цели', () => {
+    const items = incomeItems([]);
+    const target = 20_000_000;
+    const base = autoPlan(items, target);
+    const qty = (l: typeof base) => l.map((i) => qtyOf(i, 'plan', null)).join(',');
+    const other = [1, 2, 3].map((v) => autoPlan(items, target, 0, v));
+    expect(other.some((p) => qty(p) !== qty(base))).toBe(true);
+    for (const p of other) expect(incomeSum(p, 'plan')).toBeGreaterThanOrEqual(target);
+    // Один и тот же вариант — всегда один и тот же план
+    expect(qty(autoPlan(items, target, 0, 2))).toBe(qty(autoPlan(items, target, 0, 2)));
+  });
+
+  it('«Вернуть» возвращает прежние количества, даже если цель изменилась', () => {
+    const items = incomeItems([]);
+    const before = autoPlan(items, 20_000_000);
+    const snap = planSnapshot(before, cfg);
+    const patches = restorePatches(items, snap, (l) => autoPlan(l, 30_000_000));
+    const restored = autoPlan(
+      items.map((i) => {
+        const p = patches.find((x) => x.key === i.key)!;
+        return { ...withValues(i, p), planManual: p.planManual };
+      }),
+      30_000_000,
+    );
+    expect(restored.map((i) => qtyOf(i, 'plan', null))).toEqual(
+      before.map((i) => qtyOf(i, 'plan', null)),
+    );
+  });
+
+  it('«Вернуть» оставляет автоподбор, если он даёт то же самое', () => {
+    const items = incomeItems([]);
+    const snap = planSnapshot(autoPlan(items, 20_000_000), cfg);
+    const patches = restorePatches(items, snap, (l) => autoPlan(l, 20_000_000));
+    expect(patches.every((p) => !p.planManual)).toBe(true);
   });
 });

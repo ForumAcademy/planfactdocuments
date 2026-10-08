@@ -5,14 +5,10 @@
  */
 import { groupExpenses, type ExpenseTaskInput } from '../expenses';
 import {
-  autoPlan,
-  currentStage,
   incomeSum,
-  incomeTarget,
   itemSum,
-  stageDates,
+  plannedIncome,
   targetExpenses,
-  withDeals,
   type IncomeConfig,
   type IncomeItemValue,
   type PaidDealInput,
@@ -104,13 +100,15 @@ export function computeAutoRows<T extends ExpenseTaskInput>(
 ): Record<AutoSource, AutoRow[]> {
   const { groups, fact: expFact } = groupExpenses(input.tasks, input.blockOf);
   const { config, deals } = input.income;
-  const dates = stageDates(config, input.salesStart, input.forumStart);
-  const target = incomeTarget(targetExpenses(input.tasks, input.expenseLimit));
-  const planned = autoPlan(
-    withDeals(input.income.items, deals, dates, input.today),
-    target,
-    currentStage(dates, input.today),
-  );
+  const { planned } = plannedIncome({
+    items: input.income.items,
+    config,
+    deals,
+    expenses: targetExpenses(input.tasks, input.expenseLimit),
+    salesStart: input.salesStart,
+    forumStart: input.forumStart,
+    today: input.today,
+  });
   const incomeBy = (kind: 'plan' | 'fact') => {
     // Билеты одной статьи на разных стадиях цен — одна строка
     const acc = new Map<string, number>();

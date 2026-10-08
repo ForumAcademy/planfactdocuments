@@ -10,6 +10,7 @@ import {
   DEFAULT_INCOME_CONFIG,
   incomeItems,
   type IncomeConfig,
+  type PlanSnapshot,
   type IncomeItemValue,
 } from '@/lib/income';
 
@@ -325,7 +326,19 @@ export async function getIncomeConfig(forumId: number): Promise<IncomeConfig> {
   return {
     midDate: dbToISO(f.priceMidDate),
     finalDate: dbToISO(f.priceFinalDate),
+    margin: f.incomeMargin,
+    variant: f.incomeVariant,
   };
+}
+
+/** Снимки плана доходов для «Вернуть»: последний — текущее состояние */
+export async function getIncomePlanHistory(forumId: number): Promise<PlanSnapshot[]> {
+  const f = await prisma.forum.findUnique({
+    where: { id: forumId },
+    select: { incomePlanHistory: true },
+  });
+  const h = f?.incomePlanHistory;
+  return Array.isArray(h) ? (h as unknown as PlanSnapshot[]) : [];
 }
 
 export function toDealValue(d: Deal): DealValue {

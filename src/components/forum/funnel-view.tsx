@@ -33,13 +33,9 @@ import {
   type StageStat,
 } from '@/lib/funnel';
 import {
-  autoPlan,
-  currentStage,
   incomeSum,
-  incomeTarget,
+  plannedIncome,
   targetExpenses,
-  stageDates,
-  withDeals,
   type IncomeConfig,
   type IncomeItemValue,
 } from '@/lib/income';
@@ -95,12 +91,15 @@ export function FunnelView({
   const expenses = targetExpenses(tasks, forum.expenseLimit);
   // План продаж — как в «Доходах»: завершённые стадии равны проданному, включая оплаты воронки
   const planSum = React.useMemo(() => {
-    const dates = stageDates(config, forum.salesStartDate, forum.startDate);
-    const planned = autoPlan(
-      withDeals(items, deals, dates, today),
-      incomeTarget(expenses),
-      currentStage(dates, today),
-    );
+    const { planned } = plannedIncome({
+      items,
+      config,
+      deals,
+      expenses,
+      salesStart: forum.salesStartDate,
+      forumStart: forum.startDate,
+      today,
+    });
     return incomeSum(planned, 'plan');
   }, [items, deals, expenses, config, forum.salesStartDate, forum.startDate, today]);
 
@@ -214,7 +213,6 @@ export function FunnelView({
           forumStart={forum.startDate}
           planSum={source || manager ? 0 : planSum}
           directionLabel={directionLabel}
-          incomeHref={`/forums/${forum.id}/income?view=fact`}
           tableHref={(status, lostAt) => {
             // В таблицу — с этапом и теми же фильтрами, что выбраны над воронкой
             const q = new URLSearchParams({ view: 'table', status });
@@ -235,7 +233,6 @@ function FunnelBoard({
   forumStart,
   planSum,
   directionLabel,
-  incomeHref,
   tableHref,
 }: {
   deals: DealValue[];
@@ -243,7 +240,6 @@ function FunnelBoard({
   forumStart: string;
   planSum: number;
   directionLabel: (key: string | null) => string;
-  incomeHref: string;
   tableHref: (status: Selected, lostAt?: DealStageKey) => string;
 }) {
   const stats = React.useMemo(() => funnelStats(deals, today), [deals, today]);
@@ -326,7 +322,6 @@ function FunnelBoard({
           onToggle={toggle}
           today={today}
           directionLabel={directionLabel}
-          incomeHref={incomeHref}
           tableHref={tableHref}
         />
       </div>
@@ -443,7 +438,7 @@ function FunnelChart({
   selected: Selected;
   onSelect: (s: Selected) => void;
 }) {
-  const W = 430;
+  const W = 480;
   const cx = 165;
   const maxW = 300;
   const minW = 70;
@@ -459,7 +454,7 @@ function FunnelChart({
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
-      className="m-auto w-full max-w-[460px] py-2"
+      className="m-auto w-full max-w-[510px] py-2"
       role="img"
       aria-label="Воронка продаж по этапам"
       data-testid="funnel-chart"
@@ -503,7 +498,7 @@ function FunnelChart({
             >
               {s.reached}
             </text>
-            {/* Конверсия из прошлого этапа — справа от слоя */}
+            {/* Конверсия из прошлого этапа — справа от слоя: «37% от квалификации» */}
             {s.conversion !== null && (
               <text
                 x={cx + Math.max(wt, wb) / 2 + 12}
@@ -513,7 +508,7 @@ function FunnelChart({
               >
                 {pct(s.conversion)}
                 <tspan className="fill-ink/50 font-normal" style={{ fontSize: 12 }}>
-                  {' от прошлого'}
+                  {` от ${DEAL_STAGES[i - 1].of}`}
                 </tspan>
               </text>
             )}
@@ -541,7 +536,6 @@ function StageList({
   onToggle,
   today,
   directionLabel,
-  incomeHref,
   tableHref,
 }: {
   deals: DealValue[];
@@ -550,7 +544,6 @@ function StageList({
   onToggle: (s: Selected) => void;
   today: string;
   directionLabel: (key: string | null) => string;
-  incomeHref: string;
   tableHref: (status: Selected, lostAt?: DealStageKey) => string;
 }) {
   const keys: Selected[] = [...DEAL_STAGES.map((s) => s.key), 'refused'];
@@ -575,7 +568,6 @@ function StageList({
             onToggle={() => onToggle(key)}
             today={today}
             directionLabel={directionLabel}
-            incomeHref={incomeHref}
             tableHref={tableHref}
           />
         ))}
@@ -592,7 +584,6 @@ function StageItem({
   onToggle,
   today,
   directionLabel,
-  incomeHref,
   tableHref,
 }: {
   stage: Selected;
@@ -602,7 +593,6 @@ function StageItem({
   onToggle: () => void;
   today: string;
   directionLabel: (key: string | null) => string;
-  incomeHref: string;
   tableHref: (status: Selected, lostAt?: DealStageKey) => string;
 }) {
   const current = deals.filter((d) => d.status === stage);
@@ -617,7 +607,6 @@ function StageItem({
   const list = showLost ? lostHere : current;
   const meta = stage === 'refused' ? REFUSED : DEAL_STAGES[stageIndex(stage)];
   const staleList = stage === 'refused' ? [] : current.filter((d) => isStale(d, today));
-  const waiting = current.filter((d) => d.status === 'paid' && d.incomeStatus === null).length;
   const lostAt =
     stage === 'refused'
       ? breakdown(current, (d) => (d.lostStage ? statusLabel(d.lostStage) : 'Квалификация'))
@@ -708,16 +697,6 @@ function StageItem({
               {staleList.length} {dealsWord(staleList.length)} дольше{' '}
               {DEAL_STAGES[stageIndex(stage as DealStageKey)].staleDays} дней на этапе
             </p>
-          )}
-          {stage === 'paid' && waiting > 0 && (
-            <Link
-              href={incomeHref}
-              className="mt-1 inline-flex items-center gap-1 text-sm text-status-green hover:underline"
-            >
-              {waiting} {pluralRu(waiting, 'оплата ждёт', 'оплаты ждут', 'оплат ждут')} решения в
-              факте доходов
-              <ArrowRight className="size-3.5" />
-            </Link>
           )}
           {list.length === 0 ? (
             <p className="mt-2 text-sm text-ink/60">Сейчас на этом этапе сделок нет.</p>

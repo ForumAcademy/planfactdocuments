@@ -10,11 +10,23 @@ import { formatRubShort, pluralRu } from './utils';
  */
 
 export const DEAL_STAGES = [
-  { key: 'qualification', label: 'Квалификация', color: '#5B6BD6', staleDays: 21 },
-  { key: 'negotiation', label: 'Переговоры', color: '#3F7FD0', staleDays: 14 },
-  { key: 'agreement', label: 'Согласование', color: '#2B95B5', staleDays: 14 },
-  { key: 'invoice', label: 'Выставлен счёт', color: '#22A58C', staleDays: 10 },
-  { key: 'paid', label: 'Оплачено', color: '#1E9E5A', staleDays: 0 },
+  {
+    key: 'qualification',
+    label: 'Квалификация',
+    of: 'квалификации',
+    color: '#5B6BD6',
+    staleDays: 21,
+  },
+  { key: 'negotiation', label: 'Переговоры', of: 'переговоров', color: '#3F7FD0', staleDays: 14 },
+  { key: 'agreement', label: 'Согласование', of: 'согласования', color: '#2B95B5', staleDays: 14 },
+  {
+    key: 'invoice',
+    label: 'Выставлен счёт',
+    of: 'выставленных счетов',
+    color: '#22A58C',
+    staleDays: 10,
+  },
+  { key: 'paid', label: 'Оплачено', of: 'оплаченных', color: '#1E9E5A', staleDays: 0 },
 ] as const;
 export type DealStageKey = (typeof DEAL_STAGES)[number]['key'];
 export type DealStatus = DealStageKey | 'refused';

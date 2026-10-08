@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { Lightbulb, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Lightbulb, Pencil, Plus, RotateCcw, Shuffle, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { NumberCell } from '@/components/ui/number-cell';
@@ -14,22 +14,23 @@ import { formatDate } from '@/lib/dates';
 import type { DealValue } from '@/lib/funnel';
 import {
   INCOME_GROUPS,
-  INCOME_ITEMS,
-  INCOME_MARGIN,
   PRICE_STAGES,
   autoPlan,
-  currentStage,
   hasStages,
   incomeSum,
   incomeTarget,
   targetExpenses,
   itemSum,
   netPrice,
+  planSnapshot,
+  plannedIncome,
+  restorePatches,
   salesAdvice,
-  stageDates,
+  sameSnapshot,
   type IncomeConfig,
   type IncomeGroup,
   type IncomeItemValue,
+  type PlanSnapshot,
   type Triple,
   withDeals,
   withValues,
@@ -37,6 +38,8 @@ import {
 import { cn, formatRub } from '@/lib/utils';
 import {
   addIncomeItem,
+  applyIncomePlan,
+  recordIncomePlan,
   removeIncomeItem,
   saveIncomeConfig,
   saveIncomeItems,
@@ -77,11 +80,14 @@ export function IncomeView({
   initialItems,
   initialConfig,
   initialDeals,
+  initialHistory,
 }: {
   initialItems: IncomeItemValue[];
   initialConfig: IncomeConfig;
   /** Оплаченные сделки воронки — сами входят в факт */
   initialDeals: DealValue[];
+  /** Снимки плана для «Вернуть»: последний — текущий план */
+  initialHistory: PlanSnapshot[];
 }) {
   const { forum, tasks, today } = useForum();
   const sp = useSearchParams();
@@ -89,21 +95,53 @@ export function IncomeView({
   const [items, setItems] = React.useState(initialItems);
   const [cfg, setCfg] = React.useState(initialConfig);
   const [deals] = React.useState(initialDeals);
+  const [history, setHistory] = React.useState(initialHistory);
   const [saving, setSaving] = React.useState(false);
-  const dates = React.useMemo(
-    () => stageDates(cfg, forum.salesStartDate, forum.startDate),
-    [cfg, forum.salesStartDate, forum.startDate],
-  );
-  const stageNow = currentStage(dates, today);
 
   const expenses = targetExpenses(tasks, forum.expenseLimit);
   const expensesLabel = forum.expenseLimit != null ? 'предельные расходы' : 'расходы';
-  const target = incomeTarget(expenses);
   // Факт = введённое вручную + оплаченные сделки воронки; план с автоподбором под цель
-  const planned = React.useMemo(
-    () => autoPlan(withDeals(items, deals, dates, today), target, stageNow),
-    [items, deals, dates, today, target, stageNow],
+  const {
+    planned,
+    target,
+    dates,
+    stage: stageNow,
+  } = React.useMemo(
+    () =>
+      plannedIncome({
+        items,
+        config: cfg,
+        deals,
+        expenses,
+        salesStart: forum.salesStartDate,
+        forumStart: forum.startDate,
+        today,
+      }),
+    [items, cfg, deals, expenses, forum.salesStartDate, forum.startDate, today],
   );
+  /** План с теми же сделками, датами и целью для других статей или варианта */
+  const replan = React.useCallback(
+    (list: IncomeItemValue[], variant = cfg.variant, margin = cfg.margin) =>
+      autoPlan(
+        withDeals(list, deals, dates, today),
+        incomeTarget(expenses, margin),
+        stageNow,
+        variant,
+      ),
+    [deals, dates, today, expenses, stageNow, cfg.variant, cfg.margin],
+  );
+
+  // План на экране запоминается (после ручной правки или автообновления) — для «Вернуть»
+  const snapshot = React.useMemo(() => planSnapshot(planned, cfg), [planned, cfg]);
+  React.useEffect(() => {
+    if (saving) return;
+    const last = history.at(-1);
+    if (last && sameSnapshot(last, snapshot)) return;
+    const t = setTimeout(() => {
+      void recordIncomePlan(forum.id, snapshot).then((res) => res.ok && setHistory(res.data));
+    }, 800);
+    return () => clearTimeout(t);
+  }, [snapshot, history, saving, forum.id]);
   // В плане — только плановые статьи; в факте — ещё и статьи только для факта
   const shown = view === 'plan' ? planned.filter((i) => !i.factOnly) : planned;
   const partners = shown.filter((i) => !hasStages(i));
@@ -111,7 +149,6 @@ export function IncomeView({
   const planSum = incomeSum(planned, 'plan');
   const factSum = incomeSum(planned, 'fact');
   const confirm = useConfirm();
-  const removedDefaults = INCOME_ITEMS.filter((d) => !items.some((i) => i.key === d.key));
   const todayAdvice = salesAdvice(planned, target, dates, forum.startDate, today);
 
   const save = async (patches: ItemPatch[]) => {
@@ -143,6 +180,54 @@ export function IncomeView({
       setCfg(prev);
       toast.error(res.error);
     }
+  };
+
+  /** «Вернуть» и «Другой вариант»: статьи, настройки и история приходят с сервера */
+  const applyPlan = async (input: Parameters<typeof applyIncomePlan>[1]) => {
+    setSaving(true);
+    const res = await applyIncomePlan(forum.id, input);
+    setSaving(false);
+    if (!res.ok) {
+      toast.error(res.error);
+      return false;
+    }
+    setItems(res.data.items);
+    setCfg(res.data.config);
+    setHistory(res.data.history);
+    return true;
+  };
+  // Предыдущий план: последний снимок — текущий, если он уже записан
+  const current = history.at(-1);
+  const prevSnap = current && sameSnapshot(current, snapshot) ? history.at(-2) : current;
+  const undo = async () => {
+    if (!prevSnap) return;
+    const patches = restorePatches(items, prevSnap, (list) =>
+      replan(list, prevSnap.variant, prevSnap.margin),
+    );
+    // Текущий снимок убираем из истории — тогда предыдущий станет текущим
+    const ok = await applyPlan({
+      patches,
+      config: { margin: prevSnap.margin, variant: prevSnap.variant },
+      undo: current === undefined ? false : sameSnapshot(current, snapshot),
+    });
+    if (ok) toast.success('План возвращён к предыдущему');
+  };
+  /** «Другой вариант»: весь план подбирается заново по-другому — ручные количества сбрасываются */
+  const anotherVariant = async () => {
+    const auto = items.map((i) => (i.factOnly ? i : { ...i, planManual: false }));
+    const qtys = (list: IncomeItemValue[]) =>
+      JSON.stringify(list.filter((i) => !i.factOnly).map((i) => [i.key, qtyOf(i.plan)]));
+    const now = qtys(planned);
+    let variant = cfg.variant + 1;
+    for (let n = 0; n < 50 && qtys(replan(auto, variant)) === now; n++) variant++;
+    const ok = await applyPlan({
+      patches: items
+        .filter((i) => !i.factOnly && i.planManual)
+        .map((i) => ({ key: i.key, planManual: false })),
+      config: { variant },
+    });
+    if (ok && qtys(replan(auto, variant)) === now)
+      toast.info('Другого варианта под эту цель не нашлось');
   };
 
   /** Добавление / удаление позиции: список целиком приходит с сервера */
@@ -185,8 +270,10 @@ export function IncomeView({
     <AddItemActions
       group={g}
       factOnly={factOnly}
-      restore={factOnly ? [] : removedDefaults.filter((x) => x.group === g.key)}
-      onRestore={(key) => save([{ key, removed: false }])}
+      canUndo={!!prevSnap && !saving}
+      onUndo={() => void undo()}
+      onVariant={() => void anotherVariant()}
+      busy={saving}
       onOpen={() => setAdding(g.key)}
     />
   );
@@ -218,6 +305,8 @@ export function IncomeView({
         expenses={expenses}
         expensesLabel={expensesLabel}
         target={target}
+        margin={cfg.margin}
+        onMargin={(margin) => void saveConfig({ margin })}
         plan={planSum}
         fact={factSum}
       />
@@ -695,14 +784,7 @@ function AutoBadge({ item: it, onAuto }: { item: IncomeItemValue; onAuto: () => 
     >
       <RotateCcw className="size-3.5" />
     </button>
-  ) : (
-    <span
-      className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-ink/50"
-      title="Подобрано автоматически под цель"
-    >
-      авто
-    </span>
-  );
+  ) : null;
 }
 
 /** Даты стадий продаж билетов: старт — из карточки форума, «Середину» и «Финал» можно сдвинуть */
@@ -761,6 +843,8 @@ function IncomeSummary({
   expenses,
   expensesLabel,
   target,
+  margin,
+  onMargin,
   plan,
   fact,
 }: {
@@ -768,6 +852,9 @@ function IncomeSummary({
   expenses: number;
   expensesLabel: string;
   target: number;
+  /** Наценка цели над расходами, % — меняется по клику */
+  margin: number;
+  onMargin: (v: number) => void;
   plan: number;
   fact: number;
 }) {
@@ -790,7 +877,16 @@ function IncomeSummary({
               <Link href={`/forums/${forumId}/expenses`} className="text-brand hover:underline">
                 {formatRub(expenses)}
               </Link>{' '}
-              + {Math.round(INCOME_MARGIN * 100)}%
+              +
+              <NumberCell
+                value={margin}
+                format={(v) => `${v}%`}
+                label="Наценка цели над расходами, %"
+                onCommit={(v) => onMargin(Math.min(1000, v))}
+                testId="income-margin"
+                className="ml-0.5 inline w-auto px-0.5 py-0 text-left text-xs text-brand"
+                inputClassName="inline h-5 w-16 text-left text-xs"
+              />
             </>
           ) : (
             'Заполните стоимость задач в «Расходах», чтобы появилась цель'
@@ -938,34 +1034,55 @@ function LabelCell({
   );
 }
 
-/** «+ Добавить статью» справа над таблицей; там же — возврат убранных позиций по умолчанию. */
+/**
+ * Справа над таблицей: «Вернуть» (откат последнего изменения плана — ручной правки или
+ * автообновления), «Другой вариант» (подобрать план по-другому) и «+ Добавить статью».
+ */
 function AddItemActions({
   group,
   factOnly,
-  restore,
-  onRestore,
+  canUndo,
+  onUndo,
+  onVariant,
+  busy,
   onOpen,
 }: {
   group: IncomeGroup;
   factOnly: boolean;
-  restore: { key: string; label: string }[];
-  onRestore: (key: string) => void;
+  canUndo: boolean;
+  onUndo: () => void;
+  onVariant: () => void;
+  busy: boolean;
   onOpen: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-sm">
-      {restore.map((r) => (
-        <button
-          key={r.key}
-          type="button"
-          className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-xs text-ink/60 hover:bg-surface hover:text-ink"
-          onClick={() => onRestore(r.key)}
-          title="Вернуть позицию по умолчанию"
-        >
-          <RotateCcw className="size-3" />
-          Вернуть «{r.label}»
-        </button>
-      ))}
+    <div className="flex flex-wrap items-center justify-end gap-2 text-sm">
+      {!factOnly && (
+        <>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onUndo}
+            disabled={!canUndo}
+            title="Откатить последнее изменение плана: ручную правку или автообновление"
+            data-testid={`income-undo-${group.key}`}
+          >
+            <RotateCcw className="size-4" />
+            Вернуть
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onVariant}
+            disabled={busy}
+            title="Подобрать план продаж по-другому: другое число партнёрств и билетов под ту же цель. Ручные количества сбрасываются, «Вернуть» откатит"
+            data-testid={`income-variant-${group.key}`}
+          >
+            <Shuffle className="size-4" />
+            Другой вариант
+          </Button>
+        </>
+      )}
       <Button
         size="sm"
         variant="outline"

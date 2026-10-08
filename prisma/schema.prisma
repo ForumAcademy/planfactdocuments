@@ -108,33 +108,39 @@ model TemplateTask {
 // ---------- Форумы и задачи ----------
 
 model Forum {
-  id             Int           @id @default(autoincrement())
-  name           String
-  startDate      DateTime      @db.Date
-  endDate        DateTime?     @db.Date
-  salesStartDate DateTime      @db.Date
-  location       String?
+  id                Int           @id @default(autoincrement())
+  name              String
+  startDate         DateTime      @db.Date
+  endDate           DateTime?     @db.Date
+  salesStartDate    DateTime      @db.Date
+  location          String?
   /// Сайт форума
-  website        String?
+  website           String?
   /// Цвет карточки (ключ из src/lib/forum-colors.ts)
-  color          String        @default("blue")
+  color             String        @default("blue")
   /// Предельно допустимые расходы, руб. (null — лимит не задан)
-  expenseLimit   Int?
+  expenseLimit      Int?
   /// Доходы: с какой даты действуют цены «Середины» и «Финальной стадии»; null — период делится поровну
-  priceMidDate   DateTime?     @db.Date
-  priceFinalDate DateTime?     @db.Date
-  archived       Boolean       @default(false)
+  priceMidDate      DateTime?     @db.Date
+  priceFinalDate    DateTime?     @db.Date
+  /// Доходы: цель = расходы + incomeMargin %
+  incomeMargin      Int           @default(30)
+  /// Доходы: вариант автоподбора плана (0 — типовой; «Другой вариант» — следующий)
+  incomeVariant     Int           @default(0)
+  /// Доходы: снимки плана для кнопки «Вернуть» (PlanSnapshot[], последний — текущий)
+  incomePlanHistory Json          @default("[]")
+  archived          Boolean       @default(false)
   /// Возвращён из архива вручную — автоархив прошедших форумов его не трогает
-  keepActive     Boolean       @default(false)
-  reportDate     DateTime?     @db.Date
+  keepActive        Boolean       @default(false)
+  reportDate        DateTime?     @db.Date
   /// Устарело: сортировка «Отчёта для АЭ» теперь у каждой его диаграммы (ReportChart.sort)
-  aeReportSort   String        @default("desc")
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  tasks          Task[]
-  charts         ReportChart[]
-  incomeItems    IncomeItem[]
-  deals          Deal[]
+  aeReportSort      String        @default("desc")
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  tasks             Task[]
+  charts            ReportChart[]
+  incomeItems       IncomeItem[]
+  deals             Deal[]
 }
 
 /// Линия доходов: позиция (партнёрство или билет) — цена за единицу, план и факт продаж

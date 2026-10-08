@@ -1,14 +1,10 @@
 import { diffDays, type ISODate } from './dates';
 import { countStatuses, isOverdue, shouldStart, type StatusInput } from './status';
 import {
-  autoPlan,
-  currentStage,
   hasStages,
   incomeSum,
-  incomeTarget,
+  plannedIncome,
   salesAdvice,
-  stageDates,
-  withDeals,
   type IncomeConfig,
   type IncomeItemValue,
   type PaidDealInput,
@@ -218,7 +214,7 @@ export function expectedIncome(
 }
 
 /**
- * Линия доходов. Цель — предельно допустимые расходы (пока не заданы — стоимость задач) + 30%, план — с автоподбором, как во вкладке
+ * Линия доходов. Цель — предельно допустимые расходы (пока не заданы — стоимость задач) + наценка (по умолчанию 30%), план — с автоподбором, как во вкладке
  * «Доходы». Красный — факт меньше 70% от ожидаемого на сегодня (или продажи закончились, а цель
  * не достигнута); жёлтый — факт меньше ожидаемого или план меньше цели; иначе зелёный.
  * Заполнение — факт от плана, отметка — ожидаемое на сегодня.
@@ -233,13 +229,15 @@ export function incomeHealth(input: {
   today: ISODate;
 }): HealthLine & { advice: string[] } {
   const { items, config, deals, expenses, salesStart, forumStart, today } = input;
-  const dates = stageDates(config, salesStart, forumStart);
-  const target = incomeTarget(expenses);
-  const planned = autoPlan(
-    withDeals(items, deals, dates, today),
-    target,
-    currentStage(dates, today),
-  );
+  const { planned, target, dates } = plannedIncome({
+    items,
+    config,
+    deals,
+    expenses,
+    salesStart,
+    forumStart,
+    today,
+  });
   const plan = incomeSum(planned, 'plan');
   const fact = incomeSum(planned, 'fact');
   const expected = Math.min(plan, expectedIncome(planned, dates, forumStart, today));

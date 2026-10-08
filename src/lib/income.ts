@@ -26,9 +26,21 @@ export interface IncomeConfig {
   /** null — период от старта продаж до форума делится на три равные части */
   midDate: string | null;
   finalDate: string | null;
+  /** Цель доходов: расходы + margin %, по умолчанию 30 */
+  margin: number;
+  /** Вариант автоподбора плана: 0 — типовой, дальше — «Другой вариант» */
+  variant: number;
 }
 
-export const DEFAULT_INCOME_CONFIG: IncomeConfig = { midDate: null, finalDate: null };
+/** Целевая наценка над расходами по умолчанию, %: доход = расходы + 30% */
+export const DEFAULT_INCOME_MARGIN = 30;
+
+export const DEFAULT_INCOME_CONFIG: IncomeConfig = {
+  midDate: null,
+  finalDate: null,
+  margin: DEFAULT_INCOME_MARGIN,
+  variant: 0,
+};
 
 export const INCOME_GROUPS = [
   { key: 'partners', label: 'Партнёрства', color: '#0A0A9F' },
@@ -96,9 +108,6 @@ export const INCOME_KEYS = INCOME_ITEMS.map((i) => i.key);
 
 /** Типовое количество своей позиции для автоподбора: партнёрство — 1, билет — 20 */
 const CUSTOM_MIX: Record<IncomeGroupKey, number> = { partners: 1, tickets: 20 };
-
-/** Целевая наценка над расходами: доход = расходы + 30% */
-export const INCOME_MARGIN = 0.3;
 
 export function isIncomeGroup(v: unknown): v is IncomeGroupKey {
   return INCOME_GROUPS.some((g) => g.key === v);
@@ -395,14 +404,15 @@ export function targetExpenses(tasks: { cost: number }[], expenseLimit: number |
   return expenseLimit ?? tasks.reduce((s, t) => s + t.cost, 0);
 }
 
-export function incomeTarget(expenses: number): number {
-  return Math.round(expenses * (1 + INCOME_MARGIN));
+/** Цель доходов: расходы + наценка (в процентах, по умолчанию 30) */
+export function incomeTarget(expenses: number, margin = DEFAULT_INCOME_MARGIN): number {
+  return Math.round(expenses * (1 + margin / 100));
 }
 
 /**
  * Уровень дохода относительно расходов и цели:
  * `loss` — не покрывает расходы, `covered` — расходы покрыты, но цель не достигнута,
- * `target` — цель (расходы + 30%) достигнута.
+ * `target` — цель (расходы + наценка) достигнута.
  */
 export type IncomeLevel = 'loss' | 'covered' | 'target';
 
@@ -425,6 +435,7 @@ export function autoPlan(
   items: IncomeItemValue[],
   target: number,
   openStage = 0,
+  variant = 0,
 ): IncomeItemValue[] {
   // Завершённые стадии уже не продать: автоплан билетов там равен проданному
   const closed = (i: IncomeItemValue) => hasStages(i) && i.stage < openStage;
@@ -444,15 +455,23 @@ export function autoPlan(
   let rest = target - manualSum;
 
   if (rest > 0 && auto.length) {
+    // Вариант 0 — типовая пропорция; другие варианты меняют доли позиций и долю партнёрств
+    const rnd = variant > 0 ? seeded(variant) : null;
+    const weight = new Map(auto.map((i) => [i.key, mixOf(i) * (rnd ? 0.25 + 1.75 * rnd() : 1)]));
+    const capOf = new Map(
+      auto.map((i) => [
+        i.key,
+        rnd ? Math.round(mixOf(i) * [0, 0.5, 1, 1.5, 2][Math.floor(rnd() * 5)]) : mixOf(i),
+      ]),
+    );
     const scale = (list: IncomeItemValue[], amount: number, cap: boolean) => {
-      const base = list.reduce((s, i) => s + price(i) * mixOf(i), 0);
+      const base = list.reduce((s, i) => s + price(i) * weight.get(i.key)!, 0);
       if (!base) return 0;
       const k = amount / base;
       let got = 0;
       for (const i of list) {
-        const m = mixOf(i);
-        const q = Math.floor(m * k);
-        const v = cap ? Math.min(q, m) : q;
+        const q = Math.floor(weight.get(i.key)! * k);
+        const v = cap ? Math.min(q, capOf.get(i.key)!) : q;
         qty.set(i.key, v);
         got += v * price(i);
       }
@@ -460,7 +479,8 @@ export function autoPlan(
     };
     const tickets = auto.filter((i) => i.group === 'tickets');
     const partners = auto.filter((i) => i.group !== 'tickets');
-    rest -= scale(partners, rest, tickets.length > 0);
+    const partnerShare = rnd && tickets.length ? 0.1 + 0.8 * rnd() : 1;
+    rest -= scale(partners, rest * partnerShare, tickets.length > 0);
     if (rest > 0 && tickets.length) rest -= scale(tickets, rest, false);
     if (rest > 0) {
       const pool = tickets.length ? tickets : partners;
@@ -474,6 +494,136 @@ export function autoPlan(
     return { ...i, plan: atStage(q, i.stage) };
   });
   return out;
+}
+
+/** Детерминированный генератор случайных чисел: один вариант — всегда один и тот же план */
+function seeded(seed: number): () => number {
+  let a = (seed * 2654435761) >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * План доходов, как во вкладке «Доходы»: факт со сделками воронки, цель — расходы + наценка,
+ * автоподбор выбранного варианта. Общий для «Доходов», «Воронки», линии статуса и отчётов.
+ */
+export function plannedIncome(input: {
+  items: IncomeItemValue[];
+  config: IncomeConfig;
+  deals: PaidDealInput[];
+  expenses: number;
+  salesStart: string;
+  forumStart: string;
+  today: string;
+}) {
+  const { items, config, deals, expenses, salesStart, forumStart, today } = input;
+  const dates = stageDates(config, salesStart, forumStart);
+  const stage = currentStage(dates, today);
+  const target = incomeTarget(expenses, config.margin);
+  const planned = autoPlan(withDeals(items, deals, dates, today), target, stage, config.variant);
+  return { planned, target, dates, stage };
+}
+
+/** Состояние плана для «Вернуть»: количество по плану (как на экране) и условия статей */
+export interface PlanSnapshotItem {
+  key: string;
+  planQty: number;
+  planManual: boolean;
+  price: number;
+  discount: number;
+  stage: number;
+}
+export interface PlanSnapshot {
+  margin: number;
+  variant: number;
+  items: PlanSnapshotItem[];
+}
+
+/** Снимок плана: только плановые статьи (без статей факта и строк сделок воронки) */
+export function planSnapshot(planned: IncomeItemValue[], cfg: IncomeConfig): PlanSnapshot {
+  return {
+    margin: cfg.margin,
+    variant: cfg.variant,
+    items: planned
+      .filter((i) => !i.factOnly && !i.fromDeals)
+      .map((i) => ({
+        key: i.key,
+        planQty: sum3(i.plan),
+        planManual: i.planManual,
+        price: i.prices[i.stage],
+        discount: i.discounts[i.stage],
+        stage: i.stage,
+      })),
+  };
+}
+
+/**
+ * Тот же план на экране: наценка, количества и условия. Ручной ли план и номер варианта не
+ * сравниваются — после «Вернуть» количества закрепляются вручную, а план тот же.
+ */
+export function sameSnapshot(a: PlanSnapshot, b: PlanSnapshot): boolean {
+  const key = (s: PlanSnapshot) =>
+    JSON.stringify([
+      s.margin,
+      s.items.map((i) => [i.key, i.planQty, i.price, i.discount, i.stage]),
+    ]);
+  return key(a) === key(b);
+}
+
+/**
+ * Правки, которые возвращают план к снимку. Условия и ручной план — как в снимке; статьи,
+ * которые в снимке подбирались автоматически, остаются на автоподборе, только если он даёт
+ * то же количество, иначе количество закрепляется вручную (например, после смены расходов).
+ */
+export function restorePatches(
+  items: IncomeItemValue[],
+  snap: PlanSnapshot,
+  replan: (items: IncomeItemValue[]) => IncomeItemValue[],
+): {
+  key: string;
+  price: number;
+  discount: number;
+  stage: number;
+  planQty: number;
+  planManual: boolean;
+  removed?: false;
+}[] {
+  const byKey = new Map(items.map((i) => [i.key, i]));
+  // Удалённую свою статью не вернуть — её нет в базе; убранную позицию по умолчанию — можно
+  const snapItems = snap.items.filter((s) => byKey.has(s.key) || defaultIncomeItem(s.key));
+  const pinned = new Set(snapItems.filter((s) => s.planManual).map((s) => s.key));
+  const build = () =>
+    snapItems.map((s) => ({
+      key: s.key,
+      price: s.price,
+      discount: s.discount,
+      stage: s.stage,
+      planQty: s.planQty,
+      planManual: pinned.has(s.key),
+      ...(byKey.has(s.key) ? {} : { removed: false as const }),
+    }));
+  for (let round = 0; round < snapItems.length + 1; round++) {
+    const patches = build();
+    const next = replan(
+      items.map((i) => {
+        const p = patches.find((x) => x.key === i.key);
+        return p ? { ...withValues(i, p), planManual: p.planManual } : i;
+      }),
+    );
+    const differ = snapItems.filter((s) => {
+      if (pinned.has(s.key)) return false;
+      const i = next.find((x) => x.key === s.key);
+      return !i || sum3(i.plan) !== s.planQty;
+    });
+    if (!differ.length) return patches;
+    differ.forEach((s) => pinned.add(s.key));
+  }
+  return build();
 }
 
 const plural = (n: number, [one, few, many]: [string, string, string]) => {
