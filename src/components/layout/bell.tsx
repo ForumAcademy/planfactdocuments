@@ -84,8 +84,6 @@ export function Bell({
   const forumId = forums.some((f) => f.id === pickedForum) ? pickedForum : null;
   // null — ещё не прочитали хранилище (на сервере и до монтирования)
   const [seen, setSeen] = React.useState<Set<string> | null>(null);
-  // Что было новым в момент открытия — подсвечиваем в списке
-  const [fresh, setFresh] = React.useState<Set<string>>(new Set());
 
   React.useEffect(() => {
     const stored = loadSeen();
@@ -102,7 +100,6 @@ export function Bell({
   const onOpenChange = (open: boolean) => {
     if (!open || seen === null) return;
     // Открыли список — всё в нём считается просмотренным
-    setFresh(new Set(items.filter((i) => !seen.has(itemKey(i))).map(itemKey)));
     const next = new Set(items.map(itemKey));
     saveSeen(next);
     setSeen(next);
@@ -186,14 +183,6 @@ export function Bell({
                   )}
                   data-testid="bell-forum"
                 >
-                  {f.id !== null && (
-                    <span
-                      className={cn(
-                        'size-1.5 rounded-full',
-                        forumId === f.id ? 'bg-white' : 'bg-brand',
-                      )}
-                    />
-                  )}
                   {f.name}
                   <span className={forumId === f.id ? 'text-white/80' : 'text-ink/50'}>
                     {forumCount(f.id)}
@@ -232,13 +221,6 @@ export function Bell({
                       className="block px-3 py-2 hover:bg-surface"
                     >
                       <div className="flex items-center gap-2 text-[11px]">
-                        {fresh.has(itemKey(i)) && (
-                          <span
-                            className="size-2 shrink-0 rounded-full bg-brand"
-                            title="Новое"
-                            aria-label="Новое"
-                          />
-                        )}
                         {forumId === null && <span className="text-ink/60">{i.forumName}</span>}
                         {i.lag > 0 && (
                           <span className={cn('font-semibold', COLOR[i.kind])}>+{i.lag} дн.</span>
