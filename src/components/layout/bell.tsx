@@ -34,6 +34,17 @@ const SECTION = {
 } as const;
 const KINDS = ['overdue', 'due_soon', 'should_start'] as const;
 
+/** Уведомления раздела, сгруппированные по форумам (по алфавиту), порядок внутри сохраняется */
+function byForum(items: BellItem[]) {
+  const map = new Map<number, { forumId: number; forumName: string; items: BellItem[] }>();
+  for (const i of items) {
+    const g = map.get(i.forumId) ?? { forumId: i.forumId, forumName: i.forumName, items: [] };
+    g.items.push(i);
+    map.set(i.forumId, g);
+  }
+  return [...map.values()].sort((a, b) => a.forumName.localeCompare(b.forumName, 'ru'));
+}
+
 const SEEN_KEY = 'bell-seen-v1';
 
 const itemKey = (i: BellItem) => `${i.kind}:${i.taskId}`;
@@ -170,35 +181,49 @@ export function Bell({
                 {SECTION[g.kind][onlyToday ? 'today' : 'all']}
                 <span className="rounded-full bg-white px-2 text-ink/70">{g.items.length}</span>
               </h3>
-              <ul>
-                {g.items.map((i) => (
-                  <li key={`${i.kind}-${i.taskId}`} className="border-b border-line last:border-0">
-                    <Link
-                      href={`/forums/${i.forumId}/tasks?q=${encodeURIComponent(i.description.slice(0, 40))}`}
-                      className="block px-3 py-2 hover:bg-surface"
-                    >
-                      <div className="flex items-center gap-2 text-[11px]">
-                        {fresh.has(itemKey(i)) && (
-                          <span
-                            className="size-2 shrink-0 rounded-full bg-brand"
-                            title="Новое"
-                            aria-label="Новое"
-                          />
-                        )}
-                        <span className="text-ink/60">{i.forumName}</span>
-                        {i.lag > 0 && (
-                          <span className={cn('font-semibold', COLOR[i.kind])}>+{i.lag} дн.</span>
-                        )}
-                        <span className="ml-auto text-ink/60">срок {formatDate(i.endDate)}</span>
-                      </div>
-                      <div className="mt-0.5 line-clamp-2 text-sm">
-                        №{i.number}. {i.description}
-                      </div>
-                      {i.employees && <div className="text-xs text-ink/60">{i.employees}</div>}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+              {byForum(g.items).map((f) => (
+                <div key={f.forumId} data-testid="bell-forum">
+                  <div className="flex items-center justify-between border-b border-line bg-white px-3 pb-1 pt-2 text-xs font-semibold text-ink/80">
+                    <span className="truncate">{f.forumName}</span>
+                    <span className="ml-2 shrink-0 text-ink/50">{f.items.length}</span>
+                  </div>
+                  <ul>
+                    {f.items.map((i) => (
+                      <li
+                        key={`${i.kind}-${i.taskId}`}
+                        className="border-b border-line last:border-0"
+                      >
+                        <Link
+                          href={`/forums/${i.forumId}/tasks?q=${encodeURIComponent(i.description.slice(0, 40))}`}
+                          className="block py-2 pl-5 pr-3 hover:bg-surface"
+                        >
+                          <div className="flex items-center gap-2 text-[11px]">
+                            {fresh.has(itemKey(i)) && (
+                              <span
+                                className="size-2 shrink-0 rounded-full bg-brand"
+                                title="Новое"
+                                aria-label="Новое"
+                              />
+                            )}
+                            {i.lag > 0 && (
+                              <span className={cn('font-semibold', COLOR[i.kind])}>
+                                +{i.lag} дн.
+                              </span>
+                            )}
+                            <span className="ml-auto text-ink/60">
+                              срок {formatDate(i.endDate)}
+                            </span>
+                          </div>
+                          <div className="mt-0.5 line-clamp-2 text-sm">
+                            №{i.number}. {i.description}
+                          </div>
+                          {i.employees && <div className="text-xs text-ink/60">{i.employees}</div>}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </section>
           ))}
         </div>
