@@ -4,7 +4,7 @@ import Link from 'next/link';
 import * as React from 'react';
 import { Bell as BellIcon } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { formatDate } from '@/lib/dates';
+import { addDays, formatDate } from '@/lib/dates';
 import { cn } from '@/lib/utils';
 
 export interface BellItem {
@@ -30,11 +30,22 @@ const COLOR = {
  * Заголовки разделов списка. Название раздела всегда первое и такое же, как метки на линии
  * задач форума, — чтобы «Скоро срок» не путался с «Пора начинать».
  */
-function sectionTitle(kind: BellItem['kind'], onlyToday: boolean, daysBefore: number) {
+function sectionTitle(
+  kind: BellItem['kind'],
+  onlyToday: boolean,
+  today: string,
+  daysBefore: number,
+) {
   if (!onlyToday) return SECTION[kind];
-  if (kind === 'overdue') return `${SECTION.overdue}: срок прошёл вчера`;
-  if (kind === 'due_soon') return `${SECTION.due_soon}: сегодня или через ${daysBefore} дн.`;
-  return `${SECTION.should_start}: с сегодня`;
+  if (kind === 'overdue') return `${SECTION.overdue}: новые, срок прошёл вчера`;
+  if (kind === 'due_soon') {
+    // Сегодня в раздел попадают только задачи со сроком сегодня или ровно через daysBefore дней;
+    // задачи со сроком между ними вошли в него раньше и видны во «Все актуальные»
+    const dm = (d: string) => formatDate(d).slice(0, 5);
+    const soon = addDays(today, daysBefore);
+    return `${SECTION.due_soon}: новые, срок ${dm(today)}${daysBefore > 0 ? ` или ${dm(soon)}` : ''}`;
+  }
+  return `${SECTION.should_start}: новые, с сегодня`;
 }
 const SECTION = {
   overdue: 'Просрочено',
@@ -77,10 +88,13 @@ function saveSeen(keys: Set<string>) {
 export function Bell({
   items,
   total,
+  today,
   daysBefore,
 }: {
   items: BellItem[];
   total: number;
+  /** Сегодняшняя дата (МСК) */
+  today: string;
   daysBefore: number;
 }) {
   // По умолчанию — только сегодняшние, чтобы старые не путались с новыми
@@ -117,9 +131,16 @@ export function Bell({
   const forumCount = (id: number | null) =>
     id === null ? modeItems.length : modeItems.filter((i) => i.forumId === id).length;
   const list = forumId === null ? modeItems : modeItems.filter((i) => i.forumId === forumId);
-  const groups = KINDS.map((k) => ({ kind: k, items: list.filter((i) => i.kind === k) })).filter(
-    (g) => g.items.length > 0,
-  );
+  // Всего в разделе по выбранному форуму — как на линии «Задачи» форума
+  const allOfKind = (k: BellItem['kind']) =>
+    (forumId === null ? items : items.filter((i) => i.forumId === forumId)).filter(
+      (i) => i.kind === k,
+    ).length;
+  const groups = KINDS.map((k) => ({
+    kind: k,
+    items: list.filter((i) => i.kind === k),
+    all: allOfKind(k),
+  })).filter((g) => g.items.length > 0);
   return (
     <Popover onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
@@ -172,7 +193,7 @@ export function Bell({
           </div>
           <div className="mt-1 text-xs text-ink/60">
             {onlyToday
-              ? `Только то, что появилось сегодня: срок прошёл вчера, срок сегодня или через ${daysBefore} дн., пора начинать с сегодня. Все такие задачи, как на линии «Задачи» форума, — во «Все актуальные».`
+              ? `Только новые за сегодня. «1 из 5» — новых 1, а всего в разделе 5, как на линии «Задачи» форума; все — во «Все актуальные».`
               : `Все невыполненные задачи, как на линии «Задачи» форума: просрочено, скоро срок (сегодня и в ближайшие ${daysBefore} дн.), пора начинать.`}
           </div>
           {forums.length > 1 && (
@@ -219,8 +240,17 @@ export function Bell({
                   COLOR[g.kind],
                 )}
               >
-                {sectionTitle(g.kind, onlyToday, daysBefore)}
-                <span className="rounded-full bg-white px-2 text-ink/70">{g.items.length}</span>
+                {sectionTitle(g.kind, onlyToday, today, daysBefore)}
+                {onlyToday && g.all > g.items.length ? (
+                  <span
+                    className="whitespace-nowrap rounded-full bg-white px-2 text-ink/70"
+                    title={`Новых сегодня ${g.items.length}, всего в разделе ${g.all} — все во «Все актуальные» и на линии «Задачи» форума`}
+                  >
+                    {g.items.length} из {g.all}
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-white px-2 text-ink/70">{g.items.length}</span>
+                )}
               </h3>
               <ul>
                 {g.items.map((i) => (

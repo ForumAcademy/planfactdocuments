@@ -37,7 +37,7 @@ export async function BellServer() {
       employees: i.employees.map((e) => e.fullName).join(', '),
       today: isToday(i),
     }));
-    return <Bell items={items} total={all.length} daysBefore={settings.daysBefore} />;
+    return <Bell items={items} total={all.length} today={today} daysBefore={settings.daysBefore} />;
   } catch {
     return null;
   }
