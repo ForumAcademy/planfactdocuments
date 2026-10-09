@@ -34,15 +34,13 @@ const SECTION = {
 } as const;
 const KINDS = ['overdue', 'due_soon', 'should_start'] as const;
 
-/** Уведомления раздела, сгруппированные по форумам (по алфавиту), порядок внутри сохраняется */
-function byForum(items: BellItem[]) {
-  const map = new Map<number, { forumId: number; forumName: string; items: BellItem[] }>();
-  for (const i of items) {
-    const g = map.get(i.forumId) ?? { forumId: i.forumId, forumName: i.forumName, items: [] };
-    g.items.push(i);
-    map.set(i.forumId, g);
-  }
-  return [...map.values()].sort((a, b) => a.forumName.localeCompare(b.forumName, 'ru'));
+/** Форумы, по которым есть уведомления, по алфавиту */
+function forumsOf(items: BellItem[]) {
+  const map = new Map<number, string>();
+  for (const i of items) map.set(i.forumId, i.forumName);
+  return [...map.entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 }
 
 const SEEN_KEY = 'bell-seen-v1';
@@ -79,6 +77,11 @@ export function Bell({
   // По умолчанию — только сегодняшние, чтобы старые не путались с новыми
   const [onlyToday, setOnlyToday] = React.useState(true);
   const todayItems = React.useMemo(() => items.filter((i) => i.today), [items]);
+  // Выбранный форум; null — все форумы
+  const [pickedForum, setForumId] = React.useState<number | null>(null);
+  const forums = React.useMemo(() => forumsOf(items), [items]);
+  // Если у выбранного форума уведомлений не осталось — показываем все
+  const forumId = forums.some((f) => f.id === pickedForum) ? pickedForum : null;
   // null — ещё не прочитали хранилище (на сервере и до монтирования)
   const [seen, setSeen] = React.useState<Set<string> | null>(null);
   // Что было новым в момент открытия — подсвечиваем в списке
@@ -104,7 +107,10 @@ export function Bell({
     saveSeen(next);
     setSeen(next);
   };
-  const list = onlyToday ? todayItems : items;
+  const modeItems = onlyToday ? todayItems : items;
+  const forumCount = (id: number | null) =>
+    id === null ? modeItems.length : modeItems.filter((i) => i.forumId === id).length;
+  const list = forumId === null ? modeItems : modeItems.filter((i) => i.forumId === forumId);
   const groups = KINDS.map((k) => ({ kind: k, items: list.filter((i) => i.kind === k) })).filter(
     (g) => g.items.length > 0,
   );
@@ -163,11 +169,48 @@ export function Bell({
               ? `Что появилось сегодня: срок прошёл вчера, срок сегодня или через ${daysBefore} дн., задачи, которые пора начинать с сегодня.`
               : `Все невыполненные задачи: просроченные, срок в ближайшие ${daysBefore} дн. и те, которые пора начинать.`}
           </div>
+          {forums.length > 1 && (
+            <div className="mt-2 flex flex-wrap gap-1 text-xs" role="tablist" aria-label="Форум">
+              {[{ id: null, name: 'Все форумы' }, ...forums].map((f) => (
+                <button
+                  key={f.id ?? 'all'}
+                  type="button"
+                  role="tab"
+                  aria-selected={forumId === f.id}
+                  onClick={() => setForumId(f.id)}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1',
+                    forumId === f.id
+                      ? 'border-brand bg-brand text-white'
+                      : 'border-line bg-white text-ink/80 hover:border-brand/50',
+                  )}
+                  data-testid="bell-forum"
+                >
+                  {f.id !== null && (
+                    <span
+                      className={cn(
+                        'size-1.5 rounded-full',
+                        forumId === f.id ? 'bg-white' : 'bg-brand',
+                      )}
+                    />
+                  )}
+                  {f.name}
+                  <span className={forumId === f.id ? 'text-white/80' : 'text-ink/50'}>
+                    {forumCount(f.id)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="thin-scroll max-h-[60vh] overflow-y-auto">
           {groups.length === 0 && (
             <div className="px-3 py-8 text-center text-sm text-status-gray">
-              {onlyToday ? 'Сегодня новых уведомлений нет' : 'Всё в порядке — уведомлений нет'}
+              {onlyToday
+                ? forumId === null
+                  ? 'Сегодня новых уведомлений нет'
+                  : 'По этому форуму сегодня новых уведомлений нет'
+                : 'Всё в порядке — уведомлений нет'}
             </div>
           )}
           {groups.map((g) => (
@@ -181,49 +224,35 @@ export function Bell({
                 {SECTION[g.kind][onlyToday ? 'today' : 'all']}
                 <span className="rounded-full bg-white px-2 text-ink/70">{g.items.length}</span>
               </h3>
-              {byForum(g.items).map((f) => (
-                <div key={f.forumId} data-testid="bell-forum">
-                  <div className="flex items-center justify-between border-b border-line bg-white px-3 pb-1 pt-2 text-xs font-semibold text-ink/80">
-                    <span className="truncate">{f.forumName}</span>
-                    <span className="ml-2 shrink-0 text-ink/50">{f.items.length}</span>
-                  </div>
-                  <ul>
-                    {f.items.map((i) => (
-                      <li
-                        key={`${i.kind}-${i.taskId}`}
-                        className="border-b border-line last:border-0"
-                      >
-                        <Link
-                          href={`/forums/${i.forumId}/tasks?q=${encodeURIComponent(i.description.slice(0, 40))}`}
-                          className="block py-2 pl-5 pr-3 hover:bg-surface"
-                        >
-                          <div className="flex items-center gap-2 text-[11px]">
-                            {fresh.has(itemKey(i)) && (
-                              <span
-                                className="size-2 shrink-0 rounded-full bg-brand"
-                                title="Новое"
-                                aria-label="Новое"
-                              />
-                            )}
-                            {i.lag > 0 && (
-                              <span className={cn('font-semibold', COLOR[i.kind])}>
-                                +{i.lag} дн.
-                              </span>
-                            )}
-                            <span className="ml-auto text-ink/60">
-                              срок {formatDate(i.endDate)}
-                            </span>
-                          </div>
-                          <div className="mt-0.5 line-clamp-2 text-sm">
-                            №{i.number}. {i.description}
-                          </div>
-                          {i.employees && <div className="text-xs text-ink/60">{i.employees}</div>}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
+              <ul>
+                {g.items.map((i) => (
+                  <li key={`${i.kind}-${i.taskId}`} className="border-b border-line last:border-0">
+                    <Link
+                      href={`/forums/${i.forumId}/tasks?q=${encodeURIComponent(i.description.slice(0, 40))}`}
+                      className="block px-3 py-2 hover:bg-surface"
+                    >
+                      <div className="flex items-center gap-2 text-[11px]">
+                        {fresh.has(itemKey(i)) && (
+                          <span
+                            className="size-2 shrink-0 rounded-full bg-brand"
+                            title="Новое"
+                            aria-label="Новое"
+                          />
+                        )}
+                        {forumId === null && <span className="text-ink/60">{i.forumName}</span>}
+                        {i.lag > 0 && (
+                          <span className={cn('font-semibold', COLOR[i.kind])}>+{i.lag} дн.</span>
+                        )}
+                        <span className="ml-auto text-ink/60">срок {formatDate(i.endDate)}</span>
+                      </div>
+                      <div className="mt-0.5 line-clamp-2 text-sm">
+                        №{i.number}. {i.description}
+                      </div>
+                      {i.employees && <div className="text-xs text-ink/60">{i.employees}</div>}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             </section>
           ))}
         </div>
