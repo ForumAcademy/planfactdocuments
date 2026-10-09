@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
+  ArrowRightLeft,
   ChevronDown,
   ChevronRight,
   Lightbulb,
@@ -416,7 +417,7 @@ export function IncomeView({
       >
         <table className={tableClass(view)} data-testid="income-group-tickets">
           <Cols view={view} />
-          <ItemsHead view={view} withStage />
+          <ItemsHead view={view} />
           {PRICE_STAGES.map((st, k) => {
             const rows = tickets.filter((i) => i.stage === k);
             return (
@@ -673,14 +674,13 @@ function Cols({ view }: { view: View }) {
   );
 }
 
-function ItemsHead({ view, withStage }: { view: View; withStage?: boolean }) {
+function ItemsHead({ view }: { view: View }) {
   return (
     <thead className="bg-surface text-left text-xs text-ink/70">
       <tr>
-        <th className="px-3 py-2 font-medium" colSpan={withStage ? 1 : 2}>
+        <th className="px-3 py-2 font-medium" colSpan={2}>
           Статья
         </th>
-        {withStage && <th className="px-2 py-2 font-medium">Стадия</th>}
         <th className={th}>Цена 1 ед.</th>
         <th className={th}>Скидка</th>
         <th className={th}>Цена со скидкой</th>
@@ -743,35 +743,38 @@ function ItemRow({
   const muted = 'px-2 py-1.5 text-right tabular-nums text-ink/70';
   const { forum } = useForum();
   return (
-    <tr className="border-t border-line/60" data-testid="income-row">
-      <td className="py-1 pl-4 pr-3" colSpan={withStage ? 1 : 2}>
-        <LabelCell
-          item={it}
-          onRename={(label) => onSave([{ key: it.key, label }])}
-          onRemove={editTerms ? onRemove : undefined}
-        />
-      </td>
-      {withStage && (
-        <td className="px-1 py-1">
-          {editTerms ? (
-            <select
-              value={k}
-              onChange={(e) => onSave([{ key: it.key, stage: Number(e.target.value) }])}
-              className="h-7 w-full rounded border border-transparent bg-transparent px-1 text-sm hover:border-line focus:border-brand focus:outline-none"
-              aria-label={`Стадия: ${it.label}`}
-              data-testid={`income-stage-select-${it.key}`}
+    <tr className="group/row border-t border-line/60" data-testid="income-row">
+      {/* Стадия видна по заголовку группы — в строке только кнопка переноса на другую стадию */}
+      <td className="py-1 pl-4 pr-3" colSpan={2}>
+        <div className="flex items-center gap-1">
+          <LabelCell
+            item={it}
+            onRename={(label) => onSave([{ key: it.key, label }])}
+            onRemove={editTerms ? onRemove : undefined}
+          />
+          {withStage && editTerms && (
+            <label
+              className="relative rounded p-1 text-ink/40 opacity-0 hover:bg-surface hover:text-brand focus-within:opacity-100 group-hover/row:opacity-100"
+              title="Перенести на другую стадию"
             >
-              {PRICE_STAGES.map((st, s) => (
-                <option key={st.key} value={s}>
-                  {st.label}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <span className="px-1 text-ink/70">{PRICE_STAGES[k].label}</span>
+              <ArrowRightLeft className="size-3.5" />
+              <select
+                value={k}
+                onChange={(e) => onSave([{ key: it.key, stage: Number(e.target.value) }])}
+                className="absolute inset-0 cursor-pointer opacity-0"
+                aria-label={`Стадия: ${it.label}`}
+                data-testid={`income-stage-select-${it.key}`}
+              >
+                {PRICE_STAGES.map((st, s) => (
+                  <option key={st.key} value={s}>
+                    {st.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
-        </td>
-      )}
+        </div>
+      </td>
       <td className={editTerms ? 'px-1 py-1' : muted}>
         {editTerms ? (
           <NumberCell
