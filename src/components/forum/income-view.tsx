@@ -375,7 +375,7 @@ export function IncomeView({
         hidden={!partnersOpen}
         className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white"
       >
-        <table className={tableClass} data-testid="income-group-partners">
+        <table className={tableClass(view)} data-testid="income-group-partners">
           <Cols view={view} />
           <ItemsHead view={view} />
           <tbody>
@@ -414,7 +414,7 @@ export function IncomeView({
         hidden={!ticketsOpen}
         className="thin-scroll mt-2 overflow-x-auto rounded-lg border border-line bg-white"
       >
-        <table className={tableClass} data-testid="income-group-tickets">
+        <table className={tableClass(view)} data-testid="income-group-tickets">
           <Cols view={view} />
           <ItemsHead view={view} withStage />
           {PRICE_STAGES.map((st, k) => {
@@ -472,7 +472,7 @@ export function IncomeView({
 
       {/* Итог: суммы разделов и стадий видны выше, цель — в шапке; здесь только общий итог */}
       <div className="thin-scroll mt-6 overflow-x-auto rounded-lg border border-line bg-white">
-        <table className={tableClass} data-testid="income-totals">
+        <table className={tableClass(view)} data-testid="income-totals">
           <Cols view={view} />
           <tbody>
             <TotalRow
@@ -653,7 +653,9 @@ function TableTotal({
 }
 
 const th = 'px-2 py-2 text-right font-medium';
-const tableClass = 'w-full min-w-[1260px] table-fixed text-sm';
+/** Факт шире плана: без своей минимальной ширины первый столбец («Статья») сжимался в ноль */
+const tableClass = (view: View) =>
+  cn('w-full table-fixed text-sm', view === 'plan' ? 'min-w-[1260px]' : 'min-w-[1580px]');
 
 /** Ширины столбцов — общие для всех таблиц «Доходов» */
 const COL_WIDTHS: Record<View, (number | undefined)[]> = {
