@@ -654,14 +654,17 @@ function TableTotal({
 }
 
 const th = 'px-2 py-2 text-right font-medium';
-/** Факт шире плана: без своей минимальной ширины первый столбец («Статья») сжимался в ноль */
+/** Таблица тянется по ширине экрана без горизонтальной прокрутки; скролл — только на совсем узких */
 const tableClass = (view: View) =>
-  cn('w-full table-fixed text-sm', view === 'plan' ? 'min-w-[1260px]' : 'min-w-[1580px]');
+  cn('w-full table-fixed text-sm', view === 'plan' ? 'min-w-[1000px]' : 'min-w-[1100px]');
 
-/** Ширины столбцов — общие для всех таблиц «Доходов» */
-const COL_WIDTHS: Record<View, (number | undefined)[]> = {
-  plan: [undefined, 176, 144, 96, 144, 128, 160, 112, 80],
-  fact: [undefined, 176, 144, 96, 144, 128, 144, 112, 112, 144, 160],
+/**
+ * Ширины столбцов в процентах — общие для всех таблиц «Доходов». Первый столбец («Статья»)
+ * забирает остаток; второй узкий — к нему название растягивается через colSpan.
+ */
+const COL_WIDTHS: Record<View, (string | undefined)[]> = {
+  plan: [undefined, '3%', '11%', '8%', '11%', '9%', '12%', '9%', '7%'],
+  fact: [undefined, '3%', '9%', '8%', '9%', '8%', '10%', '7%', '7%', '10%', '10%'],
 };
 
 function Cols({ view }: { view: View }) {
