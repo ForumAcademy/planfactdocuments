@@ -13,8 +13,8 @@ import { useForum } from './forum-context';
 
 const DUE_BUTTONS: { key: DueFilter; label: string }[] = [
   { key: 'overdue', label: 'Просрочено' },
-  { key: 'start', label: 'Пора начинать' },
   { key: 'soon', label: 'Скоро срок' },
+  { key: 'start', label: 'Пора начинать' },
   { key: 'week', label: 'На этой неделе' },
   { key: '14d', label: 'В ближайшие 14 дней' },
   { key: 'nodate', label: 'Без даты' },
@@ -22,7 +22,8 @@ const DUE_BUTTONS: { key: DueFilter; label: string }[] = [
 
 /** Общая панель фильтров для вкладок Ганта и списка. Состояние — в URL. */
 export function FilterBar({ className }: { className?: string }) {
-  const { forum, filters, setFilters, resetFilters, dicts, tasks, visible, today } = useForum();
+  const { forum, filters, setFilters, resetFilters, dicts, tasks, visible, today, soonDays } =
+    useForum();
   const visibleCost = visible.reduce((sum, t) => sum + t.cost, 0);
   const [q, setQ] = React.useState(filters.q);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -53,13 +54,13 @@ export function FilterBar({ className }: { className?: string }) {
   const facets = React.useMemo(() => {
     const count = (key: 'stage' | 'block' | 'role' | 'emp', ids: (t: TaskDTO) => number[]) => {
       const m = new Map<number, number>();
-      for (const t of filterTasks(tasks, { ...filters, [key]: [] }, today)) {
+      for (const t of filterTasks(tasks, { ...filters, [key]: [] }, today, soonDays)) {
         for (const id of ids(t)) m.set(id, (m.get(id) ?? 0) + 1);
       }
       return m;
     };
     const statuses = new Map<string, number>();
-    for (const t of filterTasks(tasks, { ...filters, status: [] }, today)) {
+    for (const t of filterTasks(tasks, { ...filters, status: [] }, today, soonDays)) {
       statuses.set(t.status, (statuses.get(t.status) ?? 0) + 1);
     }
     return {
@@ -69,7 +70,7 @@ export function FilterBar({ className }: { className?: string }) {
       emp: count('emp', (t) => t.employeeIds),
       status: statuses,
     };
-  }, [tasks, filters, today]);
+  }, [tasks, filters, today, soonDays]);
 
   const opt = <T extends { id: number; archived?: boolean }>(
     list: T[],

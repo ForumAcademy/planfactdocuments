@@ -1,5 +1,12 @@
 import { addDays, startOfWeek, type ISODate } from './dates';
-import { isOverdue, lagDays, shouldStart, TASK_STATUSES, type TaskStatusCode } from './status';
+import {
+  DEFAULT_SOON_DAYS,
+  isOverdue,
+  lagDays,
+  taskAlert,
+  TASK_STATUSES,
+  type TaskStatusCode,
+} from './status';
 import type { DictsDTO, TaskDTO } from './types';
 
 export type DueFilter = 'overdue' | 'start' | 'soon' | 'week' | '14d' | 'nodate';
@@ -117,22 +124,20 @@ export function normalizeSearch(s: string): string {
   return s.toLowerCase().replace(/ё/g, 'е').trim();
 }
 
-export function matchesDue(t: TaskDTO, due: DueFilter, today: ISODate): boolean {
+export function matchesDue(
+  t: TaskDTO,
+  due: DueFilter,
+  today: ISODate,
+  soonDays: number = DEFAULT_SOON_DAYS,
+): boolean {
   switch (due) {
     case 'overdue':
       return isOverdue(t, today);
-    // Как в линии статуса задач: дата начала наступила, задача не начата и ещё не просрочена
+    // «Скоро срок» и «Пора начинать» — те же задачи, что в колокольчике и в линии статуса
     case 'start':
-      return shouldStart(t, today) && !isOverdue(t, today);
-    // Срок в ближайшие 3 дня, задача не начата (кроме тех, что уже «пора начинать»)
+      return taskAlert(t, today, soonDays) === 'should_start';
     case 'soon':
-      return (
-        t.status === 'NOT_STARTED' &&
-        t.endDate !== null &&
-        t.endDate >= today &&
-        t.endDate <= addDays(today, 3) &&
-        !shouldStart(t, today)
-      );
+      return taskAlert(t, today, soonDays) === 'due_soon';
     case 'week': {
       const mon = startOfWeek(today);
       return t.endDate !== null && t.endDate >= mon && t.endDate <= addDays(mon, 6);
@@ -145,7 +150,12 @@ export function matchesDue(t: TaskDTO, due: DueFilter, today: ISODate): boolean 
 }
 
 /** Применяет фильтры (без сортировки). */
-export function filterTasks(tasks: TaskDTO[], f: Filters, today: ISODate): TaskDTO[] {
+export function filterTasks(
+  tasks: TaskDTO[],
+  f: Filters,
+  today: ISODate,
+  soonDays: number = DEFAULT_SOON_DAYS,
+): TaskDTO[] {
   const q = normalizeSearch(f.q);
   const stage = new Set(f.stage);
   const block = new Set(f.block);
@@ -158,7 +168,7 @@ export function filterTasks(tasks: TaskDTO[], f: Filters, today: ISODate): TaskD
     if (role.size && !t.roleIds.some((r) => role.has(r))) return false;
     if (emp.size && !t.employeeIds.some((e) => emp.has(e))) return false;
     if (status.size && !status.has(t.status)) return false;
-    if (f.due && !matchesDue(t, f.due, today)) return false;
+    if (f.due && !matchesDue(t, f.due, today, soonDays)) return false;
     if (f.from && !(t.endDate && t.endDate >= f.from)) return false;
     if (f.to && !(t.endDate && t.endDate <= f.to)) return false;
     if (q) {

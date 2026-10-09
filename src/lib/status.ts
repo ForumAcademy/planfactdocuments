@@ -1,4 +1,4 @@
-import { diffDays, type ISODate } from './dates';
+import { addDays, diffDays, type ISODate } from './dates';
 
 export const TASK_STATUSES = ['NOT_STARTED', 'IN_PROGRESS', 'DONE'] as const;
 export type TaskStatusCode = (typeof TASK_STATUSES)[number];
@@ -50,6 +50,29 @@ export function doneLateDays(t: StatusInput): number {
 /** «Пора начинать»: не начато, дата начала наступила. */
 export function shouldStart(t: StatusInput, today: ISODate): boolean {
   return t.status === 'NOT_STARTED' && t.startDate !== null && t.startDate <= today;
+}
+
+/** Сколько дней до срока считается «скоро срок», если в настройках не задано иное */
+export const DEFAULT_SOON_DAYS = 3;
+
+export type TaskAlert = 'overdue' | 'due_soon' | 'should_start';
+
+/**
+ * Одно правило для колокольчика, линии статуса задач и фильтров списка задач. Каждая
+ * невыполненная задача попадает не больше чем в один раздел, по старшинству:
+ * просрочено → скоро срок (срок сегодня или в ближайшие soonDays дней) → пора начинать.
+ */
+export function taskAlert(
+  t: StatusInput,
+  today: ISODate,
+  soonDays: number = DEFAULT_SOON_DAYS,
+): TaskAlert | null {
+  if (t.status === 'DONE') return null;
+  if (isOverdue(t, today)) return 'overdue';
+  if (t.endDate !== null && t.endDate >= today && t.endDate <= addDays(today, soonDays))
+    return 'due_soon';
+  if (shouldStart(t, today)) return 'should_start';
+  return null;
 }
 
 /** Цвет бейджа статуса. */

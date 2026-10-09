@@ -12,10 +12,10 @@ import { appUrl, canLinkButton } from '@/lib/telegram-format';
 export { appUrl };
 import { autoArchivePastForums } from './queries';
 import { prisma } from '@/lib/db';
-import { addDays, dayOfWeek, dbToISO, todayMsk, type ISODate } from '@/lib/dates';
-import { isOverdue, lagDays, shouldStart, type TaskStatusCode } from '@/lib/status';
+import { dayOfWeek, dbToISO, todayMsk, type ISODate } from '@/lib/dates';
+import { isOverdue, lagDays, taskAlert, type TaskAlert, type TaskStatusCode } from '@/lib/status';
 
-export type ReminderKind = 'overdue' | 'due_soon' | 'should_start';
+export type ReminderKind = TaskAlert;
 
 export const KIND_LABEL: Record<ReminderKind, string> = {
   overdue: 'Просрочено',
@@ -51,7 +51,6 @@ export async function collectReminders(
   daysBefore?: number,
 ): Promise<ReminderItem[]> {
   const n = daysBefore ?? (await getSettings()).daysBefore;
-  const soon = addDays(today, n);
   const tasks = await prisma.task.findMany({
     where: { status: { not: 'DONE' }, forum: { archived: false } },
     include: { forum: true, employees: true },
@@ -65,10 +64,7 @@ export async function collectReminders(
       endDate: dbToISO(t.endDate),
       completedAt: null,
     };
-    let kind: ReminderKind | null = null;
-    if (isOverdue(s, today)) kind = 'overdue';
-    else if (s.endDate && s.endDate >= today && s.endDate <= soon) kind = 'due_soon';
-    else if (shouldStart(s, today)) kind = 'should_start';
+    const kind = taskAlert(s, today, n);
     if (!kind) continue;
     out.push({
       kind,

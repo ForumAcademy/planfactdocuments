@@ -1,5 +1,11 @@
 import { diffDays, type ISODate } from './dates';
-import { countStatuses, isOverdue, shouldStart, type StatusInput } from './status';
+import {
+  countStatuses,
+  DEFAULT_SOON_DAYS,
+  taskAlert,
+  type StatusInput,
+  type TaskAlert,
+} from './status';
 import {
   hasStages,
   incomeSum,
@@ -35,6 +41,8 @@ export interface HealthLine {
   value: string;
   /** Коротко, почему такой цвет: «Просрочено 50», «По плану» */
   badge: string;
+  /** Линия задач: все разделы с числом задач, в том же порядке и с теми же названиями, что в колокольчике */
+  alerts?: { kind: TaskAlert; label: string; count: number }[];
   /** Все цифры — для подсказки */
   summary: string;
   /** Почему такой цвет */
@@ -76,37 +84,40 @@ const tasksWord = (n: number) => `${n} ${plural(n, 'задача', 'задачи
 export const EXPENSE_WARN_SHARE = 0.9;
 /** Доходы: факт ниже этой доли от ожидаемого на сегодня — отставание */
 export const INCOME_RED_SHARE = 0.7;
-/** Задачи: срок через столько дней, а задача ещё не начата — «проверить» */
-export const TASK_SOON_DAYS = 3;
+/** Названия разделов — те же, что в колокольчике и в фильтрах задач */
+export const TASK_ALERT_LABEL: Record<TaskAlert, string> = {
+  overdue: 'Просрочено',
+  due_soon: 'Скоро срок',
+  should_start: 'Пора начинать',
+};
 
 /**
- * Линия задач. Красный — есть просроченные; жёлтый — пора начинать (дата начала прошла,
- * задача не начата) или срок через 3 дня, а задача не начата; иначе зелёный.
- * Заполнение — доля выполненных, отметка — доля задач, срок которых уже прошёл.
+ * Линия задач. Красный — есть просроченные; жёлтый — скоро срок (сегодня или в ближайшие
+ * soonDays дней) или пора начинать (дата начала прошла, задача не начата); иначе зелёный.
+ * Задачи раскладываются по разделам так же, как в колокольчике: каждая — в один раздел.
+ * Заполнение — доля выполненных.
  */
-export function taskHealth(tasks: StatusInput[], today: ISODate): HealthLine {
+export function taskHealth(
+  tasks: StatusInput[],
+  today: ISODate,
+  soonDays: number = DEFAULT_SOON_DAYS,
+): HealthLine {
   const c = countStatuses(tasks, today);
-  const late = tasks.filter((t) => !isOverdue(t, today) && shouldStart(t, today)).length;
-  const soon = tasks.filter(
-    (t) =>
-      t.status === 'NOT_STARTED' &&
-      t.endDate !== null &&
-      t.endDate >= today &&
-      diffDays(today, t.endDate) <= TASK_SOON_DAYS &&
-      !shouldStart(t, today),
-  ).length;
+  const n: Record<TaskAlert, number> = { overdue: 0, due_soon: 0, should_start: 0 };
+  for (const t of tasks) {
+    const a = taskAlert(t, today, soonDays);
+    if (a) n[a]++;
+  }
+  const alerts = (['overdue', 'due_soon', 'should_start'] as const)
+    .filter((k) => n[k] > 0)
+    .map((k) => ({ kind: k, label: TASK_ALERT_LABEL[k], count: n[k] }));
   const reasons: string[] = [];
-  if (c.overdue) reasons.push(`просрочено: ${tasksWord(c.overdue)}`);
-  if (late) reasons.push(`пора начинать: ${tasksWord(late)}`);
-  if (soon) reasons.push(`срок в ближайшие ${TASK_SOON_DAYS} дня, не начато: ${tasksWord(soon)}`);
-  const health: Health = c.overdue ? 'red' : late || soon ? 'yellow' : 'green';
-  const badge = c.overdue
-    ? `Просрочено ${c.overdue}`
-    : late
-      ? `Пора начинать ${late}`
-      : soon
-        ? `Скоро срок ${soon}`
-        : 'По плану';
+  if (n.overdue) reasons.push(`просрочено: ${tasksWord(n.overdue)}`);
+  if (n.due_soon)
+    reasons.push(`срок сегодня или в ближайшие ${soonDays} дн.: ${tasksWord(n.due_soon)}`);
+  if (n.should_start) reasons.push(`пора начинать: ${tasksWord(n.should_start)}`);
+  const health: Health = n.overdue ? 'red' : alerts.length ? 'yellow' : 'green';
+  const badge = alerts.length ? `${alerts[0].label} ${alerts[0].count}` : 'По плану';
   if (health === 'green') reasons.push(c.total ? 'просроченных задач нет' : 'задач пока нет');
   return {
     health,
@@ -115,7 +126,8 @@ export function taskHealth(tasks: StatusInput[], today: ISODate): HealthLine {
     mark: null,
     value: `${c.done} из ${c.total} шт. выполнено`,
     badge,
-    summary: `Выполнено ${c.done} из ${c.total} (${percent(share(c.done, c.total))}) · в работе ${c.inProgress} · не начато ${c.notStarted} · просрочено ${c.overdue}`,
+    alerts,
+    summary: `Выполнено ${c.done} из ${c.total} (${percent(share(c.done, c.total))}) · в работе ${c.inProgress} · не начато ${c.notStarted} · просрочено ${n.overdue}`,
     reasons,
   };
 }

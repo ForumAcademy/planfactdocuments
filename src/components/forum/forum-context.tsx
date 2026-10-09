@@ -46,6 +46,8 @@ interface ForumContextValue {
   forum: ForumDTO;
   income: ForumIncome;
   today: ISODate;
+  /** Сколько дней до срока — «скоро срок» (из настроек уведомлений) */
+  soonDays: number;
   dicts: DictsDTO;
   lookups: Lookups;
   /** Производственный календарь: выходные и праздники */
@@ -82,6 +84,7 @@ export function ForumProvider({
   tasks: initialTasks,
   dicts,
   today,
+  soonDays,
   income,
   children,
 }: {
@@ -90,6 +93,7 @@ export function ForumProvider({
   tasks: TaskDTO[];
   dicts: DictsDTO;
   today: ISODate;
+  soonDays: number;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -133,8 +137,15 @@ export function ForumProvider({
   );
 
   const visible = React.useMemo(
-    () => sortTasks(filterTasks(tasks, filters, today), filters.sort, filters.dir, dicts, today),
-    [tasks, filters, today, dicts],
+    () =>
+      sortTasks(
+        filterTasks(tasks, filters, today, soonDays),
+        filters.sort,
+        filters.dir,
+        dicts,
+        today,
+      ),
+    [tasks, filters, today, soonDays, dicts],
   );
 
   const track = async <T,>(p: Promise<T>): Promise<T> => {
@@ -258,6 +269,7 @@ export function ForumProvider({
     forum: forumWithRate,
     income,
     today,
+    soonDays,
     dicts,
     lookups,
     calendar,

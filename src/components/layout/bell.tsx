@@ -26,11 +26,20 @@ const COLOR = {
   due_soon: 'text-brand',
   should_start: 'text-status-red',
 } as const;
-/** Заголовки разделов списка */
+/**
+ * Заголовки разделов списка. Название раздела всегда первое и такое же, как метки на линии
+ * задач форума, — чтобы «Скоро срок» не путался с «Пора начинать».
+ */
+function sectionTitle(kind: BellItem['kind'], onlyToday: boolean, daysBefore: number) {
+  if (!onlyToday) return SECTION[kind];
+  if (kind === 'overdue') return `${SECTION.overdue}: срок прошёл вчера`;
+  if (kind === 'due_soon') return `${SECTION.due_soon}: сегодня или через ${daysBefore} дн.`;
+  return `${SECTION.should_start}: с сегодня`;
+}
 const SECTION = {
-  overdue: { today: 'Срок прошёл вчера', all: 'Просрочено' },
-  due_soon: { today: 'Срок сегодня или подходит', all: 'Скоро срок' },
-  should_start: { today: 'Пора начинать с сегодня', all: 'Пора начинать' },
+  overdue: 'Просрочено',
+  due_soon: 'Скоро срок',
+  should_start: 'Пора начинать',
 } as const;
 const KINDS = ['overdue', 'due_soon', 'should_start'] as const;
 
@@ -163,8 +172,8 @@ export function Bell({
           </div>
           <div className="mt-1 text-xs text-ink/60">
             {onlyToday
-              ? `Что появилось сегодня: срок прошёл вчера, срок сегодня или через ${daysBefore} дн., задачи, которые пора начинать с сегодня.`
-              : `Все невыполненные задачи: просроченные, срок в ближайшие ${daysBefore} дн. и те, которые пора начинать.`}
+              ? `Только то, что появилось сегодня: срок прошёл вчера, срок сегодня или через ${daysBefore} дн., пора начинать с сегодня. Все такие задачи, как на линии «Задачи» форума, — во «Все актуальные».`
+              : `Все невыполненные задачи, как на линии «Задачи» форума: просрочено, скоро срок (сегодня и в ближайшие ${daysBefore} дн.), пора начинать.`}
           </div>
           {forums.length > 1 && (
             <div className="mt-2 flex flex-wrap gap-1 text-xs" role="tablist" aria-label="Форум">
@@ -210,7 +219,7 @@ export function Bell({
                   COLOR[g.kind],
                 )}
               >
-                {SECTION[g.kind][onlyToday ? 'today' : 'all']}
+                {sectionTitle(g.kind, onlyToday, daysBefore)}
                 <span className="rounded-full bg-white px-2 text-ink/70">{g.items.length}</span>
               </h3>
               <ul>

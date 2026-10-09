@@ -13,6 +13,7 @@ import {
   getTasks,
   getTemplateGap,
 } from '@/server/queries';
+import { getSettings } from '@/server/reminders';
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -31,13 +32,14 @@ export default async function ForumLayout({
   const forumId = Number(id);
   const forum = await getForum(forumId);
   if (!forum) notFound();
-  const [tasks, dicts, options, incomeItems, incomeConfig, deals] = await Promise.all([
+  const [tasks, dicts, options, incomeItems, incomeConfig, deals, settings] = await Promise.all([
     getTasks(forumId),
     getDicts(),
     getForumOptions(),
     getIncomeItems(forumId),
     getIncomeConfig(forumId),
     getDeals(forumId),
+    getSettings(),
   ]);
   const templateGap = await getTemplateGap(tasks);
   const income = {
@@ -46,7 +48,14 @@ export default async function ForumLayout({
     deals: deals.filter((d) => d.status === 'paid'),
   };
   return (
-    <ForumProvider forum={forum} tasks={tasks} dicts={dicts} today={todayMsk()} income={income}>
+    <ForumProvider
+      forum={forum}
+      tasks={tasks}
+      dicts={dicts}
+      today={todayMsk()}
+      soonDays={settings.daysBefore}
+      income={income}
+    >
       <ForumBreadcrumbs />
       <ForumHeader
         forumOptions={options.filter((o) => o.id !== forumId)}

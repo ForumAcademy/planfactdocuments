@@ -26,6 +26,25 @@ describe('линия задач', () => {
       taskHealth([task({ startDate: '2026-10-01', endDate: '2026-11-01' })], today).health,
     ).toBe('yellow');
   });
+  it('разделы как в колокольчике: каждая задача в одном разделе, все метки с числами', () => {
+    const l = taskHealth(
+      [
+        // срок через 2 дня, уже в работе — «скоро срок»
+        task({ status: 'IN_PROGRESS', endDate: '2026-10-09' }),
+        // дата начала прошла и срок через 3 дня — тоже «скоро срок», не «пора начинать»
+        task({ startDate: '2026-10-01', endDate: '2026-10-10' }),
+        task({ startDate: '2026-10-01', endDate: '2026-11-01' }),
+      ],
+      today,
+      3,
+    );
+    expect(l.health).toBe('yellow');
+    expect(l.badge).toBe('Скоро срок 2');
+    expect(l.alerts?.map((a) => `${a.label} ${a.count}`)).toEqual([
+      'Скоро срок 2',
+      'Пора начинать 1',
+    ]);
+  });
   it('красная при просрочке', () => {
     const l = taskHealth([task({ status: 'IN_PROGRESS', endDate: '2026-10-06' })], today);
     expect(l.health).toBe('red');

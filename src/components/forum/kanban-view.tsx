@@ -25,8 +25,18 @@ const HEAD: Record<TaskStatusCode, string> = {
 
 /** Вид «По статусам»: три колонки, карточки перетаскиваются между ними. */
 export function KanbanView() {
-  const { visible, tasks, today, lookups, patchTask, setOpenTaskId, filters, setFilters, dicts } =
-    useForum();
+  const {
+    visible,
+    tasks,
+    today,
+    soonDays,
+    lookups,
+    patchTask,
+    setOpenTaskId,
+    filters,
+    setFilters,
+    dicts,
+  } = useForum();
   const [over, setOver] = React.useState<TaskStatusCode | null>(null);
   const [dragId, setDragId] = React.useState<number | null>(null);
   const [limit, setLimit] = React.useState<Record<TaskStatusCode, number>>({
@@ -38,11 +48,11 @@ export function KanbanView() {
   // Счётчики для кнопок этапов — с учётом всех фильтров, кроме самого этапа
   const stageCounts = React.useMemo(() => {
     const m = new Map<number | null, number>();
-    for (const t of filterTasks(tasks, { ...filters, stage: [] }, today)) {
+    for (const t of filterTasks(tasks, { ...filters, stage: [] }, today, soonDays)) {
       m.set(t.stageId, (m.get(t.stageId) ?? 0) + 1);
     }
     return m;
-  }, [tasks, filters, today]);
+  }, [tasks, filters, today, soonDays]);
   const totalAll = [...stageCounts.values()].reduce((a, b) => a + b, 0);
   const oneStage = filters.stage.length === 1 ? filters.stage[0] : null;
   const stageOrder = (id: number | null) => (id ? (lookups.stage.get(id)?.order ?? 1e8) : 1e9);
